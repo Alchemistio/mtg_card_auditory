@@ -4,7 +4,7 @@ use sha1::{Digest, Sha1};
 use reqwest::blocking::{Client, Response};
 use reqwest::header::ACCEPT;
 use serde::Deserialize;
-use std::{collections::HashSet, io::Read, time::Duration};
+use std::{collections::HashSet, io::Read, time::{Duration, SystemTime}};
 
 use crate::models::{RemoteEntry, RepositoryTree};
 
@@ -87,8 +87,14 @@ const MAX_HTTP_RETRIES: usize = 3;
 const MAX_RETRY_AFTER_SECS: u64 = 10;
 
 fn retry_delay(attempt: usize, retry_after: Option<&str>) -> Duration {
-    if let Some(seconds) = retry_after.and_then(|value| value.trim().parse::<u64>().ok()) {
-        return Duration::from_secs(seconds.min(MAX_RETRY_AFTER_SECS));
+    if let Some(value) = retry_after {
+        if let Ok(seconds) = value.trim().parse::<u64>() {
+            return Duration::from_secs(seconds.min(MAX_RETRY_AFTER_SECS));
+        }
+        if let Ok(deadline) = httpdate::parse_http_date(value) {
+            let delay = deadline.duration_since(SystemTime::now()).unwrap_or_default();
+            return delay.min(Duration::from_secs(MAX_RETRY_AFTER_SECS));
+        }
     }
     Duration::from_millis(500_u64.saturating_mul(1_u64 << attempt.min(4)))
 }
@@ -381,6 +387,10 @@ mod tests {
         assert_eq!(retry_delay(0, Some("4")), Duration::from_secs(4));
         assert_eq!(retry_delay(0, Some("999")), Duration::from_secs(MAX_RETRY_AFTER_SECS));
         assert_eq!(retry_delay(0, Some("invalid")), Duration::from_millis(500));
+        assert_eq!(
+            retry_delay(0, Some("Wed, 21 Oct 2015 07:28:00 GMT")),
+            Duration::ZERO
+        );
     }
 
     #[test]
