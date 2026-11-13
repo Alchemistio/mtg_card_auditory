@@ -35,3 +35,11 @@ pub struct DownloadedFile {
     pub blob_sha: String,
     pub size_bytes: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadProgressRecord {
+    pub path: String,
+    pub blob_sha: String,
+    pub size_bytes: u64,
+    pub completed_unix_seconds: u64,
+}
