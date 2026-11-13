@@ -48,7 +48,7 @@
 ## Limites restantes
 - Le téléchargement des blobs utilise la représentation brute GitHub en flux vers un fichier temporaire dans le cache ; la taille et le SHA-1 Git sont vérifiés avant publication. La destination finale est ensuite copiée depuis le cache avec création exclusive.
 - Le journal de reprise JSONL est local au workspace et ne contient que chemin, blob SHA, taille et horodatage ; aucun jeton GitHub n'y est écrit. Son dossier parent est canonicalisé et doit rester dans le workspace ; les liens symboliques et fichiers non réguliers sont refusés.
-- Un fichier déjà journalisé n'est sauté qu'après vérification de son SHA-1 Git et de sa taille. Une destination modifiée, manquante ou invalide n'est jamais écrasée automatiquement.
+- Un fichier déjà journalisé n'est sauté qu'après vérification de son SHA-1 Git et de sa taille ; cette vérification se fait en flux avec un tampon de 64 Kio, sans lecture intégrale en mémoire. Une destination modifiée, manquante ou invalide n'est jamais écrasée automatiquement.
 - Une ligne finale JSONL incomplète est ignorée après arrêt brutal ; les lignes antérieures invalides bloquent la reprise plutôt que de faire confiance à un journal corrompu.
 - Les erreurs transitoires et réponses 429/502/503/504 utilisent des retries bornés ; le quota primaire épuisé est signalé sans attente longue automatique.
 - La défense TOCTOU reste incomplète : la création exclusive protège le fichier final contre l'écrasement, mais ne neutralise pas toutes les courses sur les répertoires parents ni le remplacement de liens entre vérification et ouverture. Une approche basée sur des handles de répertoire et des opérations relatives est à étudier.
