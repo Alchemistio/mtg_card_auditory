@@ -436,8 +436,9 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
             continue;
         }
         let dimensions = ImageReader::open(&source)
-            .and_then(|reader| reader.with_guessed_format())
-            .and_then(|reader| reader.into_dimensions());
+            .map_err(anyhow::Error::from)
+            .and_then(|reader| reader.with_guessed_format().map_err(anyhow::Error::from))
+            .and_then(|reader| reader.into_dimensions().map_err(anyhow::Error::from));
         let (width, height) = match dimensions {
             Ok(dimensions) => dimensions,
             Err(_) => {
