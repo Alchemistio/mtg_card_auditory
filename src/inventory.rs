@@ -24,6 +24,8 @@ pub struct AssetRecord {
     pub svg_viewbox: Option<String>,
     pub svg_has_external_refs: Option<bool>,
     pub svg_xml_valid: Option<bool>,
+    pub font_family: Option<String>,
+    pub font_subfamily: Option<String>,
     pub analysis_warning: Option<String>,
     pub review_status: String,
 }
@@ -73,6 +75,11 @@ fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Opt
     if family != "svg" {
         return (None, None, None, None);
     }
+    if let Ok(metadata) = std::fs::metadata(path) {
+        if metadata.len() > 32 * 1024 * 1024 {
+            return (None, None, None, Some("SVG ignoré : taille supérieure à 32 Mio.".to_string()));
+        }
+    }
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible : {}", error))),
@@ -121,6 +128,37 @@ fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Opt
         external_refs = true;
     }
     (viewbox, Some(external_refs), Some(true), None)
+}
+
+fn font_metadata(path: &Path, family: &str) -> (Option<String>, Option<String>, Option<String>) {
+    if family != "font" {
+        return (None, None, None);
+    }
+    let size = match std::fs::metadata(path) {
+        Ok(metadata) => metadata.len(),
+        Err(error) => return (None, None, Some(format!("Métadonnées de police indisponibles : {}", error))),
+    };
+    if size > 64 * 1024 * 1024 {
+        return (None, None, Some("Police ignorée : taille supérieure à 64 Mio.".to_string()));
+    }
+    let data = match std::fs::read(path) {
+        Ok(data) => data,
+        Err(error) => return (None, None, Some(format!("Lecture de police impossible : {}", error))),
+    };
+    let face = match ttf_parser::Face::parse(&data, 0) {
+        Ok(face) => face,
+        Err(error) => return (None, None, Some(format!("Format de police non pris en charge ou invalide : {}", error))),
+    };
+    let mut font_family = None;
+    let mut font_subfamily = None;
+    for name in face.names() {
+        if name.name_id == 1 && font_family.is_none() {
+            font_family = name.to_string();
+        } else if name.name_id == 2 && font_subfamily.is_none() {
+            font_subfamily = name.to_string();
+        }
+    }
+    (font_family, font_subfamily, None)
 }
 
 fn is_external_reference(value: &str) -> bool {
@@ -180,7 +218,8 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
             raster_metadata(path, detected_family);
         let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
             svg_metadata(path, detected_family);
-        let analysis_warning = raster_warning.or(svg_warning);
+        let (font_family, font_subfamily, font_warning) = font_metadata(path, detected_family);
+        let analysis_warning = raster_warning.or(svg_warning).or(font_warning);
         total_bytes = total_bytes.saturating_add(size_bytes);
         assets.push(AssetRecord {
             id: format!("sha256:{}:{}", sha256, relative_path),
@@ -197,6 +236,8 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
             svg_viewbox,
             svg_has_external_refs,
             svg_xml_valid,
+            font_family,
+            font_subfamily,
             analysis_warning,
             review_status: "needs-review".to_string(),
         });
