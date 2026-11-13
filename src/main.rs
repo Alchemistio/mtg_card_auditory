@@ -16,6 +16,7 @@ struct AuditorApp {
     token: String,
     workspace: String,
     local_source: String,
+    local_filter: String,
     local_inventory: Option<inventory::InventoryDocument>,
     scan_receiver: Option<Receiver<std::result::Result<inventory::InventoryDocument, String>>>,
     github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
@@ -253,6 +254,46 @@ impl eframe::App for AuditorApp {
                 ui.horizontal(|ui| {
                     if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
                     if ui.button("Exporter CSV…").clicked() { self.export_local_csv(); }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Filtrer les résultats");
+                    ui.text_edit_singleline(&mut self.local_filter);
+                });
+                let filter = self.local_filter.to_lowercase();
+                egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                    let mut shown = 0usize;
+                    for asset in &document.assets {
+                        if !filter.is_empty() && !asset.relative_path.to_lowercase().contains(&filter) {
+                            continue;
+                        }
+                        if shown >= 500 {
+                            ui.label("Affichage limité aux 500 premiers résultats correspondants ; l'export contient l'inventaire complet.");
+                            break;
+                        }
+                        shown += 1;
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(&asset.relative_path);
+                            ui.label(egui::RichText::new(format!("{} • {} octets", asset.detected_family, asset.size_bytes)).weak());
+                            if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
+                                ui.label(format!("{}×{}", width, height));
+                            }
+                            if let Some(viewbox) = &asset.svg_viewbox {
+                                ui.label(format!("viewBox {}", viewbox));
+                            }
+                            if let Some(family) = &asset.font_family {
+                                ui.label(format!("Police : {}", family));
+                            }
+                            if let Some(count) = asset.archive_entry_count {
+                                ui.label(format!("ZIP : {} entrées", count));
+                            }
+                            if let Some(warning) = &asset.analysis_warning {
+                                ui.colored_label(egui::Color32::YELLOW, warning);
+                            }
+                        });
+                    }
+                    if shown == 0 {
+                        ui.label("Aucun résultat correspondant.");
+                    }
                 });
             }
 
