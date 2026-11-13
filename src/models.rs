@@ -25,6 +25,7 @@ pub struct DownloadManifest {
     pub requested_reference: String,
     pub commit_sha: String,
     pub tree_sha: String,
+    pub downloaded_unix_seconds: u64,
     pub downloaded_files: Vec<DownloadedFile>,
 }
 
