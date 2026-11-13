@@ -48,7 +48,6 @@ pub struct AssetRecord {
     #[serde(default)]
     pub analysis_warning: Option<String>,
     #[serde(default)]
-    #[serde(default)]
     pub notice_kind: Option<String>,
     #[serde(default)]
     pub duplicate_of: Option<String>,
