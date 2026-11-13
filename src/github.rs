@@ -84,43 +84,44 @@ fn fetch_tree(owner: &str, repository: &str, tree_sha: &str, recursive: bool, to
     api_get(&url, token)?.json().context("Réponse arbre GitHub invalide")
 }
 
-fn collect_subtrees(
-    owner: &str,
-    repository: &str,
-    tree_sha: &str,
-    prefix: &str,
-    token: &str,
-    visited: &mut HashSet<String>,
-    output: &mut Vec<RemoteEntry>,
-    depth: usize,
-) -> Result<()> {
-    if depth > 128 {
-        anyhow::bail!("Profondeur d'arbre GitHub supérieure à la limite de sécurité (128).");
-    }
-    if !visited.insert(tree_sha.to_string()) {
-        return Ok(());
-    }
-    let response = fetch_tree(owner, repository, tree_sha, false, token)?;
-    if response.truncated {
-        anyhow::bail!("Un sous-arbre GitHub non récursif est lui-même tronqué ; inventaire incomplet refusé.");
-    }
-    for mut entry in response.tree {
-        let full_path = if prefix.is_empty() {
-            entry.path.clone()
-        } else {
-            format!("{}/{}", prefix, entry.path)
-        };
-        if entry.kind == "tree" {
-            let child_sha = entry.sha.clone();
-            entry.path = full_path.clone();
-            output.push(entry);
-            collect_subtrees(owner, repository, &child_sha, &full_path, token, visited, output, depth + 1)?;
-        } else {
-            entry.path = full_path;
-            output.push(entry);
+struct TreeWalker<'a> {
+    owner: &'a str,
+    repository: &'a str,
+    token: &'a str,
+    visited: HashSet<String>,
+    output: Vec<RemoteEntry>,
+}
+
+impl TreeWalker<'_> {
+    fn collect(&mut self, tree_sha: &str, prefix: &str, depth: usize) -> Result<()> {
+        if depth > 128 {
+            anyhow::bail!("Profondeur d'arbre GitHub supérieure à la limite de sécurité (128).");
         }
+        if !self.visited.insert(tree_sha.to_string()) {
+            return Ok(());
+        }
+        let response = fetch_tree(self.owner, self.repository, tree_sha, false, self.token)?;
+        if response.truncated {
+            anyhow::bail!("Un sous-arbre GitHub non récursif est lui-même tronqué ; inventaire incomplet refusé.");
+        }
+        for mut entry in response.tree {
+            let full_path = if prefix.is_empty() {
+                entry.path.clone()
+            } else {
+                format!("{}/{}", prefix, entry.path)
+            };
+            if entry.kind == "tree" {
+                let child_sha = entry.sha.clone();
+                entry.path = full_path.clone();
+                self.output.push(entry);
+                self.collect(&child_sha, &full_path, depth + 1)?;
+            } else {
+                entry.path = full_path;
+                self.output.push(entry);
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: &str) -> Result<Vec<RemoteEntry>> {
@@ -142,24 +143,21 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
     let commit: CommitResponse = api_get(&commit_url, token)?
         .json()
         .context("Impossible de résoudre la référence en commit immuable")?;
-    let recursive = fetch_tree(owner, repository, &commit.commit.tree.sha, true, token)?;
+    let tree_sha = commit.commit.tree.sha;
+    let recursive = fetch_tree(owner, repository, &tree_sha, true, token)?;
     if !recursive.truncated {
         return Ok(recursive.tree);
     }
 
-    let mut entries = Vec::new();
-    let mut visited = HashSet::new();
-    collect_subtrees(
+    let mut walker = TreeWalker {
         owner,
         repository,
-        &commit.commit.tree.sha,
-        "",
         token,
-        &mut visited,
-        &mut entries,
-        0,
-    )?;
-    Ok(entries)
+        visited: HashSet::new(),
+        output: Vec::new(),
+    };
+    walker.collect(&tree_sha, "", 0)?;
+    Ok(walker.output)
 }
 
 pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> Result<Vec<u8>> {
