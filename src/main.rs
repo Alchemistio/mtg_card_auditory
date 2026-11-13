@@ -261,7 +261,7 @@ impl eframe::App for AuditorApp {
             loop {
                 match receiver.try_recv() {
                     Ok(message) => {
-                        let finished = matches!(message, ScanMessage::Finished(_));
+                        let finished = matches!(&message, ScanMessage::Finished(_));
                         scan_messages.push(message);
                         if finished { break; }
                     }
