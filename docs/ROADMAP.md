@@ -6,8 +6,8 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [x] CI Windows complète sur commit `a6bf479` : Clippy, tests, build Release et upload d'artefact.
-- [ ] CI des retries HTTP, limites de blobs et annulation du scan local en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
+- [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
+- [ ] CI des retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
@@ -32,7 +32,7 @@
 - [ ] Sélection multi-dossiers.
 - [x] Parcours local parallèle via Rayon, sans suivre les liens symboliques.
 - [x] Scan local exécuté dans un worker d'arrière-plan.
-- [x] Progression en nombre de fichiers traités (mise à jour par lots de 100 et à la fin).
+- [x] Progression en octets traités (mise à jour par lots de 100 fichiers et à la fin).
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux ; anciens inventaires v1 acceptés avec champs optionnels par défaut.
 - [x] Détection des doublons binaires exacts par SHA-256, sans suppression.
 - [x] Comparaison de deux inventaires JSON par chemin et SHA-256 (ajouté/supprimé/modifié/identique).
@@ -67,6 +67,8 @@
 - [ ] Revue humaine persistante.
 
 ## Phase 5 — Rapports et intégration MTG
+
+> L'intégration au MTG Card Remodeler est volontairement suspendue jusqu'à finalisation de son cahier des charges. Aucun code ni asset n'est intégré au Remodeler à ce stade.
 - [x] Rapport HTML autonome initial.
 - [x] Rapport JSON de comparaison initial.
 - [ ] Statistiques et alertes enrichies.
