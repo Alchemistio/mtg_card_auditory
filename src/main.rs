@@ -262,8 +262,12 @@ impl eframe::App for AuditorApp {
                     self.scan_local();
                 }
             });
-            if let Some(document) = self.local_inventory.as_ref() {
-                ui.label(format!("{} fichiers • {} octets • {} doublons exacts • schéma v{}", document.files_scanned, document.total_bytes, document.duplicate_files, document.schema_version));
+            if self.local_inventory.is_some() {
+                let (files_scanned, total_bytes, duplicate_files, schema_version) = {
+                    let document = self.local_inventory.as_ref().unwrap();
+                    (document.files_scanned, document.total_bytes, document.duplicate_files, document.schema_version)
+                };
+                ui.label(format!("{} fichiers • {} octets • {} doublons exacts • schéma v{}", files_scanned, total_bytes, duplicate_files, schema_version));
                 ui.horizontal(|ui| {
                     if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
                     if ui.button("Exporter CSV…").clicked() { self.export_local_csv(); }
@@ -274,44 +278,46 @@ impl eframe::App for AuditorApp {
                     ui.text_edit_singleline(&mut self.local_filter);
                 });
                 let filter = self.local_filter.to_lowercase();
-                egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-                    let mut shown = 0usize;
-                    for asset in &document.assets {
-                        if !filter.is_empty() && !asset.relative_path.to_lowercase().contains(&filter) {
-                            continue;
+                if let Some(document) = self.local_inventory.as_ref() {
+                    egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                        let mut shown = 0usize;
+                        for asset in &document.assets {
+                            if !filter.is_empty() && !asset.relative_path.to_lowercase().contains(&filter) {
+                                continue;
+                            }
+                            if shown >= 500 {
+                                ui.label("Affichage limité aux 500 premiers résultats correspondants ; l'export contient l'inventaire complet.");
+                                break;
+                            }
+                            shown += 1;
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(&asset.relative_path);
+                                ui.label(egui::RichText::new(format!("{} • {} octets", asset.detected_family, asset.size_bytes)).weak());
+                                if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
+                                    ui.label(format!("{}×{}", width, height));
+                                }
+                                if let Some(viewbox) = &asset.svg_viewbox {
+                                    ui.label(format!("viewBox {}", viewbox));
+                                }
+                                if let Some(family) = &asset.font_family {
+                                    ui.label(format!("Police : {}", family));
+                                }
+                                if let Some(count) = asset.archive_entry_count {
+                                    ui.label(format!("ZIP : {} entrées", count));
+                                }
+                                if let Some(first_path) = &asset.duplicate_of {
+                                    ui.colored_label(egui::Color32::LIGHT_BLUE, format!("Doublon de {}", first_path));
+                                }
+                                if let Some(warning) = &asset.analysis_warning {
+                                    ui.colored_label(egui::Color32::YELLOW, warning);
+                                }
+                            });
                         }
-                        if shown >= 500 {
-                            ui.label("Affichage limité aux 500 premiers résultats correspondants ; l'export contient l'inventaire complet.");
-                            break;
+                        if shown == 0 {
+                            ui.label("Aucun résultat correspondant.");
                         }
-                        shown += 1;
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(&asset.relative_path);
-                            ui.label(egui::RichText::new(format!("{} • {} octets", asset.detected_family, asset.size_bytes)).weak());
-                            if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
-                                ui.label(format!("{}×{}", width, height));
-                            }
-                            if let Some(viewbox) = &asset.svg_viewbox {
-                                ui.label(format!("viewBox {}", viewbox));
-                            }
-                            if let Some(family) = &asset.font_family {
-                                ui.label(format!("Police : {}", family));
-                            }
-                            if let Some(count) = asset.archive_entry_count {
-                                ui.label(format!("ZIP : {} entrées", count));
-                            }
-                            if let Some(first_path) = &asset.duplicate_of {
-                                ui.colored_label(egui::Color32::LIGHT_BLUE, format!("Doublon de {}", first_path));
-                            }
-                            if let Some(warning) = &asset.analysis_warning {
-                                ui.colored_label(egui::Color32::YELLOW, warning);
-                            }
-                        });
-                    }
-                    if shown == 0 {
-                        ui.label("Aucun résultat correspondant.");
-                    }
-                });
+                    });
+                }
             }
 
             ui.separator();
