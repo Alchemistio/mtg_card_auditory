@@ -63,6 +63,8 @@ pub struct InventoryDocument {
     pub total_bytes: u64,
     #[serde(default)]
     pub duplicate_files: usize,
+    #[serde(default)]
+    pub source_roots: Vec<String>,
     pub assets: Vec<AssetRecord>,
 }
 
@@ -479,6 +481,94 @@ where
         files_scanned: assets.len(),
         total_bytes,
         duplicate_files,
+        source_roots: vec![canonical_root.display().to_string()],
+        assets,
+    })
+}
+
+/// Audite plusieurs dossiers en lecture seule. Les chemins sont préfixés par un identifiant
+/// stable de source afin d'éviter toute collision entre deux dossiers portant les mêmes noms.
+pub fn scan_multiple_directories_with_progress_and_cancel<F>(
+    roots: &[PathBuf],
+    progress: F,
+    cancelled: &AtomicBool,
+) -> Result<InventoryDocument>
+where
+    F: Fn(u64, u64) + Sync,
+{
+    if roots.is_empty() {
+        anyhow::bail!("Sélectionne au moins un dossier source.");
+    }
+    let mut canonical_roots = Vec::with_capacity(roots.len());
+    for root in roots {
+        let canonical = root.canonicalize()
+            .with_context(|| format!("Dossier source inaccessible : {}", root.display()))?;
+        if !canonical.is_dir() {
+            anyhow::bail!("La source sélectionnée n'est pas un dossier : {}", canonical.display());
+        }
+        if canonical_roots.contains(&canonical) {
+            anyhow::bail!("Le même dossier source a été sélectionné plusieurs fois : {}", canonical.display());
+        }
+        canonical_roots.push(canonical);
+    }
+    for (index, root) in canonical_roots.iter().enumerate() {
+        for other in canonical_roots.iter().skip(index + 1) {
+            if root.starts_with(other) || other.starts_with(root) {
+                anyhow::bail!("Les dossiers sources se chevauchent ; sélectionne des dossiers distincts sans relation parent/enfant.");
+            }
+        }
+    }
+    let total_bytes = canonical_roots.iter().try_fold(0_u64, |total, root| -> Result<u64> {
+        let mut size = 0_u64;
+        for item in WalkDir::new(root).follow_links(false).max_depth(128)
+            .into_iter().filter_entry(|entry| entry.depth() == 0 || !is_hidden_or_metadata(entry)) {
+            if cancelled.load(Ordering::Relaxed) { anyhow::bail!("Scan annulé par l'utilisateur."); }
+            let entry = item?;
+            if entry.file_type().is_file() {
+                size = size.saturating_add(entry.metadata()?.len());
+            }
+        }
+        Ok(total.saturating_add(size))
+    })?;
+    let mut assets = Vec::new();
+    let mut completed_bytes = 0_u64;
+    let mut source_roots = Vec::with_capacity(canonical_roots.len());
+    for (index, root) in canonical_roots.iter().enumerate() {
+        if cancelled.load(Ordering::Relaxed) { anyhow::bail!("Scan annulé par l'utilisateur."); }
+        source_roots.push(root.display().to_string());
+        let document = scan_directory_with_progress_and_cancel(root, |done, _| {
+            progress(completed_bytes.saturating_add(done), total_bytes);
+        }, cancelled)?;
+        completed_bytes = completed_bytes.saturating_add(document.total_bytes);
+        let prefix = format!("source-{:04}", index + 1);
+        for mut asset in document.assets {
+            asset.relative_path = format!("{}/{}", prefix, asset.relative_path);
+            asset.id = format!("sha256:{}:{}", asset.sha256, asset.relative_path);
+            asset.duplicate_of = None;
+            assets.push(asset);
+        }
+        progress(completed_bytes, total_bytes);
+    }
+    assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
+    let mut first_path_by_hash = HashMap::<String, String>::new();
+    let mut duplicate_files = 0usize;
+    for asset in &mut assets {
+        if let Some(first_path) = first_path_by_hash.get(&asset.sha256) {
+            asset.duplicate_of = Some(first_path.clone());
+            duplicate_files += 1;
+        } else {
+            first_path_by_hash.insert(asset.sha256.clone(), asset.relative_path.clone());
+        }
+    }
+    let total_bytes = assets.iter().fold(0_u64, |total, asset| total.saturating_add(asset.size_bytes));
+    Ok(InventoryDocument {
+        schema_version: INVENTORY_SCHEMA_VERSION,
+        source_root: source_roots[0].clone(),
+        generated_unix_seconds: std::time::SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+        files_scanned: assets.len(),
+        total_bytes,
+        duplicate_files,
+        source_roots,
         assets,
     })
 }
@@ -548,17 +638,18 @@ pub fn export_comparison_json(comparison: &InventoryComparison, destination: &Pa
 }
 
 fn ensure_export_outside_source(document: &InventoryDocument, destination: &Path) -> Result<()> {
-    let source_root = Path::new(&document.source_root).canonicalize()?;
+    let source_roots = if document.source_roots.is_empty() { vec![document.source_root.clone()] } else { document.source_roots.clone() };
+    let canonical_sources = source_roots.iter().map(|source| Path::new(source).canonicalize()).collect::<std::io::Result<Vec<_>>>()?;
     let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
     let canonical_parent = parent.canonicalize()
         .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
-    if canonical_parent.starts_with(&source_root) {
-        anyhow::bail!("Export refusé : choisis un dossier de sortie situé hors de la source analysée.");
+    if canonical_sources.iter().any(|source| canonical_parent.starts_with(source)) {
+        anyhow::bail!("Export refusé : choisis un dossier de sortie situé hors de toutes les sources analysées.");
     }
     if destination.exists() {
         let canonical_destination = destination.canonicalize()?;
-        if canonical_destination.starts_with(&source_root) {
-            anyhow::bail!("Export refusé : la destination résout vers un fichier de la source analysée.");
+        if canonical_sources.iter().any(|source| canonical_destination.starts_with(source)) {
+            anyhow::bail!("Export refusé : la destination résout vers une des sources analysées.");
         }
     }
     Ok(())
@@ -606,10 +697,19 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
     let selected = &raster_assets[start..raster_assets.len().min(start + page_size)];
     let mut canvas = image::RgbaImage::from_pixel(880, 720, image::Rgba([245, 246, 248, 255]));
     let mut index_text = String::from("Index de la planche de contact\n");
-    let source_root = Path::new(&document.source_root);
+    let source_roots = if document.source_roots.is_empty() { vec![document.source_root.clone()] } else { document.source_roots.clone() };
     let mut rendered = 0usize;
     for (slot, asset) in selected.iter().enumerate() {
-        let source = source_root.join(&asset.relative_path);
+        let source = if source_roots.len() > 1 {
+            let mut parts = asset.relative_path.splitn(2, '/');
+            let prefix = parts.next().unwrap_or_default();
+            let relative = parts.next().unwrap_or_default();
+            let index = prefix.strip_prefix("source-").and_then(|value| value.parse::<usize>().ok()).and_then(|value| value.checked_sub(1));
+            index.and_then(|value| source_roots.get(value)).map(|root| Path::new(root).join(relative))
+                .context("Source de la planche introuvable dans l'inventaire multi-dossiers")?
+        } else {
+            Path::new(&source_roots[0]).join(&asset.relative_path)
+        };
         if std::fs::symlink_metadata(&source).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(true) {
             index_text.push_str(&format!("{:02}\tLIEN SYMBOLIQUE OU SOURCE ABSENTE\t{}\n", slot + 1, asset.relative_path));
             continue;
