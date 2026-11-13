@@ -30,7 +30,7 @@
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
 ## Phase 2 — Sources locales et inventaire
-- [ ] Sélection multi-dossiers.
+- [x] Sélection de plusieurs dossiers locaux, chemins préfixés par source et détection des sélections imbriquées/dupliquées.
 - [x] Parcours local parallèle via Rayon, sans suivre les liens symboliques.
 - [x] Scan local exécuté dans un worker d'arrière-plan.
 - [x] Progression en octets traités (mise à jour par lots de 100 fichiers et à la fin).
@@ -50,7 +50,7 @@
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
 - [x] Annulation coopérative du scan local depuis l'interface, vérifiée entre les étapes de parcours et d'analyse.
 - [x] Progression locale en octets, agrégée à partir des tailles des fichiers et mise à jour par lots de 100 fichiers.
-- [ ] Estimation temps restant et scan multi-sources.
+- [ ] Estimation du temps restant.
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
