@@ -14,7 +14,7 @@ enum DownloadMessage {
     Progress(usize, usize, String),
     Finished(String),
 }
-use std::{collections::HashSet, io::Write, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
+use std::{collections::HashSet, io::Write, path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, TryRecvError}, Arc}, time::Duration};
 
 #[derive(Default)]
 struct AuditorApp {
@@ -33,6 +33,7 @@ struct AuditorApp {
     local_inventory: Option<inventory::InventoryDocument>,
     comparison: Option<inventory::InventoryComparison>,
     scan_receiver: Option<Receiver<ScanMessage>>,
+    scan_cancel: Option<Arc<AtomicBool>>, 
     github_receiver: Option<Receiver<std::result::Result<models::RepositoryTree, String>>>,
     download_receiver: Option<Receiver<DownloadMessage>>,
     status: String,
@@ -76,16 +77,30 @@ impl AuditorApp {
         }
         let source = PathBuf::from(self.local_source.trim());
         let (sender, receiver) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancelled = Arc::clone(&cancelled);
         self.scan_receiver = Some(receiver);
+        self.scan_cancel = Some(cancelled);
         self.busy = true;
         self.status = "Inventaire local parallèle et calcul SHA-256 en arrière-plan…".into();
         std::thread::spawn(move || {
             let progress_sender = sender.clone();
-            let result = inventory::scan_directory_with_progress(&source, |done, total| {
-                let _ = progress_sender.send(ScanMessage::Progress(done, total));
-            }).map_err(|error| format!("{:#}", error));
+            let result = inventory::scan_directory_with_progress_and_cancel(
+                &source,
+                |done, total| {
+                    let _ = progress_sender.send(ScanMessage::Progress(done, total));
+                },
+                &worker_cancelled,
+            ).map_err(|error| format!("{:#}", error));
             let _ = sender.send(ScanMessage::Finished(result));
         });
+    }
+
+    fn cancel_scan(&mut self) {
+        if let Some(cancelled) = self.scan_cancel.as_ref() {
+            cancelled.store(true, Ordering::Relaxed);
+            self.status = "Annulation du scan demandée ; arrêt après les opérations en cours…".into();
+        }
     }
 
     fn export_local_json(&mut self) {
@@ -344,6 +359,7 @@ impl eframe::App for AuditorApp {
                 }
                 ScanMessage::Finished(result) => {
                     self.scan_receiver = None;
+                    self.scan_cancel = None;
                     self.busy = false;
                     match result {
                         Ok(document) => {
@@ -427,6 +443,9 @@ impl eframe::App for AuditorApp {
                 }
                 if ui.add_enabled(!self.busy, egui::Button::new("Analyser")).clicked() {
                     self.scan_local();
+                }
+                if ui.add_enabled(self.scan_cancel.is_some(), egui::Button::new("Annuler le scan")).clicked() {
+                    self.cancel_scan();
                 }
             });
             if let Some((files_scanned, total_bytes, duplicate_files, schema_version)) = self.local_inventory.as_ref().map(|document| {
