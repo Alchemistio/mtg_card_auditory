@@ -256,7 +256,7 @@ impl AuditorApp {
                         break;
                     }
                     processed = index + 1;
-                    let result = github::download_blob(&owner, &repository, &entry.sha, &token, entry.size)
+                    let result = cached_github_blob(&canonical_root, &owner, &repository, &commit_sha, &entry.sha, entry.size, &token)
                         .and_then(|bytes| {
                             let destination = safe_destination(&canonical_root, &entry.path)?;
                             if destination.exists() {
@@ -323,6 +323,62 @@ impl AuditorApp {
             let _ = sender.send(DownloadMessage::Finished(result));
         });
     }
+}
+
+fn cached_github_blob(
+    workspace: &Path,
+    owner: &str,
+    repository: &str,
+    commit_sha: &str,
+    blob_sha: &str,
+    expected_size: Option<u64>,
+    token: &str,
+) -> anyhow::Result<Vec<u8>> {
+    fn safe_segment(value: &str) -> bool {
+        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+            && value != "." && value != ".."
+    }
+    if !safe_segment(owner) || !safe_segment(repository) || !safe_segment(commit_sha) || !safe_segment(blob_sha) {
+        anyhow::bail!("Identifiant de cache GitHub invalide.");
+    }
+    let cache_root = workspace.join(".mtg-auditor-cache").join("github")
+        .join(owner).join(repository).join(commit_sha);
+    std::fs::create_dir_all(&cache_root)?;
+    let canonical_cache = cache_root.canonicalize()?;
+    if !canonical_cache.starts_with(workspace) {
+        anyhow::bail!("Le cache GitHub sort du workspace.");
+    }
+    let cache_file = canonical_cache.join(format!("{}.blob", blob_sha));
+    if cache_file.exists() {
+        match std::fs::read(&cache_file) {
+            Ok(bytes) if github::verify_git_blob_sha(blob_sha, &bytes).is_ok()
+                && expected_size.is_some_and(|size| size == bytes.len() as u64) => return Ok(bytes),
+            _ => {
+                std::fs::remove_file(&cache_file)
+                    .context("Impossible d'écarter une entrée de cache invalide")?;
+            }
+        }
+    }
+    let bytes = github::download_blob(owner, repository, blob_sha, token, expected_size)?;
+    let temporary = canonical_cache.join(format!(".{}.{}.tmp", blob_sha, std::process::id()));
+    write_new_file(&temporary, &bytes).context("Impossible d'écrire le cache temporaire")?;
+    match std::fs::rename(&temporary, &cache_file) {
+        Ok(()) => {}
+        Err(error) if cache_file.exists() => {
+            let _ = std::fs::remove_file(&temporary);
+            let existing = std::fs::read(&cache_file)?;
+            github::verify_git_blob_sha(blob_sha, &existing)?;
+            if existing.len() != bytes.len() {
+                return Err(error.into());
+            }
+            return Ok(existing);
+        }
+        Err(error) => {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(error.into());
+        }
+    }
+    Ok(bytes)
 }
 
 fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
