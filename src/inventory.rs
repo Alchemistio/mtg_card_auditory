@@ -194,6 +194,13 @@ fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Op
         }
         return (None, None, None, None);
     }
+    let archive_size = match std::fs::metadata(path) {
+        Ok(metadata) => metadata.len(),
+        Err(error) => return (None, None, None, Some(format!("Métadonnées ZIP indisponibles : {}", error))),
+    };
+    if archive_size > 512 * 1024 * 1024 {
+        return (None, None, None, Some("Archive ignorée : fichier ZIP supérieur à 512 Mio.".to_string()));
+    }
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) => return (None, None, None, Some(format!("Ouverture ZIP impossible : {}", error))),
