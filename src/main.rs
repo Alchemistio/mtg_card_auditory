@@ -576,7 +576,6 @@ fn cached_github_blob(
     github::download_blob_to_file(owner, repository, blob_sha, token, expected_size, &workspace.inner, &temporary)
         .context("Téléchargement streaming du blob impossible")?;
     let verified = workspace.open_read(&temporary)
-        .map_err(anyhow::Error::from)
         .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size));
     if let Err(error) = verified {
         let _ = workspace.remove_file(&temporary);
