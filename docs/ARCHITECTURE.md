@@ -21,9 +21,11 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
 9. Les blobs sont récupérés via l'API Git Blobs Base64 ; la taille déclarée doit être connue, est limitée à 90 Mio et la réponse JSON à 128 Mio ; la taille décodée est comparée à celle déclarée. Le SHA-1 Git est recalculé sur l'objet `blob {taille}\\0{octets}` avant toute écriture ou mise en cache.
 10. Le cache local est isolé sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace. Chaque entrée est revalidée contre le SHA-1 Git attendu ; une entrée invalide est supprimée puis retéléchargée. Le cache ne modifie aucune source locale ni distante.
-11. La reprise après fermeture, le téléchargement streaming et la concurrence bornée restent à faire.
-12. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
-13. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
+11. Un journal JSONL par commit est conservé sous `.mtg-auditor-cache/download-session-{commit}.jsonl`. Chaque succès est synchronisé sur disque ; à la relance, seuls les fichiers dont le chemin, le blob SHA, la taille et le contenu correspondent sont sautés. Une dernière ligne incomplète après arrêt brutal est ignorée.
+12. Le journal ne contient aucun jeton. Une destination absente ou dont l'empreinte ne correspond pas n'est jamais écrasée ; elle produit une erreur explicite.
+13. Le téléchargement streaming et la concurrence bornée restent à faire.
+15. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
+14. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
 
 ## Flux local actuel
 1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
