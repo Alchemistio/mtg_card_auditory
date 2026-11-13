@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `a6bf479` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Les changements suivants (durcissement du parseur d'URL et des écritures sans écrasement) sont en cours de revalidation CI.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les ajouts ultérieurs (retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets) sont en cours de validation sur les commits les plus récents.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -34,13 +34,13 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 
 ## Limites connues
 - Reprise après fermeture, cache GitHub, streaming des blobs volumineux et affichage du quota restant.
-- Credential Manager, progression en octets, estimation du temps restant, annulation du téléchargement GitHub et scan multi-sources.
+- Credential Manager, estimation du temps restant, annulation du téléchargement GitHub et scan multi-sources.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les nouvelles tentatives HTTP, limites de taille des blobs et annulation du scan local sont en cours de validation CI.
+- Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les fonctionnalités ajoutées après ce commit restent en cours de validation CI.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
@@ -57,6 +57,8 @@ L'application analyse les sources en lecture seule. Les téléchargements sont �
 Pour un dépôt privé, utiliser un jeton à permissions minimales (Contents: read). Ne jamais le commiter ni l'inclure dans les rapports. Il n'est actuellement conservé qu'en mémoire pendant l'exécution.
 
 Le dépôt cible est configurable : aucun dépôt MTG n'est codé en dur.
+
+**Périmètre actuel :** cet outil reste autonome. Aucune intégration ni modification du MTG Card Remodeler ne sera entreprise tant que son propre cahier des charges n'est pas finalisé.
 
 ## Documentation
 - [Cahier des charges](docs/REQUIREMENTS.md)
