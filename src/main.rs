@@ -17,6 +17,7 @@ struct AuditorApp {
     workspace: String,
     local_source: String,
     local_filter: String,
+    contact_page: String,
     local_inventory: Option<inventory::InventoryDocument>,
     scan_receiver: Option<Receiver<std::result::Result<inventory::InventoryDocument, String>>>,
     github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
@@ -106,6 +107,20 @@ impl AuditorApp {
             match inventory::export_html(document, &path) {
                 Ok(()) => self.status = format!("Rapport HTML exporté : {}", path.display()),
                 Err(error) => self.status = format!("Échec export HTML : {:#}", error),
+            }
+        }
+    }
+
+    fn export_contact_sheet(&mut self) {
+        let Some(document) = self.local_inventory.as_ref() else {
+            self.status = "Lance d'abord un inventaire local.".into();
+            return;
+        };
+        let page_number = self.contact_page.trim().parse::<usize>().unwrap_or(1).max(1);
+        if let Some(path) = rfd::FileDialog::new().set_file_name(format!("contact-sheet-{:04}.png", page_number)).save_file() {
+            match inventory::export_contact_sheet(document, page_number - 1, &path) {
+                Ok(rendered) => self.status = format!("Planche {} créée avec {} aperçu(x) : {} (index .txt associé).", page_number, rendered, path.display()),
+                Err(error) => self.status = format!("Échec de la planche : {:#}", error),
             }
         }
     }
@@ -270,6 +285,9 @@ impl eframe::App for AuditorApp {
                     if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
                     if ui.button("Exporter CSV…").clicked() { self.export_local_csv(); }
                     if ui.button("Rapport HTML…").clicked() { self.export_local_html(); }
+                    ui.label("Page planche");
+                    ui.add(egui::TextEdit::singleline(&mut self.contact_page).desired_width(36.0));
+                    if ui.button("Planche PNG…").clicked() { self.export_contact_sheet(); }
                 });
                 ui.horizontal(|ui| {
                     ui.label("Filtrer les résultats");
