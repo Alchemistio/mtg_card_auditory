@@ -15,7 +15,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 2. Résoudre la branche par défaut si la référence est vide.
 3. Résoudre la référence en commit, puis utiliser le SHA de l'arbre associé.
 4. Demander l'arbre récursif ; si GitHub le tronque, descendre par sous-arbres avec garde-fous de profondeur et de cycles actifs.
-5. Filtrer par sous-dossier.
+5. Filtrer par sous-dossier, puis filtrer localement la liste distante par chemin et extension.
 6. Sélectionner les blobs distants et télécharger vers le workspace choisi.
 7. Vérifier les chemins de destination, refuser les liens symboliques et ouvrir les fichiers avec création exclusive afin de ne pas écraser une destination existante.
 8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
