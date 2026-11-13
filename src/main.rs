@@ -81,7 +81,11 @@ impl AuditorApp {
             self.status = "Choisis un dossier source à analyser.".into();
             return;
         }
-        let source = PathBuf::from(self.local_source.trim());
+        let sources: Vec<PathBuf> = self.local_source.lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).collect();
+        if sources.is_empty() {
+            self.status = "Ajoute au moins un dossier source.".into();
+            return;
+        }
         let (sender, receiver) = mpsc::channel();
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
@@ -91,13 +95,12 @@ impl AuditorApp {
         self.status = "Inventaire local parallèle et calcul SHA-256 en arrière-plan…".into();
         std::thread::spawn(move || {
             let progress_sender = sender.clone();
-            let result = inventory::scan_directory_with_progress_and_cancel(
-                &source,
-                |done, total| {
-                    let _ = progress_sender.send(ScanMessage::Progress(done, total));
-                },
-                &worker_cancelled,
-            ).map_err(|error| format!("{:#}", error));
+            let progress = |done, total| { let _ = progress_sender.send(ScanMessage::Progress(done, total)); };
+            let result = if sources.len() == 1 {
+                inventory::scan_directory_with_progress_and_cancel(&sources[0], progress, &worker_cancelled)
+            } else {
+                inventory::scan_multiple_directories_with_progress_and_cancel(&sources, progress, &worker_cancelled)
+            }.map_err(|error| format!("{:#}", error));
             let _ = sender.send(ScanMessage::Finished(result));
         });
     }
@@ -392,8 +395,8 @@ impl eframe::App for AuditorApp {
                     match result {
                         Ok(document) => {
                             self.status = format!(
-                                "Inventaire terminé : {} fichiers, {} octets, {} doublon(s) exact(s). Sources en lecture seule.",
-                                document.files_scanned, document.total_bytes, document.duplicate_files
+                                "Inventaire terminé : {} fichiers, {} octets, {} doublon(s) exact(s), {} source(s). Sources en lecture seule.",
+                                document.files_scanned, document.total_bytes, document.duplicate_files, document.source_roots.len().max(1)
                             );
                             self.local_inventory = Some(document);
                         }
@@ -463,13 +466,19 @@ impl eframe::App for AuditorApp {
             ui.separator();
 
             ui.heading("Source locale");
+            ui.label("Un ou plusieurs dossiers (un chemin par ligne) :");
             ui.horizontal(|ui| {
-                ui.text_edit_singleline(&mut self.local_source);
-                if ui.button("Choisir un dossier…").clicked() {
+                ui.add(egui::TextEdit::multiline(&mut self.local_source).desired_rows(2).desired_width(520.0));
+                if ui.button("Ajouter un dossier…").clicked() {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.local_source = path.display().to_string();
+                        let value = path.display().to_string();
+                        if !self.local_source.lines().any(|line| line.trim() == value) {
+                            if !self.local_source.trim().is_empty() { self.local_source.push('\n'); }
+                            self.local_source.push_str(&value);
+                        }
                     }
                 }
+                if ui.button("Effacer la sélection").clicked() { self.local_source.clear(); }
                 if ui.add_enabled(!self.busy, egui::Button::new("Analyser")).clicked() {
                     self.scan_local();
                 }
