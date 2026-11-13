@@ -97,6 +97,19 @@ impl AuditorApp {
         }
     }
 
+    fn export_local_html(&mut self) {
+        let Some(document) = self.local_inventory.as_ref() else {
+            self.status = "Aucun inventaire à exporter.".into();
+            return;
+        };
+        if let Some(path) = rfd::FileDialog::new().set_file_name("asset-inventory.html").save_file() {
+            match inventory::export_html(document, &path) {
+                Ok(()) => self.status = format!("Rapport HTML exporté : {}", path.display()),
+                Err(error) => self.status = format!("Échec export HTML : {:#}", error),
+            }
+        }
+    }
+
     fn download_selected(&mut self) {
         let root = PathBuf::from(self.workspace.trim());
         if self.workspace.trim().is_empty() {
@@ -254,6 +267,7 @@ impl eframe::App for AuditorApp {
                 ui.horizontal(|ui| {
                     if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
                     if ui.button("Exporter CSV…").clicked() { self.export_local_csv(); }
+                    if ui.button("Rapport HTML…").clicked() { self.export_local_html(); }
                 });
                 ui.horizontal(|ui| {
                     ui.label("Filtrer les résultats");
