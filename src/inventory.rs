@@ -425,7 +425,7 @@ where
         .map(|path| {
             let asset = analyze_file(path, &canonical_root)?;
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-            if done % 100 == 0 || done == total_paths {
+            if done.is_multiple_of(100) || done == total_paths {
                 progress(done, total_paths);
             }
             Ok(asset)
