@@ -317,25 +317,6 @@ fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
     Ok(destination)
 }
 
-#[cfg(test)]
-mod write_tests {
-    use super::write_new_file;
-    use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
-
-    #[test]
-    fn exclusive_write_never_overwrites_existing_files() {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let directory = std::env::temp_dir().join(format!("mtg-auditor-write-test-{}-{}", std::process::id(), nonce));
-        fs::create_dir_all(&directory).unwrap();
-        let destination: PathBuf = directory.join("asset.bin");
-
-        write_new_file(&destination, b"original").unwrap();
-        assert!(write_new_file(&destination, b"replacement").is_err());
-        assert_eq!(fs::read(&destination).unwrap(), b"original");
-
-        fs::remove_dir_all(directory).unwrap();
-    }
-}
 
 impl eframe::App for AuditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -604,4 +585,24 @@ fn main() -> eframe::Result<()> {
         eframe::NativeOptions::default(),
         Box::new(|_cc| Ok(Box::new(AuditorApp::default()))),
     )
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::write_new_file;
+    use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+
+    #[test]
+    fn exclusive_write_never_overwrites_existing_files() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let directory = std::env::temp_dir().join(format!("mtg-auditor-write-test-{}-{}", std::process::id(), nonce));
+        fs::create_dir_all(&directory).unwrap();
+        let destination: PathBuf = directory.join("asset.bin");
+
+        write_new_file(&destination, b"original").unwrap();
+        assert!(write_new_file(&destination, b"replacement").is_err());
+        assert_eq!(fs::read(&destination).unwrap(), b"original");
+
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
