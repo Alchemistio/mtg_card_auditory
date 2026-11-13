@@ -6,7 +6,8 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [ ] Compilation Windows CI vérifiée sur le dernier commit (le commit ZIP+scan parallèle a passé Clippy, tests et build Release).
+- [x] CI Windows complète sur commit `6310f92` : Clippy, tests, build Release et upload d'artefact.
+- [ ] Revalidation du dernier commit après ajout des métadonnées alpha raster.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -27,7 +28,7 @@
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux.
 - [x] Détection des doublons binaires exacts par SHA-256, sans suppression.
 - [x] Classification indicative par extension.
-- [x] Métadonnées raster initiales : format détecté et dimensions depuis l'en-tête.
+- [x] Métadonnées raster : format, dimensions, type de canaux et présence d'alpha depuis le décodeur sans décodage des pixels.
 - [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
 - [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
 - [x] Inspection ZIP sans extraction : nombre d'entrées, taille déclarée, chemins suspects et ratios anormaux.
@@ -38,7 +39,7 @@
 - [ ] Progression détaillée, annulation et reprise pour les scans longs.
 
 ## Phase 3 — Analyse des formats
-- [~] Raster : détection du format et dimensions initiales ; alpha, orientation, limites, décodage contrôlé et miniatures à faire.
+- [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
 - [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
