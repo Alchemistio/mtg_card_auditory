@@ -215,7 +215,7 @@ impl AuditorApp {
                 let manifest_conflict = chosen.iter().any(|entry| entry.path == manifest_name);
                 let progress_sender = sender.clone();
                 for (index, entry) in chosen.into_iter().enumerate() {
-                    let result = github::download_blob(&owner, &repository, &entry.sha, &token)
+                    let result = github::download_blob(&owner, &repository, &entry.sha, &token, entry.size)
                         .and_then(|bytes| {
                             let destination = safe_destination(&canonical_root, &entry.path)?;
                             if destination.exists() {
