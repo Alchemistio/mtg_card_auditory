@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use image::ImageReader;
+use quick_xml::{events::Event, Reader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs::File, io::{BufReader, Read}, path::Path, time::UNIX_EPOCH};
@@ -20,6 +21,9 @@ pub struct AssetRecord {
     pub raster_format: Option<String>,
     pub raster_width: Option<u32>,
     pub raster_height: Option<u32>,
+    pub svg_viewbox: Option<String>,
+    pub svg_has_external_refs: Option<bool>,
+    pub svg_xml_valid: Option<bool>,
     pub analysis_warning: Option<String>,
     pub review_status: String,
 }
@@ -65,6 +69,70 @@ fn raster_metadata(path: &Path, family: &str) -> (Option<String>, Option<u32>, O
     }
 }
 
+fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
+    if family != "svg" {
+        return (None, None, None, None);
+    }
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible : {}", error))),
+    };
+    let mut reader = Reader::from_str(&source);
+    reader.config_mut().trim_text(true);
+    let mut viewbox = None;
+    let mut external_refs = false;
+    let mut found_svg_root = false;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) | Ok(Event::Empty(element)) => {
+                if element.name().as_ref() == b"svg" {
+                    found_svg_root = true;
+                }
+                for attribute in element.attributes() {
+                    let attribute = match attribute {
+                        Ok(attribute) => attribute,
+                        Err(error) => return (viewbox, Some(external_refs), Some(false), Some(format!("Attribut SVG invalide : {}", error))),
+                    };
+                    let key = attribute.key.as_ref();
+                    let value = match attribute.decode_and_unescape_value(reader.decoder()) {
+                        Ok(value) => value.into_owned(),
+                        Err(error) => return (viewbox, Some(external_refs), Some(false), Some(format!("Valeur d'attribut SVG invalide : {}", error))),
+                    };
+                    if key == b"viewBox" && viewbox.is_none() {
+                        viewbox = Some(value.clone());
+                    }
+                    if key.ends_with(b"href") && is_external_reference(&value) {
+                        external_refs = true;
+                    }
+                    if key == b"style" && contains_external_css_reference(&value) {
+                        external_refs = true;
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => {}
+            Err(error) => return (viewbox, Some(external_refs), Some(false), Some(format!("XML SVG invalide : {}", error))),
+        }
+    }
+    if !found_svg_root {
+        return (viewbox, Some(external_refs), Some(false), Some("Élément racine SVG absent.".to_string()));
+    }
+    if contains_external_css_reference(&source) {
+        external_refs = true;
+    }
+    (viewbox, Some(external_refs), Some(true), None)
+}
+
+fn is_external_reference(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
+    value.starts_with("http://") || value.starts_with("https://") || value.starts_with("//")
+}
+
+fn contains_external_css_reference(value: &str) -> bool {
+    let value = value.to_ascii_lowercase().replace(' ', "");
+    value.contains("url(http://") || value.contains("url(https://") || value.contains("url(//")
+}
+
 fn sha256_file(path: &Path) -> Result<String> {
     let file = File::open(path).with_context(|| format!("Ouverture impossible : {}", path.display()))?;
     let mut reader = BufReader::with_capacity(1024 * 1024, file);
@@ -108,8 +176,11 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_secs());
         let detected_family = classify_extension(&extension);
-        let (raster_format, raster_width, raster_height, analysis_warning) =
+        let (raster_format, raster_width, raster_height, raster_warning) =
             raster_metadata(path, detected_family);
+        let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
+            svg_metadata(path, detected_family);
+        let analysis_warning = raster_warning.or(svg_warning);
         total_bytes = total_bytes.saturating_add(size_bytes);
         assets.push(AssetRecord {
             id: format!("sha256:{}:{}", sha256, relative_path),
@@ -123,6 +194,9 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
             raster_format,
             raster_width,
             raster_height,
+            svg_viewbox,
+            svg_has_external_refs,
+            svg_xml_valid,
             analysis_warning,
             review_status: "needs-review".to_string(),
         });
@@ -185,6 +259,21 @@ mod tests {
         assert_eq!(classify_extension("SVG"), "svg");
         assert_eq!(classify_extension("mse-set"), "mse");
         assert_eq!(classify_extension("exe"), "unknown");
+    }
+
+    #[test]
+    fn detects_svg_viewbox_and_external_references_without_rendering() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-svg-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let svg = root.join("test.svg");
+        std::fs::write(&svg, r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 20"><image href="https://example.invalid/image.png"/></svg>"#).unwrap();
+        let (viewbox, external, valid, warning) = svg_metadata(&svg, "svg");
+        assert_eq!(viewbox.as_deref(), Some("0 0 10 20"));
+        assert_eq!(external, Some(true));
+        assert_eq!(valid, Some(true));
+        assert!(warning.is_none());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
