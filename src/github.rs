@@ -315,7 +315,7 @@ pub fn download_blob_to_file(owner: &str, repository: &str, sha: &str, token: &s
     expected_size: Option<u64>, destination: &Path) -> Result<()> {
     let expected_size = validate_blob_size(expected_size)?;
     let url = format!("{}/git/blobs/{}", repository_base(owner, repository), urlencoding::encode(sha.trim()));
-    let mut response = api_get_with_accept(&url, token, "application/vnd.github.raw")?;
+    let mut response = api_get_with_accept(&url, token, "application/vnd.github.raw+json")?;
     if response.content_length().is_some_and(|length| length > expected_size) {
         anyhow::bail!("Réponse blob GitHub supérieure à la taille déclarée.");
     }
