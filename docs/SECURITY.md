@@ -6,8 +6,9 @@
 - Aucun fichier source n'est supprimé, déplacé, renommé, normalisé ou écrasé.
 - Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
 - Les rapports sont exportés hors du dossier local analysé.
-- Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
+- Les rapports HTML sont autonomes, échappent les données inventoriées et n'embarquent aucun JavaScript.
 - Les planches de contact revérifient le SHA-256 des sources avant de les décoder et refusent les liens symboliques.
+- Les rapports de comparaison JSON sont exportés hors des deux sources comparées.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
 - Les SVG sont analysés comme XML sans rendu.
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
@@ -15,7 +16,7 @@
 ## Chemins et liens
 - Les chemins GitHub sont composés uniquement de composants relatifs normaux.
 - Les chemins contenant racine, préfixe, parent ou composant spécial sont rejetés.
-- Les destinations existantes ne sont pas écrasées.
+- Les destinations existantes ne sont pas écrasées pour les téléchargements et planches.
 - Les liens symboliques présents dans les chemins de destination sont refusés.
 - Le dossier de destination est canonicalisé et doit rester dans le workspace.
 - Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
@@ -37,6 +38,7 @@
 
 ## Limites restantes
 - Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
+- Les erreurs de quota sont détectées mais aucun backoff automatique n'est encore appliqué.
 - La défense contre les changements concurrents du système de fichiers (TOCTOU) devra être renforcée lors de la mise en place du moteur asynchrone.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
 - Les analyseurs de formats actifs devront rester sans extraction/exécution automatique.
