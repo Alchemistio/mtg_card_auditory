@@ -275,6 +275,17 @@ fn validate_blob_size(expected_size: Option<u64>) -> Result<u64> {
     Ok(size)
 }
 
+fn validate_decoded_blob_size(actual: usize, expected: u64) -> Result<()> {
+    if actual as u64 != expected {
+        anyhow::bail!(
+            "Taille du blob incohérente : {} octets reçus, {} attendus.",
+            actual,
+            expected
+        );
+    }
+    Ok(())
+}
+
 pub fn download_blob(
     owner: &str,
     repository: &str,
@@ -302,23 +313,23 @@ pub fn download_blob(
     if blob.encoding != "base64" {
         anyhow::bail!("Encodage de blob non pris en charge : {}", blob.encoding);
     }
-    let compact = blob.content.replace('\n', "");
+    let compact: String = blob.content.chars().filter(|character| !character.is_ascii_whitespace()).collect();
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(compact)
         .context("Décodage base64 impossible")?;
-    if bytes.len() as u64 != expected_size {
-        anyhow::bail!(
-            "Taille du blob incohérente : {} octets reçus, {} attendus.",
-            bytes.len(),
-            expected_size
-        );
-    }
+    validate_decoded_blob_size(bytes.len(), expected_size)?;
     Ok(bytes)
 }
 
 #[cfg(test)]
 mod blob_size_tests {
     use super::*;
+
+    #[test]
+    fn rejects_decoded_blob_size_mismatches() {
+        assert!(validate_decoded_blob_size(4, 5).is_err());
+        assert!(validate_decoded_blob_size(5, 5).is_ok());
+    }
 
     #[test]
     fn rejects_unknown_and_oversized_blob_lengths() {
