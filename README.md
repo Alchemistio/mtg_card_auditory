@@ -34,7 +34,9 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement ; les exports restent hors de la source.
 
 ## Limites connues
-- Streaming des blobs volumineux et affichage du quota restant. Le cache GitHub local par commit/blob est maintenant activé et chaque entrée est vérifiée avec le SHA-1 Git avant réutilisation ; la reprise après fermeture reste à développer.
+- Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
+- Journal de progression persistant par commit dans `.mtg-auditor-cache` ; les fichiers terminés sont repris uniquement si leur taille et leur SHA-1 Git correspondent encore. Les fichiers absents ou modifiés ne sont jamais écrasés.
+- La reprise concerne les fichiers terminés d'une sélection relancée ; le streaming et la reprise d'un blob interrompu restent à développer.
 - Credential Manager et estimation du temps restant.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
