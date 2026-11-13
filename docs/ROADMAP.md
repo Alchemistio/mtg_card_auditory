@@ -24,7 +24,7 @@
 - [x] Cache GitHub local sous le workspace, indexé par owner/repository/commit/blob SHA et vérifié avec le SHA-1 Git avant réutilisation.
 - [x] Journal JSONL persistant des téléchargements par commit ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
 - [ ] Affichage du quota restant et de sa fenêtre de reset.
-- [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
+- [x] Stockage explicite du jeton dans Windows Credential Manager : charger, enregistrer et supprimer ; aucun enregistrement automatique. Validation CI à suivre.
 - [x] Taille maximale par blob (90 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
 - [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
 - [x] Téléchargement streaming des blobs GitHub vers le cache temporaire, contrôle taille et SHA-1 Git en flux, puis copie vers la destination sans charger le blob entier en mémoire.
