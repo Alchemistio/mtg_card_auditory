@@ -6,7 +6,7 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [ ] Compilation Windows CI vérifiée sur le dernier commit (un commit intermédiaire a passé Clippy, tests et build Release).
+- [ ] Compilation Windows CI vérifiée sur le dernier commit (un commit antérieur avec raster/SVG/polices a passé tout le pipeline).
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -21,7 +21,7 @@
 
 ## Phase 2 — Sources locales et inventaire
 - [ ] Sélection multi-dossiers.
-- [ ] Parcours parallèle et exclusions configurables.
+- [x] Parcours local parallèle via Rayon, sans suivre les liens symboliques.
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux.
 - [x] Classification indicative par extension.
 - [x] Métadonnées raster initiales : format détecté et dimensions depuis l'en-tête.
