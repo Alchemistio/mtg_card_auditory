@@ -880,8 +880,20 @@ fn main() -> eframe::Result<()> {
 
 #[cfg(test)]
 mod write_tests {
-    use super::write_new_file;
+    use super::{safe_github_namespace_segment, write_new_file};
     use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+
+    #[test]
+    fn github_namespace_segments_reject_path_traversal_and_separators() {
+        assert!(safe_github_namespace_segment("owner-1"));
+        assert!(safe_github_namespace_segment("repo_name.v2"));
+        assert!(!safe_github_namespace_segment(""));
+        assert!(!safe_github_namespace_segment("."));
+        assert!(!safe_github_namespace_segment(".."));
+        assert!(!safe_github_namespace_segment("../outside"));
+        assert!(!safe_github_namespace_segment("owner/repository"));
+        assert!(!safe_github_namespace_segment("owner\\\\repository"));
+    }
 
     #[test]
     fn exclusive_write_never_overwrites_existing_files() {
