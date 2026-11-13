@@ -7,7 +7,7 @@
 - Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
 - Les rapports sont exportés hors du dossier local analysé.
 - Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
-- Les planches de contact revérifient le SHA-256 des sources avant de les décoder.
+- Les planches de contact revérifient le SHA-256 des sources avant de les décoder et refusent les liens symboliques.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
 - Les SVG sont analysés comme XML sans rendu.
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
@@ -25,7 +25,7 @@
 - ZIP : lecture des métadonnées de l'archive sans extraire de contenu.
 - Les chemins absolus, parent, points, antislashs et préfixes de volume sont signalés.
 - Les ratios de compression inhabituels et tailles décompressées déclarées importantes sont signalés.
-- Le nombre d'entrées (200 000) et la taille décompressée déclarée (8 Gio) sont plafonnés.
+- Le fichier ZIP est plafonné à 512 Mio ; le nombre d'entrées (200 000) et la taille décompressée déclarée (8 Gio) sont plafonnés.
 - Les formats 7z/RAR ne sont pas encore inspectés.
 
 ## Secrets GitHub
