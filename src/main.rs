@@ -317,7 +317,7 @@ impl AuditorApp {
                                     .duration_since(std::time::UNIX_EPOCH)?.as_secs(),
                             };
                             serde_json::to_writer(&mut journal, &record)?;
-                            journal.write_all(b"\\n")?;
+                            journal.write_all(b"\n")?;
                             journal.sync_all()?;
                             completed_records.insert((record.path, record.blob_sha, record.size_bytes));
                             Ok(())
