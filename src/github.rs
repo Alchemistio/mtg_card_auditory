@@ -3,7 +3,7 @@ use base64::Engine;
 use reqwest::blocking::{Client, Response};
 use reqwest::header::ACCEPT;
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use crate::models::RemoteEntry;
 
@@ -56,7 +56,10 @@ pub fn parse_repository_url(input: &str) -> Result<(String, String)> {
 }
 
 fn api_get(url: &str, token: &str) -> Result<Response> {
-    let client = Client::builder().user_agent("mtg-asset-auditor").build()?;
+    let client = Client::builder()
+        .user_agent("mtg-asset-auditor")
+        .timeout(Duration::from_secs(60))
+        .build()?;
     let mut request = client.get(url).header(ACCEPT, "application/vnd.github+json");
     if !token.trim().is_empty() {
         request = request.bearer_auth(token.trim());
@@ -64,7 +67,13 @@ fn api_get(url: &str, token: &str) -> Result<Response> {
     let response = request.send().with_context(|| format!("Requête GitHub impossible : {}", url))?;
     let status = response.status();
     if !status.is_success() {
+        let remaining = response.headers().get("x-ratelimit-remaining").and_then(|value| value.to_str().ok()).unwrap_or("");
+        let reset = response.headers().get("x-ratelimit-reset").and_then(|value| value.to_str().ok()).unwrap_or("");
+        let retry_after = response.headers().get("retry-after").and_then(|value| value.to_str().ok()).unwrap_or("");
         let body = response.text().unwrap_or_default();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS || (status == reqwest::StatusCode::FORBIDDEN && remaining == "0") {
+            anyhow::bail!("Limite de l'API GitHub atteinte. Retry-After={} s ; reset Unix={} ; détail={}", retry_after, reset, body);
+        }
         anyhow::bail!("GitHub a répondu {}: {}", status, body);
     }
     Ok(response)
