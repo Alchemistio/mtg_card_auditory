@@ -4,7 +4,7 @@ use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicUsize, Ordering}, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -400,7 +400,7 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
 #[cfg(test)]
 pub fn scan_directory_with_progress<F>(root: &Path, progress: F) -> Result<InventoryDocument>
 where
-    F: Fn(usize, usize) + Sync,
+    F: Fn(u64, u64) + Sync,
 {
     scan_directory_with_progress_and_cancel(root, progress, &AtomicBool::new(false))
 }
@@ -436,7 +436,11 @@ where
     }
 
     let total_paths = paths.len();
+    let total_bytes = paths.iter()
+        .filter_map(|path| std::fs::metadata(path).ok())
+        .fold(0_u64, |total, metadata| total.saturating_add(metadata.len()));
     let completed = AtomicUsize::new(0);
+    let completed_bytes = AtomicU64::new(0);
     let mut assets: Vec<AssetRecord> = paths.par_iter()
         .map(|path| {
             if cancelled.load(Ordering::Relaxed) {
@@ -447,8 +451,10 @@ where
                 anyhow::bail!("Scan annulé par l'utilisateur.");
             }
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+            let bytes_done = completed_bytes.fetch_add(asset.size_bytes, Ordering::Relaxed)
+                .saturating_add(asset.size_bytes);
             if done.is_multiple_of(100) || done == total_paths {
-                progress(done, total_paths);
+                progress(bytes_done, total_bytes);
             }
             Ok(asset)
         })
