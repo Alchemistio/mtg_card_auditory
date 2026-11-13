@@ -7,7 +7,7 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `df73f1a` : Clippy, tests, build Release et upload d'artefact.
-- [ ] Revalidation des derniers ajouts de repérage des fichiers de notices.
+- [ ] Revalidation des derniers ajouts de repérage des notices et progression.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -26,6 +26,7 @@
 - [ ] Sélection multi-dossiers.
 - [x] Parcours local parallèle via Rayon, sans suivre les liens symboliques.
 - [x] Scan local exécuté dans un worker d'arrière-plan.
+- [x] Progression en nombre de fichiers traités (mise à jour par lots de 100 et à la fin).
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux ; anciens inventaires v1 acceptés avec champs optionnels par défaut.
 - [x] Détection des doublons binaires exacts par SHA-256, sans suppression.
 - [x] Comparaison de deux inventaires JSON par chemin et SHA-256 (ajouté/supprimé/modifié/identique).
@@ -40,7 +41,7 @@
 - [x] Génération de planches raster PNG paginées (16 éléments/page) avec index texte ; SHA vérifié avant aperçu.
 - [x] Refus des exports dans l'arborescence source.
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
-- [ ] Progression détaillée, annulation et reprise pour les scans longs.
+- [ ] Progression en octets, estimation temps restant et annulation.
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
