@@ -190,8 +190,9 @@ fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Op
         Ok(archive) => archive,
         Err(error) => return (None, None, None, Some(format!("Structure ZIP invalide : {}", error))),
     };
-    if archive.len() > 200_000 {
-        return (Some(archive.len()), None, None, Some("Archive ignorée : plus de 200 000 entrées.".to_string()));
+    let entry_count = archive.len();
+    if entry_count > 200_000 {
+        return (Some(entry_count), None, None, Some("Archive ignorée : plus de 200 000 entrées.".to_string()));
     }
     let mut uncompressed_bytes = 0_u64;
     let mut suspicious_paths = 0_usize;
@@ -199,7 +200,7 @@ fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Op
     for index in 0..archive.len() {
         let entry = match archive.by_index(index) {
             Ok(entry) => entry,
-            Err(error) => return (Some(archive.len()), None, None, Some(format!("Entrée ZIP illisible : {}", error))),
+            Err(error) => return (Some(entry_count), None, None, Some(format!("Entrée ZIP illisible : {}", error))),
         };
         let name = entry.name();
         if entry.enclosed_name().is_none()
@@ -216,7 +217,7 @@ fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Op
         }
         uncompressed_bytes = uncompressed_bytes.saturating_add(size);
         if uncompressed_bytes > 8 * 1024 * 1024 * 1024 {
-            return (Some(archive.len()), Some(uncompressed_bytes), Some(suspicious_paths),
+            return (Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths),
                 Some("Alerte ZIP : taille décompressée déclarée supérieure à 8 Gio.".to_string()));
         }
     }
@@ -227,7 +228,7 @@ fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Op
     } else {
         None
     };
-    (Some(archive.len()), Some(uncompressed_bytes), Some(suspicious_paths), warning)
+    (Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths), warning)
 }
 
 fn sha256_file(path: &Path) -> Result<String> {
