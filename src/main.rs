@@ -59,6 +59,9 @@ impl AuditorApp {
             let result = github::download_blob(&self.owner, &self.repository, &entry.sha, &self.token)
                 .and_then(|bytes| {
                     let destination = safe_destination(&root, &entry.path)?;
+                    if destination.exists() {
+                        anyhow::bail!("Le fichier existe déjà dans le workspace : {}", destination.display());
+                    }
                     if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent)?; }
                     std::fs::write(destination, bytes)?;
                     Ok(())
