@@ -3,7 +3,7 @@
 ## État de l'implémentation
 Le prototype est organisé en modules Rust :
 - `main.rs` : interface egui, workers d'arrière-plan, choix des sources et actions d'export/comparaison.
-- `github.rs` : API REST, parsing URL, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
+- `github.rs` : API REST, parsing URL, timeout HTTP, erreurs de quota, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
 - `models.rs` : entrées d'arbre GitHub.
 - `inventory.rs` : parcours local parallèle, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
 - `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
@@ -19,6 +19,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 6. Sélectionner les blobs distants et télécharger vers le workspace choisi.
 7. Vérifier les chemins de destination et refuser les liens symboliques / écrasements.
 8. Les blobs sont actuellement récupérés via l'API Git Blobs Base64 ; streaming/cache/reprise restent à faire.
+9. Les erreurs 429 et 403 avec quota épuisé sont identifiées ; le backoff automatique reste à faire.
 
 ## Flux local actuel
 1. Choisir un dossier source.
@@ -30,6 +31,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 7. Comparer avec un inventaire JSON antérieur par chemin et SHA-256.
 8. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source.
 9. Générer des planches raster PNG de 16 éléments/page et un index texte ; le SHA est revérifié avant décodage.
+10. Les rapports de comparaison JSON sont écrits hors des deux sources comparées.
 
 ## Séparation des états
 Source, inventaire, analyse calculée, revue humaine et exports sont séparés. Une revue visuelle ou juridique ne peut jamais être validée par heuristique. Les classifications automatiques restent des suggestions.
@@ -46,11 +48,11 @@ Source, inventaire, analyse calculée, revue humaine et exports sont séparés. 
 Le cache et la persistance des revues restent à développer ; les sources distantes et locales ne sont jamais altérées.
 
 ## Limites techniques
-- Les requêtes HTTP utilisent actuellement reqwest bloquant dans les workers ; quotas, backoff et reprise doivent être ajoutés.
+- Les requêtes HTTP utilisent actuellement reqwest bloquant dans les workers ; backoff, reprise et cache doivent être ajoutés.
 - Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `6310f92` a passé Clippy, tests, build Release et upload d'artefact ; les changements raster alpha, planches et comparaison doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `a4a099e` a passé Clippy, tests, build Release et upload d'artefact ; les changements de rapport de comparaison et de gestion des limites API doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
