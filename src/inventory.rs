@@ -714,6 +714,32 @@ mod tests {
     }
 
     #[test]
+    fn reads_early_v1_inventory_without_new_optional_fields() {
+        let legacy = r#"{
+            "schema_version": 1,
+            "source_root": "C:/assets",
+            "generated_unix_seconds": 1,
+            "files_scanned": 1,
+            "total_bytes": 5,
+            "assets": [{
+                "id": "old-id",
+                "relative_path": "sample.txt",
+                "file_name": "sample.txt",
+                "extension": "txt",
+                "size_bytes": 5,
+                "modified_unix_seconds": null,
+                "sha256": "abc",
+                "detected_family": "text",
+                "review_status": "needs-review"
+            }]
+        }"#;
+        let inventory: InventoryDocument = serde_json::from_str(legacy).unwrap();
+        assert_eq!(inventory.duplicate_files, 0);
+        assert_eq!(inventory.assets[0].raster_width, None);
+        assert_eq!(inventory.assets[0].duplicate_of, None);
+    }
+
+    #[test]
     fn compares_added_removed_changed_and_unchanged_files() {
         let base = std::env::temp_dir().join(format!("mtg-auditor-compare-test-{}", std::process::id()));
         let baseline_root = base.join("baseline");
