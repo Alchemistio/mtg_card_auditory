@@ -412,6 +412,17 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
     let mut rendered = 0usize;
     for (slot, asset) in selected.iter().enumerate() {
         let source = source_root.join(&asset.relative_path);
+        let current_hash = match sha256_file(&source) {
+            Ok(hash) => hash,
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tSOURCE ABSENTE OU ILLISIBLE\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        if current_hash != asset.sha256 {
+            index_text.push_str(&format!("{:02}\tSOURCE MODIFIÉE DEPUIS LE SCAN\t{}\n", slot + 1, asset.relative_path));
+            continue;
+        }
         let file_size = std::fs::metadata(&source).map(|metadata| metadata.len()).unwrap_or(u64::MAX);
         if file_size > 100 * 1024 * 1024 {
             index_text.push_str(&format!("{:02}\tIGNORÉ (fichier > 100 Mio)\t{}\n", slot + 1, asset.relative_path));
