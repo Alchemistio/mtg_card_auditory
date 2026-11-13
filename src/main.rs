@@ -7,6 +7,7 @@ use std::{collections::HashSet, path::{Path, PathBuf}};
 
 #[derive(Default)]
 struct AuditorApp {
+    repository_url: String,
     owner: String,
     repository: String,
     branch: String,
@@ -37,6 +38,17 @@ impl AuditorApp {
             Err(error) => self.status = format!("Erreur GitHub : {:#}", error),
         }
         self.busy = false;
+    }
+
+    fn parse_url(&mut self) {
+        match github::parse_repository_url(&self.repository_url) {
+            Ok((owner, repository)) => {
+                self.owner = owner;
+                self.repository = repository;
+                self.status = "URL reconnue. Vérifie la branche et lance l'exploration.".into();
+            }
+            Err(error) => self.status = format!("URL invalide : {:#}", error),
+        }
     }
 
     fn scan_local(&mut self) {
@@ -171,6 +183,11 @@ impl eframe::App for AuditorApp {
             ui.separator();
             ui.heading("Source GitHub");
             ui.horizontal(|ui| {
+                ui.label("URL du dépôt");
+                ui.text_edit_singleline(&mut self.repository_url);
+                if ui.button("Lire l'URL").clicked() { self.parse_url(); }
+            });
+            ui.horizontal(|ui| {
                 ui.label("Propriétaire");
                 ui.text_edit_singleline(&mut self.owner);
                 ui.label("Dépôt");
@@ -227,7 +244,7 @@ impl eframe::App for AuditorApp {
             ui.separator();
             ui.label(&self.status);
             if self.busy { ui.spinner(); }
-            ui.small("Socle en développement : inventaire local SHA-256 et exports JSON/CSV. Les sources ne sont jamais modifiées.");
+            ui.small("Inventaire local SHA-256, exports JSON/CSV et exploration GitHub par URL. Les sources ne sont jamais modifiées.");
         });
     }
 }
