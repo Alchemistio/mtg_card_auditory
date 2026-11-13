@@ -211,6 +211,8 @@ impl AuditorApp {
                 let mut errors = Vec::new();
                 let mut manifest_files = Vec::new();
                 let total = chosen.len();
+                let manifest_name = format!("download-manifest-{}.json", &commit_sha[..7.min(commit_sha.len())]);
+                let manifest_conflict = chosen.iter().any(|entry| entry.path == manifest_name);
                 let progress_sender = sender.clone();
                 for (index, entry) in chosen.into_iter().enumerate() {
                     let result = github::download_blob(&owner, &repository, &entry.sha, &token)
@@ -240,8 +242,10 @@ impl AuditorApp {
                     }
                     let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                 }
-                let manifest_path = canonical_root.join(format!("download-manifest-{}.json", &commit_sha[..7.min(commit_sha.len())]));
-                let manifest_status = if !manifest_files.is_empty() && !commit_sha.is_empty() {
+                let manifest_path = canonical_root.join(&manifest_name);
+                let manifest_status = if manifest_conflict {
+                    "Manifeste ignoré : un chemin distant sélectionné porte le même nom.".to_string()
+                } else if !manifest_files.is_empty() && !commit_sha.is_empty() {
                     if manifest_path.exists() {
                         "Manifeste existant non écrasé.".to_string()
                     } else {
