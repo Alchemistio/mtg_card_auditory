@@ -7,7 +7,7 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `a6bf479` : Clippy, tests, build Release et upload d'artefact.
-- [ ] CI des nouvelles tentatives HTTP en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
+- [ ] CI des retries HTTP, limites de blobs et annulation du scan local en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
@@ -46,7 +46,8 @@
 - [x] Génération de planches raster PNG paginées (16 éléments/page) avec index texte ; SHA vérifié avant aperçu.
 - [x] Refus des exports dans l'arborescence source.
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
-- [ ] Progression en octets, estimation temps restant et annulation.
+- [x] Annulation coopérative du scan local depuis l'interface, vérifiée entre les étapes de parcours et d'analyse.
+- [ ] Progression en octets, estimation temps restant, annulation du téléchargement GitHub et scan multi-sources.
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
