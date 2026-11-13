@@ -11,16 +11,17 @@ Le prototype est organisé en modules Rust :
 Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. L'annulation et la progression en octets ne sont pas encore implémentées.
 
 ## Flux GitHub actuel
-1. Saisir une URL github.com ou propriétaire/dépôt.
+1. Saisir une URL HTTPS canonique `github.com/owner/repository` ou propriétaire/dépôt ; le parseur vérifie l'hôte exact et refuse les identifiants, ports, query strings, fragments et sous-chemins.
 2. Résoudre la branche par défaut si la référence est vide.
 3. Résoudre la référence en commit, puis utiliser le SHA de l'arbre associé.
 4. Demander l'arbre récursif ; si GitHub le tronque, descendre par sous-arbres avec garde-fous de profondeur et de cycles actifs.
 5. Filtrer par sous-dossier.
 6. Sélectionner les blobs distants et télécharger vers le workspace choisi.
-7. Vérifier les chemins de destination et refuser les liens symboliques / écrasements.
+7. Vérifier les chemins de destination, refuser les liens symboliques et ouvrir les fichiers avec création exclusive afin de ne pas écraser une destination existante.
 8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
 9. Les blobs sont actuellement récupérés via l'API Git Blobs Base64 ; streaming/cache/reprise restent à faire.
 10. Les erreurs 429 et 403 avec quota épuisé sont identifiées ; le backoff automatique reste à faire.
+11. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
 
 ## Flux local actuel
 1. Choisir un dossier source.
@@ -56,4 +57,4 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `f83a9e3` a passé Clippy, tests, build Release et upload d'artefact ; le manifeste de provenance GitHub doit être revalidé avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `a6bf479` a passé Clippy, tests, build Release et upload d'artefact. Le durcissement du parseur URL et des écritures sans écrasement est soumis à une nouvelle CI. La signature de code pourra être ajoutée avec un certificat externe.
