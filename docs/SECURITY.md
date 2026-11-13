@@ -1,12 +1,31 @@
-# Sécurité
-- Le logiciel ne modifie jamais le dépôt GitHub distant ni les sources locales.
-- Les téléchargements et rapports restent dans le workspace choisi.
-- Les chemins distants sont validés composant par composant.
-- Jeton masqué, conservé en mémoire, jamais journalisé ou exporté.
-- Permissions recommandées : Contents read.
-- Les téléchargements sont des données, jamais du code à exécuter.
-- Archives inspectées sans extraction automatique par défaut.
-- Limites de taille et d'expansion avant toute extraction.
-- Les aperçus SVG bloquent les références réseau externes.
-- Les doublons ne déclenchent aucune suppression.
-- Les rapports documentent fichiers ignorés, erreurs et limites.
+# Sécurité et intégrité des sources
+
+## Principes
+- Les dépôts GitHub sont interrogés en lecture seule.
+- Les dossiers locaux sont parcourus en lecture seule.
+- Aucun fichier source n'est supprimé, déplacé, renommé, normalisé ou écrasé.
+- Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
+- Les rapports sont exportés hors du dossier local analysé.
+- Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
+
+## Chemins et liens
+- Les chemins GitHub sont composés uniquement de composants relatifs normaux.
+- Les chemins contenant racine, préfixe, parent ou composant spécial sont rejetés.
+- Les destinations existantes ne sont pas écrasées.
+- Les liens symboliques présents dans les chemins de destination sont refusés.
+- Le dossier de destination est canonicalisé et doit rester dans le workspace.
+- Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
+- Les exports JSON/CSV sont refusés si le chemin final se trouve dans l'arborescence source.
+
+## Secrets GitHub
+- Le champ du jeton est masqué.
+- Le jeton n'est conservé qu'en mémoire dans le prototype.
+- Ne jamais écrire le jeton dans les journaux, exports ou fichiers de configuration.
+- Utiliser un jeton à permissions minimales, Contents: read.
+- Le stockage Windows Credential Manager reste à implémenter.
+
+## Limites restantes
+- Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
+- La défense contre les changements concurrents du système de fichiers (TOCTOU) devra être renforcée lors de la mise en place du moteur asynchrone.
+- Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
+- Les analyseurs d'archives et formats actifs devront rester sans extraction/exécution automatique.
