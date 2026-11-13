@@ -14,7 +14,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Progression des téléchargements GitHub par fichier terminé.
 - Manifeste JSON de provenance pour les téléchargements : propriétaire, dépôt, référence demandée, commit SHA, tree SHA, date, chemin et blob SHA.
 - Timeout HTTP de 60 secondes, jusqu'à trois nouvelles tentatives (quatre requêtes au total) pour les erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After (secondes ou date HTTP) ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
-- Téléchargement streaming des blobs GitHub plafonné à 90 Mio par fichier ; taille et SHA-1 Git vérifiés pendant le flux avec un tampon borné, avant publication dans le cache puis copie vers le workspace.
+- Téléchargement streaming des blobs GitHub via le média type brut documenté `application/vnd.github.raw+json`, plafonné à 90 Mio par fichier ; taille et SHA-1 Git vérifiés pendant le flux avec un tampon de 64 Kio, avant publication dans le cache puis copie vers le workspace.
 - Cache local sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace ; les entrées sont vérifiées par SHA-1 Git et les entrées invalides sont écartées avant un nouveau téléchargement.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Filtrage de la liste distante par chemin, extension, plage de taille et famille technique, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
@@ -36,7 +36,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 ## Limites connues
 - Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
 - Journal de progression persistant par commit dans `.mtg-auditor-cache` ; les fichiers terminés sont repris uniquement si leur taille et leur SHA-1 Git correspondent encore. Les fichiers absents ou modifiés ne sont jamais écrasés.
-- La reprise concerne les fichiers terminés d'une sélection relancée ; le streaming et la reprise d'un blob interrompu restent à développer.
+- La reprise concerne les fichiers terminés d'une sélection relancée. La reprise d'un blob interrompu au niveau des octets n'est pas implémentée ; la documentation GitHub de l'API Git Blobs ne garantit pas la prise en charge de `Range` ou d'ETag, donc aucun fragment partiel n'est réutilisé.
 - Credential Manager et estimation du temps restant.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
