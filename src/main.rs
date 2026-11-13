@@ -339,7 +339,7 @@ impl AuditorApp {
                         let relative_path = safe_workspace_relative(&entry.path)?;
                         if let Ok(metadata) = workspace_fs.symlink_metadata(&relative_path) {
                             let valid = if metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() == expected_size {
-                                workspace_fs.open_read(&relative_path).and_then(|mut file| github::verify_git_blob_reader(&entry.sha, &mut file, expected_size).map_err(std::io::Error::other)).is_ok()
+                                workspace_fs.open_read(&relative_path).map_or(false, |mut file| github::verify_git_blob_reader(&entry.sha, &mut file, expected_size).is_ok())
                             } else { false };
                             if valid {
                                 downloaded += 1;
@@ -561,8 +561,7 @@ fn cached_github_blob(
             anyhow::bail!("Entrée de cache non régulière ou lien symbolique refusé.");
         }
         let valid = workspace.open_read(&cache_file)
-            .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).map_err(std::io::Error::other))
-            .is_ok();
+            .map_or(false, |mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).is_ok());
         if valid { return Ok(cache_file); }
         workspace.remove_file(&cache_file).context("Impossible d'écarter une entrée de cache invalide")?;
     }
@@ -578,7 +577,8 @@ fn cached_github_blob(
     github::download_blob_to_file(owner, repository, blob_sha, token, expected_size, &workspace.inner, &temporary)
         .context("Téléchargement streaming du blob impossible")?;
     let verified = workspace.open_read(&temporary)
-        .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).map_err(std::io::Error::other));
+        .map_err(anyhow::Error::from)
+        .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size));
     if let Err(error) = verified {
         let _ = workspace.remove_file(&temporary);
         return Err(error).context("Vérification du fichier temporaire de cache impossible");
