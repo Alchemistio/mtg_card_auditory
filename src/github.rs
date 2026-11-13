@@ -5,7 +5,7 @@ use reqwest::header::ACCEPT;
 use serde::Deserialize;
 use std::{collections::HashSet, time::Duration};
 
-use crate::models::RemoteEntry;
+use crate::models::{RemoteEntry, RepositoryTree};
 
 #[derive(Deserialize)]
 struct TreeResponse {
@@ -20,6 +20,7 @@ struct RepositoryResponse {
 
 #[derive(Deserialize)]
 struct CommitResponse {
+    sha: String,
     commit: CommitDetails,
 }
 
@@ -134,7 +135,7 @@ impl TreeWalker<'_> {
     }
 }
 
-pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: &str) -> Result<Vec<RemoteEntry>> {
+pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: &str) -> Result<RepositoryTree> {
     let owner = owner.trim();
     let repository = repository.trim();
     if owner.is_empty() || repository.is_empty() {
@@ -156,7 +157,11 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
     let tree_sha = commit.commit.tree.sha;
     let recursive = fetch_tree(owner, repository, &tree_sha, true, token)?;
     if !recursive.truncated {
-        return Ok(recursive.tree);
+        return Ok(RepositoryTree {
+            commit_sha: commit.sha,
+            tree_sha,
+            entries: recursive.tree,
+        });
     }
 
     let mut walker = TreeWalker {
@@ -167,7 +172,11 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
         output: Vec::new(),
     };
     walker.collect(&tree_sha, "", 0)?;
-    Ok(walker.output)
+    Ok(RepositoryTree {
+        commit_sha: commit.sha,
+        tree_sha,
+        entries: walker.output,
+    })
 }
 
 pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> Result<Vec<u8>> {
