@@ -7,7 +7,7 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `df73f1a` : Clippy, tests, build Release et upload d'artefact.
-- [ ] Revalidation des derniers ajouts de repérage des notices et progression.
+- [ ] Revalidation des derniers ajouts de repérage des notices et de progression.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -16,6 +16,7 @@
 - [x] Si l'arbre récursif est tronqué, parcourir les sous-arbres avec détection de cycle et limite de profondeur.
 - [x] Sous-dossier filtré côté interface.
 - [x] Exploration et téléchargement GitHub dans des workers d'arrière-plan.
+- [x] Progression de téléchargement par fichier.
 - [x] Timeout HTTP et diagnostic structuré des rate limits (429 / 403 avec quota épuisé).
 - [ ] Backoff automatique, reprise et affichage du quota restant.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
