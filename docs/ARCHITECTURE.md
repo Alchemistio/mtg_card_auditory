@@ -1,41 +1,54 @@
 # Architecture
 
-## Modules cibles
-- UI : source, paramètres, galerie, progression.
-- GitHub : API, dépôt/branche/commit/arbre, arbres partiels et blobs.
-- Local : parcours récursif en lecture seule.
-- Inventory : modèle unifié et IDs stables.
-- Images/SVG/Fonts/Archives/MSE : analyseurs spécialisés.
-- Hashes : SHA-256 et groupes de doublons.
-- Licenses : preuves, provenance et statuts manuels.
-- Export : JSON, CSV, HTML et planches.
-- Workspace : cache, téléchargement et résultats.
+## État de l'implémentation
+Le prototype est organisé en modules Rust :
+- `main.rs` : interface egui, workers d'arrière-plan, choix des sources et actions d'export.
+- `github.rs` : API REST, parsing URL, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
+- `models.rs` : entrées d'arbre GitHub.
+- `inventory.rs` : parcours local parallèle, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, doublons exacts et exports JSON/CSV/HTML.
+- `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
 
-## Flux GitHub
-1. Saisir URL ou propriétaire/dépôt.
-2. Vérifier le dépôt et résoudre la branche/tag/commit en SHA immuable.
-3. Obtenir l'arbre Git récursif ; si tronqué, descendre par sous-arbres.
-4. Filtrer par sous-dossier, extensions, tailles et familles.
-5. Afficher les chemins, blob SHA et tailles.
-6. Télécharger uniquement la sélection dans le workspace.
-7. Calculer le SHA-256 des octets et lancer les analyseurs.
-8. Exporter un rapport relié au commit exact.
+Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. L'annulation et la progression détaillée ne sont pas encore implémentées.
 
-Les limites API GitHub doivent être respectées. Les gros blobs nécessitent un téléchargement streaming plutôt que l'endpoint Base64.
+## Flux GitHub actuel
+1. Saisir une URL github.com ou propriétaire/dépôt.
+2. Résoudre la branche par défaut si la référence est vide.
+3. Résoudre la référence en commit, puis utiliser le SHA de l'arbre associé.
+4. Demander l'arbre récursif ; si GitHub le tronque, descendre par sous-arbres avec garde-fous de profondeur et de cycles.
+5. Filtrer par sous-dossier.
+6. Sélectionner les blobs distants et télécharger vers le workspace choisi.
+7. Vérifier les chemins de destination et refuser les liens symboliques / écrasements.
+8. Les blobs sont actuellement récupérés via l'API Git Blobs Base64 ; streaming/cache/reprise restent à faire.
+
+## Flux local actuel
+1. Choisir un dossier source.
+2. Parcourir récursivement sans suivre les liens symboliques, avec profondeur maximale.
+3. Calculer SHA-256 en blocs et relever taille/date/extension.
+4. Classifier indicativement par extension.
+5. Extraire les dimensions et format raster depuis l'en-tête, analyser le XML SVG sans rendu, relever famille/sous-famille des polices prises en charge, inspecter la table centrale ZIP sans extraction.
+6. Détecter les doublons exacts par SHA-256 sans supprimer ni modifier les fichiers.
+7. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source.
 
 ## Séparation des états
-Source, inventaire, analyse calculée, revue humaine et exports sont séparés. Une revue visuelle ou juridique ne peut jamais être validée par heuristique.
+Source, inventaire, analyse calculée, revue humaine et exports sont séparés. Une revue visuelle ou juridique ne peut jamais être validée par heuristique. Les classifications automatiques restent des suggestions.
 
 ## Workspace
-- cache/github/owner/repo/commit/blob-sha
-- runs/run-id/inventory.json
-- runs/run-id/assets.csv
-- runs/run-id/contact-sheets/
-- runs/run-id/gallery/index.html
-- runs/run-id/report.html
-- runs/run-id/logs/
+- `cache/github/owner/repo/commit/blob-sha` (à implémenter)
+- `runs/run-id/inventory.json`
+- `runs/run-id/assets.csv`
+- `runs/run-id/report.html`
+- `runs/run-id/contact-sheets/` (à implémenter)
+- `runs/run-id/gallery/index.html` (à implémenter)
+- `runs/run-id/logs/` (à implémenter)
 
-Le cache peut être nettoyé par l'utilisateur ; les sources distantes ne sont jamais altérées.
+Le cache et la persistance des revues restent à développer ; les sources distantes et locales ne sont jamais altérées.
+
+## Limites techniques
+- Les requêtes HTTP utilisent actuellement reqwest bloquant dans les workers ; quotas, backoff et reprise doivent être ajoutés.
+- Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
+- La protection contre les courses TOCTOU sur le workspace doit être renforcée.
+- Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
+- Les miniatures, aperçu SVG sandboxé, MSE, licences/provenance et comparaison d'inventaires sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `45e601e` a passé Clippy, tests, build Release et upload d'artefact ; les changements UI/HTML/doublons postérieurs doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
