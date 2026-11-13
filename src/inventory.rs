@@ -375,6 +375,71 @@ pub fn export_csv(document: &InventoryDocument, destination: &Path) -> Result<()
     Ok(())
 }
 
+fn escape_html(value: &str) -> String {
+    value.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<()> {
+    ensure_export_outside_source(document, destination)?;
+    let mut html = String::from(
+        "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Rapport d'inventaire d'assets</title><style>body{font:14px system-ui,sans-serif;margin:2rem;color:#20242a;background:#fff}h1{margin-bottom:.3rem}.meta{color:#59636e}.stats{display:flex;gap:1.5rem;flex-wrap:wrap;margin:1.5rem 0}.stat{padding:.8rem 1rem;background:#f1f3f5;border-radius:.5rem}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #d8dde3;padding:.45rem;text-align:left;vertical-align:top}th{background:#eef1f4;position:sticky;top:0}code{overflow-wrap:anywhere}.warning{color:#8a4b00}.duplicate{color:#075a91}</style></head><body>"
+    );
+    html.push_str("<h1>Rapport d'inventaire d'assets</h1><p class=\"meta\">Source : ");
+    html.push_str(&escape_html(&document.source_root));
+    html.push_str("</p><div class=\"stats\"><div class=\"stat\"><b>Fichiers</b><br>");
+    html.push_str(&document.files_scanned.to_string());
+    html.push_str("</div><div class=\"stat\"><b>Taille totale</b><br>");
+    html.push_str(&document.total_bytes.to_string());
+    html.push_str(" octets</div><div class=\"stat\"><b>Doublons exacts</b><br>");
+    html.push_str(&document.duplicate_files.to_string());
+    html.push_str("</div><div class=\"stat\"><b>Schéma</b><br>v");
+    html.push_str(&document.schema_version.to_string());
+    html.push_str("</div></div><table><thead><tr><th>Chemin</th><th>Famille</th><th>Taille</th><th>SHA-256</th><th>Métadonnées</th><th>Revue</th></tr></thead><tbody>");
+    for asset in &document.assets {
+        html.push_str("<tr><td><code>");
+        html.push_str(&escape_html(&asset.relative_path));
+        html.push_str("</code></td><td>");
+        html.push_str(&escape_html(&asset.detected_family));
+        html.push_str("</td><td>");
+        html.push_str(&asset.size_bytes.to_string());
+        html.push_str("</td><td><code>");
+        html.push_str(&escape_html(&asset.sha256));
+        html.push_str("</code></td><td>");
+        if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
+            html.push_str(&format!("Raster : {}×{} ", width, height));
+        }
+        if let Some(viewbox) = &asset.svg_viewbox {
+            html.push_str(&format!("viewBox : {} ", escape_html(viewbox)));
+        }
+        if let Some(family) = &asset.font_family {
+            html.push_str(&format!("Police : {} ", escape_html(family)));
+        }
+        if let Some(count) = asset.archive_entry_count {
+            html.push_str(&format!("ZIP : {} entrées ", count));
+        }
+        if let Some(first_path) = &asset.duplicate_of {
+            html.push_str("<span class=\"duplicate\">Doublon de ");
+            html.push_str(&escape_html(first_path));
+            html.push_str("</span> ");
+        }
+        if let Some(warning) = &asset.analysis_warning {
+            html.push_str("<p class=\"warning\">");
+            html.push_str(&escape_html(warning));
+            html.push_str("</p>");
+        }
+        html.push_str("</td><td>");
+        html.push_str(&escape_html(&asset.review_status));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table><p class=\"meta\">Rapport autonome hors ligne. Les catégories sont indicatives et ne constituent ni une validation de licence ni une approbation de ressource.</p></body></html>");
+    std::fs::write(destination, html)
+        .with_context(|| format!("Écriture du rapport HTML impossible : {}", destination.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,6 +503,11 @@ mod tests {
         assert_eq!(suspicious, Some(1));
         assert!(warning.is_some());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn html_escaping_blocks_markup_in_user_paths() {
+        assert_eq!(escape_html("<script>&\"'"), "&lt;script&gt;&amp;&quot;&#39;");
     }
 
     #[test]
