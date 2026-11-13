@@ -742,6 +742,18 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn cancelled_scan_stops_before_analyzing_source_files() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-cancel-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("sample.txt"), b"sample").unwrap();
+        let cancelled = AtomicBool::new(true);
+        let result = scan_directory_with_progress_and_cancel(&root, |_, _| {}, &cancelled);
+        assert!(result.unwrap_err().to_string().contains("annulé"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn classifies_known_and_unknown_extensions() {
         assert_eq!(classify_extension("png"), "raster");
         assert_eq!(classify_extension("SVG"), "svg");
