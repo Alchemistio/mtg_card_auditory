@@ -97,7 +97,7 @@ struct TreeWalker<'a> {
     owner: &'a str,
     repository: &'a str,
     token: &'a str,
-    visited: HashSet<String>,
+    active_trees: HashSet<String>,
     output: Vec<RemoteEntry>,
 }
 
@@ -106,8 +106,8 @@ impl TreeWalker<'_> {
         if depth > 128 {
             anyhow::bail!("Profondeur d'arbre GitHub supérieure à la limite de sécurité (128).");
         }
-        if !self.visited.insert(tree_sha.to_string()) {
-            return Ok(());
+        if !self.active_trees.insert(tree_sha.to_string()) {
+            anyhow::bail!("Cycle détecté dans le graphe des arbres GitHub.");
         }
         let response = fetch_tree(self.owner, self.repository, tree_sha, false, self.token)?;
         if response.truncated {
@@ -129,6 +129,7 @@ impl TreeWalker<'_> {
                 self.output.push(entry);
             }
         }
+        self.active_trees.remove(tree_sha);
         Ok(())
     }
 }
@@ -162,7 +163,7 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
         owner,
         repository,
         token,
-        visited: HashSet::new(),
+        active_trees: HashSet::new(),
         output: Vec::new(),
     };
     walker.collect(&tree_sha, "", 0)?;
