@@ -21,7 +21,7 @@
 - Les chemins contenant racine, préfixe, parent ou composant spécial sont rejetés.
 - Les destinations existantes ne sont pas écrasées pour les téléchargements et planches.
 - Les fichiers téléchargés et les manifestes sont ouverts avec création exclusive (`create_new`) pour refuser un fichier déjà présent au moment de l'ouverture.
-- Les blobs GitHub sont refusés au-delà de 90 Mio ; le corps JSON est limité à 128 Mio et la taille décodée doit correspondre à la taille déclarée par Git.
+- Les blobs GitHub sont refusés au-delà de 90 Mio ; le téléchargement utilise la représentation brute en flux, vérifie la taille déclarée et calcule le SHA-1 Git en mémoire bornée (tampon 64 Kio).
 - Le SHA-1 Git de chaque blob est recalculé avec l'en-tête objet Git `blob {taille}\\0` avant écriture et avant réutilisation du cache.
 - Le cache est conservé dans le workspace sous `.mtg-auditor-cache` ; les noms de segments sont validés et chaque fichier de cache est vérifié contre le SHA attendu. Une entrée invalide est écartée.
 - Les écritures sont synchronisées (`sync_all`) ; si l'écriture ou la synchronisation échoue, le fichier partiel créé par l'opération est supprimé.
@@ -46,7 +46,7 @@
 - Le stockage Windows Credential Manager reste à implémenter.
 
 ## Limites restantes
-- Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
+- Le téléchargement des blobs utilise la représentation brute GitHub en flux vers un fichier temporaire dans le cache ; la taille et le SHA-1 Git sont vérifiés avant publication. La destination finale est ensuite copiée depuis le cache avec création exclusive.
 - Le journal de reprise JSONL est local au workspace et ne contient que chemin, blob SHA, taille et horodatage ; aucun jeton GitHub n'y est écrit. Son dossier parent est canonicalisé et doit rester dans le workspace ; les liens symboliques et fichiers non réguliers sont refusés.
 - Un fichier déjà journalisé n'est sauté qu'après vérification de son SHA-1 Git et de sa taille. Une destination modifiée, manquante ou invalide n'est jamais écrasée automatiquement.
 - Une ligne finale JSONL incomplète est ignorée après arrêt brutal ; les lignes antérieures invalides bloquent la reprise plutôt que de faire confiance à un journal corrompu.
