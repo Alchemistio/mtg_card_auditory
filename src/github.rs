@@ -41,17 +41,43 @@ struct BlobResponse {
 }
 
 pub fn parse_repository_url(input: &str) -> Result<(String, String)> {
-    let trimmed = input.trim().trim_end_matches('/');
-    let without_scheme = trimmed.strip_prefix("https://")
-        .or_else(|| trimmed.strip_prefix("http://"))
-        .unwrap_or(trimmed);
-    let without_host = without_scheme.strip_prefix("github.com/")
-        .context("URL GitHub attendue (github.com/owner/repository)")?;
-    let mut parts = without_host.split('/');
-    let owner = parts.next().unwrap_or_default();
-    let repository = parts.next().unwrap_or_default().trim_end_matches(".git");
-    if owner.is_empty() || repository.is_empty() || owner.contains(':') || owner.contains('@') {
-        anyhow::bail!("URL de dépôt GitHub invalide.");
+    let input = input.trim();
+    if input.is_empty() {
+        anyhow::bail!("URL de dépôt GitHub vide.");
+    }
+    let candidate = if input.contains("://") {
+        input.to_string()
+    } else {
+        format!("https://{}", input)
+    };
+    let url = url::Url::parse(&candidate).context("URL GitHub invalide.")?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("github.com")
+        || url.port().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        anyhow::bail!("Une URL HTTPS canonique de github.com est attendue.");
+    }
+    let parts: Vec<_> = url.path_segments()
+        .context("Chemin de dépôt GitHub invalide.")?
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.len() != 2 {
+        anyhow::bail!("Indique exactement github.com/owner/repository, sans sous-chemin.");
+    }
+    let owner = parts[0];
+    let repository = parts[1].strip_suffix(".git").unwrap_or(parts[1]);
+    let valid_owner = !owner.is_empty()
+        && owner.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+    let valid_repository = !repository.is_empty()
+        && repository != "."
+        && repository != ".."
+        && repository.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
+    if !valid_owner || !valid_repository {
+        anyhow::bail!("Nom de propriétaire ou de dépôt GitHub invalide.");
     }
     Ok((owner.to_string(), repository.to_string()))
 }
@@ -211,5 +237,9 @@ mod tests {
     fn rejects_non_github_urls() {
         assert!(parse_repository_url("https://example.com/octocat/repo").is_err());
         assert!(parse_repository_url("https://github.com/octocat").is_err());
+        assert!(parse_repository_url("https://github.com.evil.test/octocat/repo").is_err());
+        assert!(parse_repository_url("http://github.com/octocat/repo").is_err());
+        assert!(parse_repository_url("https://github.com/octocat/repo/tree/main").is_err());
+        assert!(parse_repository_url("https://github.com/octocat/repo?tab=readme").is_err());
     }
 }
