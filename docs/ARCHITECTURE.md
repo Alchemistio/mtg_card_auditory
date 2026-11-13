@@ -21,7 +21,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
 9. Les blobs sont récupérés via l'API Git Blobs avec `Accept: application/vnd.github.raw+json` (média type brut documenté par GitHub). Le flux est écrit dans un fichier temporaire avec un tampon de 64 Kio ; la taille déclarée (plafond 90 Mio) et le SHA-1 Git sont vérifiés progressivement avant publication du cache.
 10. Le cache local est isolé sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace. Chaque entrée est revalidée en flux contre le SHA-1 Git attendu ; une entrée invalide est supprimée puis retéléchargée. Les liens symboliques et fichiers non réguliers sont refusés. La copie vers le workspace est exclusive et son SHA-1 est revérifié avant journalisation.
-11. Un journal JSONL par commit est conservé sous `.mtg-auditor-cache/download-session-{commit}.jsonl`. Chaque succès est synchronisé sur disque ; à la relance, seuls les fichiers dont le chemin, le blob SHA, la taille et le contenu correspondent sont sautés. Une dernière ligne incomplète après arrêt brutal est ignorée.
+11. Un journal JSONL par commit est conservé sous `.mtg-auditor-cache/download-session-{commit}.jsonl`. Chaque succès est synchronisé sur disque ; à la relance, seuls les fichiers dont le chemin, le blob SHA, la taille et le contenu correspondent sont sautés ; le contenu est revérifié en flux avec un tampon de 64 Kio, sans charger le fichier entier en mémoire. Une dernière ligne incomplète après arrêt brutal est ignorée.
 12. Le journal ne contient aucun jeton. Son parent est canonicalisé dans le workspace et les liens symboliques ou fichiers non réguliers sont refusés. Une destination absente ou dont l'empreinte ne correspond pas n'est jamais écrasée ; elle produit une erreur explicite.
 13. La reprise d'un blob interrompu au niveau des octets reste à faire : la documentation de l'API Git Blobs ne garantit pas `Range`/ETag ; aucun fragment partiel n'est réutilisé. La concurrence bornée reste à évaluer.
 14. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique ou date HTTP est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
@@ -51,10 +51,10 @@ Source, inventaire, analyse calculée, revue humaine et exports sont séparés. 
 - `runs/run-id/gallery/index.html` (à implémenter)
 - `runs/run-id/logs/` (à implémenter)
 
-La reprise après fermeture et la persistance des revues restent à développer ; les sources distantes et locales ne sont jamais altérées.
+La reprise après fermeture des fichiers terminés est implémentée ; la persistance des revues reste à développer. Les sources distantes et locales ne sont jamais altérées.
 
 ## Limites techniques
-- Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture reste à ajouter.
+- Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture des fichiers terminés est disponible via le journal JSONL ; les blobs partiellement téléchargés ne sont pas repris.
 - Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
