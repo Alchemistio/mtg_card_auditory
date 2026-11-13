@@ -22,7 +22,7 @@
 - Les destinations existantes ne sont pas écrasées pour les téléchargements et planches.
 - Les fichiers téléchargés et les manifestes sont ouverts avec création exclusive (`create_new`) pour refuser un fichier déjà présent au moment de l'ouverture.
 - Les blobs GitHub sont refusés au-delà de 90 Mio ; le téléchargement utilise le média type brut documenté `application/vnd.github.raw+json` en flux, vérifie la taille déclarée et calcule le SHA-1 Git en mémoire bornée (tampon 64 Kio).
-- Le SHA-1 Git de chaque blob est recalculé avec l'en-tête objet Git `blob {taille}\\0` avant écriture et avant réutilisation du cache.
+- Le SHA-1 Git de chaque blob est recalculé avec l'en-tête objet Git `blob {taille}\0` avant écriture et avant réutilisation du cache.
 - Le cache est conservé dans le workspace sous `.mtg-auditor-cache` ; les noms de segments sont validés et chaque fichier de cache est vérifié contre le SHA attendu. Une entrée invalide est écartée.
 - Les écritures sont synchronisées (`sync_all`) ; si l'écriture ou la synchronisation échoue, le fichier partiel créé par l'opération est supprimé.
 - Les écritures de fichiers téléchargés utilisent `write_all` puis `sync_all`; un fichier partiel est supprimé si l'écriture échoue.
