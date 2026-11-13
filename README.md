@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, les exports JSON/CSV/HTML, les doublons binaires exacts, les premières métadonnées raster, SVG et polices, l'inspection ZIP sans extraction, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés au code. Un commit antérieur contenant ZIP et scan parallèle a passé Clippy, les tests et le build Release Windows ; les modifications UI/HTML/duplications les plus récentes doivent encore être validées.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, les exports JSON/CSV/HTML, les doublons binaires exacts, les métadonnées raster (format, dimensions, canaux et alpha), SVG, polices et ZIP, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `6310f92` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Les dernières modifications raster alpha restent à revalider.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -15,7 +15,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Scan local parallèle via Rayon, sans suivre les liens symboliques.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
 - Doublons binaires exacts repérés par SHA-256 et référencés au premier chemin ; aucun fichier n'est supprimé.
-- Raster : format détecté et dimensions lues depuis l'en-tête, sans décodage des pixels.
+- Raster : format détecté, dimensions, type de canaux et présence d'alpha depuis le décodeur, sans décodage des pixels.
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
 - Polices : extraction initiale de la famille et sous-famille lorsque le format est pris en charge.
 - ZIP : lecture de la table centrale, comptage des entrées, taille décompressée déclarée, chemins suspects et ratios anormaux ; aucune extraction.
@@ -26,11 +26,11 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 ## Limites connues
 - Gestion structurée des rate limits, streaming des blobs volumineux, cache et reprise.
 - Credential Manager, progression détaillée, annulation et scan multi-sources.
-- Alpha/orientation, miniatures, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
+- Orientation, miniatures, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches de contact, licences, provenance, revue humaine et comparaison entre inventaires.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Le dernier commit doit encore passer l'intégralité de la CI avant qu'un binaire soit livré.
+- Le dernier ajout raster alpha doit encore passer l'intégralité de la CI avant de livrer un nouveau binaire.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
