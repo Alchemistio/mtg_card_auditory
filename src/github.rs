@@ -289,7 +289,7 @@ fn validate_decoded_blob_size(actual: usize, expected: u64) -> Result<()> {
 
 pub fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
     let mut hasher = Sha1::new();
-    hasher.update(format!("blob {}\\0", bytes.len()).as_bytes());
+    hasher.update(format!("blob {}\0", bytes.len()).as_bytes());
     hasher.update(bytes);
     let actual = format!("{:x}", hasher.finalize());
     if !actual.eq_ignore_ascii_case(expected_sha.trim()) {
@@ -340,8 +340,8 @@ mod blob_size_tests {
 
     #[test]
     fn verifies_git_blob_sha1_with_git_object_header() {
-        let bytes = b"hello world\\n";
-        assert!(verify_git_blob_sha("3b18e512d8f1d4a1f3e4f3f6f7f7f7f7f7f7f7f7", bytes).is_err());
+        let bytes = b"hello world\n";
+        assert!(verify_git_blob_sha("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", bytes).is_err());
         assert!(verify_git_blob_sha("3b18e512d8f1d4a1f3e4f3f6f7f7f7f7f7f7f7f7", b"tampered").is_err());
     }
 
