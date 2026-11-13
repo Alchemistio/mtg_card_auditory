@@ -226,18 +226,8 @@ impl AuditorApp {
                             if !canonical_parent.starts_with(&canonical_root) {
                                 anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
                             }
-                            let mut file = std::fs::OpenOptions::new()
-                                .write(true)
-                                .create_new(true)
-                                .open(&destination)
-                                .with_context(|| format!("Impossible de créer le fichier sans écrasement : {}", destination.display()))?;
-                            if let Err(error) = file.write_all(&bytes) {
-                                drop(file);
-                                let _ = std::fs::remove_file(&destination);
-                                return Err(error.into());
-                            }
-                            file.sync_all()?;
-                            Ok(())
+                            write_new_file(&destination, &bytes)
+                                .with_context(|| format!("Écriture sans écrasement impossible : {}", destination.display()))
                         });
                     match result {
                         Ok(()) => {
@@ -270,13 +260,9 @@ impl AuditorApp {
                             downloaded_unix_seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs(),
                             downloaded_files: manifest_files,
                         };
-                        let file = std::fs::OpenOptions::new()
-                            .write(true)
-                            .create_new(true)
-                            .open(&manifest_path)
-                            .context("Impossible de créer le manifeste sans écraser un fichier existant")?;
-                        serde_json::to_writer_pretty(&file, &manifest)?;
-                        file.sync_all()?;
+                        let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
+                        write_new_file(&manifest_path, &manifest_bytes)
+                            .context("Impossible d'écrire le manifeste sans écraser un fichier existant")?;
                         format!(" Manifeste de provenance : {}", manifest_path.display())
                     }
                 } else {
@@ -291,6 +277,20 @@ impl AuditorApp {
             let _ = sender.send(DownloadMessage::Finished(result));
         });
     }
+}
+
+fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .with_context(|| format!("Le fichier existe déjà ou ne peut pas être créé : {}", path.display()))?;
+    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        drop(file);
+        let _ = std::fs::remove_file(path);
+        return Err(error.into());
+    }
+    Ok(())
 }
 
 fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
@@ -315,6 +315,26 @@ fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
         }
     }
     Ok(destination)
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::write_new_file;
+    use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+
+    #[test]
+    fn exclusive_write_never_overwrites_existing_files() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let directory = std::env::temp_dir().join(format!("mtg-auditor-write-test-{}-{}", std::process::id(), nonce));
+        fs::create_dir_all(&directory).unwrap();
+        let destination: PathBuf = directory.join("asset.bin");
+
+        write_new_file(&destination, b"original").unwrap();
+        assert!(write_new_file(&destination, b"replacement").is_err());
+        assert_eq!(fs::read(&destination).unwrap(), b"original");
+
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 impl eframe::App for AuditorApp {
