@@ -397,6 +397,25 @@ mod tests {
     }
 
     #[test]
+    fn detects_suspicious_zip_paths_without_extracting() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-zip-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("unsafe.zip");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("../escape.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"not extracted").unwrap();
+        writer.finish().unwrap();
+        let (count, _, suspicious, warning) = zip_metadata(&archive_path, "zip");
+        assert_eq!(count, Some(1));
+        assert_eq!(suspicious, Some(1));
+        assert!(warning.is_some());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn refuses_export_inside_source_tree() {
         let root: PathBuf = std::env::temp_dir().join(format!("mtg-auditor-export-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
