@@ -581,7 +581,7 @@ fn cached_github_blob(
             workspace.remove_file(&temporary)?;
             Ok(cache_file)
         }
-        Err(error) if workspace.symlink_metadata(&cache_file).is_ok() => {
+        Err(_error) if workspace.symlink_metadata(&cache_file).is_ok() => {
             let _ = workspace.remove_file(&temporary);
             let mut existing = workspace.open_read(&cache_file)?;
             github::verify_git_blob_reader(blob_sha, &mut existing, size)

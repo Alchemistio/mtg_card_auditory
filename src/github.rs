@@ -3,7 +3,7 @@ use sha1::{Digest, Sha1};
 use reqwest::blocking::{Client, Response};
 use reqwest::header::{ACCEPT, HeaderValue};
 use serde::Deserialize;
-use std::{collections::HashSet, fs::File, io::{Read, Write}, path::Path, time::{Duration, SystemTime}};
+use std::{collections::HashSet, io::{Read, Write}, path::Path, time::{Duration, SystemTime}};
 
 use crate::models::{RemoteEntry, RepositoryTree};
 
@@ -311,8 +311,9 @@ pub fn verify_git_blob_reader<R: Read>(expected_sha: &str, reader: &mut R, expec
     Ok(())
 }
 
+#[cfg(test)]
 pub fn verify_git_blob_file(expected_sha: &str, path: &Path, expected_size: u64) -> Result<()> {
-    let mut file = File::open(path)?;
+    let mut file = std::fs::File::open(path)?;
     verify_git_blob_reader(expected_sha, &mut file, expected_size)
 }
 
