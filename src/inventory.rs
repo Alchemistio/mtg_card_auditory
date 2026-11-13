@@ -64,27 +64,46 @@ fn classify_extension(extension: &str) -> &'static str {
     }
 }
 
-fn raster_metadata(
-    path: &Path,
-    family: &str,
-) -> (Option<String>, Option<u32>, Option<u32>, Option<String>, Option<bool>, Option<String>) {
+#[derive(Default)]
+struct RasterMetadata {
+    format: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
+    color_type: Option<String>,
+    has_alpha: Option<bool>,
+    warning: Option<String>,
+}
+
+fn raster_metadata(path: &Path, family: &str) -> RasterMetadata {
     if family != "raster" {
-        return (None, None, None, None, None, None);
+        return RasterMetadata::default();
     }
     let reader = match ImageReader::open(path).and_then(|reader| reader.with_guessed_format()) {
         Ok(reader) => reader,
-        Err(error) => return (None, None, None, None, None, Some(format!("Détection du format image impossible : {}", error))),
+        Err(error) => return RasterMetadata {
+            warning: Some(format!("Détection du format image impossible : {}", error)),
+            ..RasterMetadata::default()
+        },
     };
     let format = reader.format().map(|value| format!("{value:?}"));
     let decoder = match reader.into_decoder() {
         Ok(decoder) => decoder,
-        Err(error) => return (format, None, None, None, None, Some(format!("En-tête image illisible : {}", error))),
+        Err(error) => return RasterMetadata {
+            format,
+            warning: Some(format!("En-tête image illisible : {}", error)),
+            ..RasterMetadata::default()
+        },
     };
     let (width, height) = decoder.dimensions();
     let color_type = decoder.color_type();
-    let color_type_name = format!("{color_type:?}");
-    let has_alpha = color_type.has_alpha();
-    (format, Some(width), Some(height), Some(color_type_name), Some(has_alpha), None)
+    RasterMetadata {
+        format,
+        width: Some(width),
+        height: Some(height),
+        color_type: Some(format!("{color_type:?}")),
+        has_alpha: Some(color_type.has_alpha()),
+        warning: None,
+    }
 }
 
 fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
@@ -276,14 +295,18 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
     let detected_family = classify_extension(&extension);
-    let (raster_format, raster_width, raster_height, raster_color_type, raster_has_alpha, raster_warning) =
-        raster_metadata(path, detected_family);
+    let raster = raster_metadata(path, detected_family);
+    let raster_format = raster.format;
+    let raster_width = raster.width;
+    let raster_height = raster.height;
+    let raster_color_type = raster.color_type;
+    let raster_has_alpha = raster.has_alpha;
     let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
         svg_metadata(path, detected_family);
     let (font_family, font_subfamily, font_warning) = font_metadata(path, detected_family);
     let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
         zip_metadata(path, &extension);
-    let analysis_warning = raster_warning.or(svg_warning).or(font_warning).or(archive_warning);
+    let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     Ok(AssetRecord {
         id: format!("sha256:{}:{}", sha256, relative_path),
         relative_path,
