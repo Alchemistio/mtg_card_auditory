@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
+use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
 use image::{ImageDecoder, ImageReader};
 use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -620,6 +621,32 @@ pub fn compare_inventories(current: &InventoryDocument, baseline: &InventoryDocu
     }
 }
 
+fn with_new_output_file<T>(destination: &Path, write: impl FnOnce(&mut cap_std::fs::File) -> Result<T>) -> Result<T> {
+    let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
+    let name = destination.file_name().context("Nom de fichier de destination absent")?;
+    if name.to_string_lossy().contains(':') {
+        anyhow::bail!("Flux de données alternatif Windows refusé dans le nom de destination.");
+    }
+    let canonical_parent = parent.canonicalize()
+        .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
+    let directory = CapabilityDir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
+        .context("Ouverture capability du dossier de destination impossible")?;
+    let mut options = CapabilityOpenOptions::new();
+    options.write(true).create_new(true);
+    let mut file = directory.open_with(name, &options)
+        .with_context(|| format!("Création exclusive impossible (fichier déjà présent ?) : {}", destination.display()))?;
+    let result = (|| {
+        let value = write(&mut file)?;
+        file.sync_all().context("Synchronisation du fichier exporté impossible")?;
+        Ok(value)
+    })();
+    if result.is_err() {
+        drop(file);
+        let _ = directory.remove_file(name);
+    }
+    result
+}
+
 pub fn export_comparison_json(comparison: &InventoryComparison, destination: &Path) -> Result<()> {
     let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
     let canonical_parent = parent.canonicalize()
@@ -646,9 +673,9 @@ pub fn export_comparison_json(comparison: &InventoryComparison, destination: &Pa
             anyhow::bail!("Export refusé : la destination résout vers une des sources comparées.");
         }
     }
-    let file = File::create(destination)
-        .with_context(|| format!("Création impossible : {}", destination.display()))?;
-    serde_json::to_writer_pretty(file, comparison).context("Écriture du rapport de comparaison impossible")
+    with_new_output_file(destination, |file| {
+        serde_json::to_writer_pretty(file, comparison).context("Écriture du rapport de comparaison impossible")
+    })
 }
 
 fn ensure_export_outside_source(document: &InventoryDocument, destination: &Path) -> Result<()> {
@@ -671,20 +698,21 @@ fn ensure_export_outside_source(document: &InventoryDocument, destination: &Path
 
 pub fn export_json(document: &InventoryDocument, destination: &Path) -> Result<()> {
     ensure_export_outside_source(document, destination)?;
-    let file = File::create(destination)
-        .with_context(|| format!("Création impossible : {}", destination.display()))?;
-    serde_json::to_writer_pretty(file, document).context("Écriture JSON impossible")
+    with_new_output_file(destination, |file| {
+        serde_json::to_writer_pretty(file, document).context("Écriture JSON impossible")
+    })
 }
 
 pub fn export_csv(document: &InventoryDocument, destination: &Path) -> Result<()> {
     ensure_export_outside_source(document, destination)?;
-    let mut writer = csv::Writer::from_path(destination)
-        .with_context(|| format!("Création CSV impossible : {}", destination.display()))?;
-    for asset in &document.assets {
-        writer.serialize(asset)?;
-    }
-    writer.flush()?;
-    Ok(())
+    with_new_output_file(destination, |file| {
+        let mut writer = csv::Writer::from_writer(file);
+        for asset in &document.assets {
+            writer.serialize(asset)?;
+        }
+        writer.flush()?;
+        Ok(())
+    })
 }
 
 pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, destination: &Path) -> Result<usize> {
@@ -778,8 +806,15 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
         rendered += 1;
         index_text.push_str(&format!("{:02}\t{}\n", slot + 1, asset.relative_path));
     }
-    canvas.save(destination).context("Écriture de la planche PNG impossible")?;
-    std::fs::write(&sidecar, index_text).context("Écriture de l'index de planche impossible")?;
+    with_new_output_file(destination, |file| {
+        image::DynamicImage::ImageRgba8(canvas).write_to(file, image::ImageFormat::Png)
+            .context("Écriture de la planche PNG impossible")?;
+        Ok(())
+    })?;
+    with_new_output_file(&sidecar, |file| {
+        file.write_all(index_text.as_bytes()).context("Écriture de l'index de planche impossible")?;
+        Ok(())
+    })?;
     Ok(rendered)
 }
 
@@ -853,14 +888,40 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table><p class=\"meta\">Rapport autonome hors ligne. Les catégories sont indicatives et ne constituent ni une validation de licence ni une approbation de ressource.</p></body></html>");
-    std::fs::write(destination, html)
-        .with_context(|| format!("Écriture du rapport HTML impossible : {}", destination.display()))
+    with_new_output_file(destination, |file| {
+        file.write_all(html.as_bytes())
+            .with_context(|| format!("Écriture du rapport HTML impossible : {}", destination.display()))?;
+        Ok(())
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn capability_export_refuses_overwrite_and_removes_partial_output() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-cap-export-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let output = root.join("report.json");
+        with_new_output_file(&output, |file| {
+            file.write_all(b"first").context("test write")?;
+            Ok(())
+        }).unwrap();
+        assert!(with_new_output_file(&output, |file| {
+            file.write_all(b"second").context("test write")?;
+            Ok(())
+        }).is_err());
+        assert_eq!(std::fs::read(&output).unwrap(), b"first");
+        let partial = root.join("partial.json");
+        assert!(with_new_output_file(&partial, |_file| {
+            anyhow::bail!("simulated export failure");
+        }).is_err());
+        assert!(!partial.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn cancelled_scan_stops_before_analyzing_source_files() {
