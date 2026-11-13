@@ -3,7 +3,7 @@ mod inventory;
 mod models;
 
 use eframe::egui;
-use std::{collections::HashSet, path::{Path, PathBuf}};
+use std::{collections::HashSet, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
 
 #[derive(Default)]
 struct AuditorApp {
@@ -16,6 +16,7 @@ struct AuditorApp {
     workspace: String,
     local_source: String,
     local_inventory: Option<inventory::InventoryDocument>,
+    scan_receiver: Option<Receiver<std::result::Result<inventory::InventoryDocument, String>>>,
     status: String,
     entries: Vec<models::RemoteEntry>,
     selected: HashSet<String>,
@@ -56,19 +57,15 @@ impl AuditorApp {
             self.status = "Choisis un dossier source à analyser.".into();
             return;
         }
+        let source = PathBuf::from(self.local_source.trim());
+        let (sender, receiver) = mpsc::channel();
+        self.scan_receiver = Some(receiver);
         self.busy = true;
-        self.status = "Inventaire local et calcul SHA-256 en cours…".into();
-        match inventory::scan_directory(Path::new(self.local_source.trim())) {
-            Ok(document) => {
-                self.status = format!(
-                    "Inventaire terminé : {} fichiers, {} octets. Sources en lecture seule.",
-                    document.files_scanned, document.total_bytes
-                );
-                self.local_inventory = Some(document);
-            }
-            Err(error) => self.status = format!("Erreur d'inventaire : {:#}", error),
-        }
-        self.busy = false;
+        self.status = "Inventaire local parallèle et calcul SHA-256 en arrière-plan…".into();
+        std::thread::spawn(move || {
+            let result = inventory::scan_directory(&source).map_err(|error| format!("{:#}", error));
+            let _ = sender.send(result);
+        });
     }
 
     fn export_local_json(&mut self) {
@@ -172,6 +169,28 @@ fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
 
 impl eframe::App for AuditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let completed_scan = self.scan_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(TryRecvError::Disconnected) => Some(Err("Le worker d'inventaire s'est arrêté sans résultat.".to_string())),
+            Err(TryRecvError::Empty) => None,
+        });
+        if let Some(result) = completed_scan {
+            self.scan_receiver = None;
+            self.busy = false;
+            match result {
+                Ok(document) => {
+                    self.status = format!(
+                        "Inventaire terminé : {} fichiers, {} octets. Sources en lecture seule.",
+                        document.files_scanned, document.total_bytes
+                    );
+                    self.local_inventory = Some(document);
+                }
+                Err(error) => self.status = format!("Erreur d'inventaire : {}", error),
+            }
+        }
+        if self.busy {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("MTG Asset Auditor");
             ui.label("Audit local et exploration de dépôts GitHub configurables");
