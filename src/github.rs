@@ -67,9 +67,9 @@ fn api_get(url: &str, token: &str) -> Result<Response> {
     let response = request.send().with_context(|| format!("Requête GitHub impossible : {}", url))?;
     let status = response.status();
     if !status.is_success() {
-        let remaining = response.headers().get("x-ratelimit-remaining").and_then(|value| value.to_str().ok()).unwrap_or("");
-        let reset = response.headers().get("x-ratelimit-reset").and_then(|value| value.to_str().ok()).unwrap_or("");
-        let retry_after = response.headers().get("retry-after").and_then(|value| value.to_str().ok()).unwrap_or("");
+        let remaining = response.headers().get("x-ratelimit-remaining").and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
+        let reset = response.headers().get("x-ratelimit-reset").and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
+        let retry_after = response.headers().get("retry-after").and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
         let body = response.text().unwrap_or_default();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS || (status == reqwest::StatusCode::FORBIDDEN && remaining == "0") {
             anyhow::bail!("Limite de l'API GitHub atteinte. Retry-After={} s ; reset Unix={} ; détail={}", retry_after, reset, body);
