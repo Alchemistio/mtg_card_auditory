@@ -15,7 +15,7 @@ Outil Windows autonome en Rust pour auditer les assets d'un dossier local ou de 
 - Aucun dépôt cible codé en dur.
 
 ## Sources locales
-- Sélection d'un ou plusieurs dossiers, analyse récursive, exclusions.
+- Sélection d'un ou plusieurs dossiers, analyse récursive, exclusions ; les chemins d'inventaire sont préfixés par source pour éviter les collisions.
 - Liens symboliques et boucles traités explicitement.
 - Sources locales en lecture seule.
 
