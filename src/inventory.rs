@@ -48,6 +48,8 @@ pub struct AssetRecord {
     #[serde(default)]
     pub analysis_warning: Option<String>,
     #[serde(default)]
+    pub notice_kind: Option<String>,
+    #[serde(default)]
     pub duplicate_of: Option<String>,
     pub review_status: String,
 }
@@ -84,6 +86,20 @@ pub struct InventoryComparison {
 
 fn is_hidden_or_metadata(entry: &DirEntry) -> bool {
     entry.file_name().to_string_lossy().starts_with('.')
+}
+
+fn classify_notice(file_name: &str) -> Option<String> {
+    let normalized = file_name.to_ascii_uppercase();
+    let base = normalized.split('.').next().unwrap_or(&normalized);
+    match base {
+        "LICENSE" | "LICENCE" => Some("license-notice".to_string()),
+        "COPYING" => Some("copying-notice".to_string()),
+        "NOTICE" => Some("notice-file".to_string()),
+        "README" => Some("readme".to_string()),
+        "AUTHORS" | "CONTRIBUTORS" => Some("contributors".to_string()),
+        "CREDITS" => Some("credits".to_string()),
+        _ => None,
+    }
 }
 
 fn classify_extension(extension: &str) -> &'static str {
@@ -364,6 +380,7 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
         archive_uncompressed_bytes,
         archive_suspicious_paths,
         analysis_warning,
+        notice_kind: classify_notice(&file_name),
         duplicate_of: None,
         review_status: "needs-review".to_string(),
     })
@@ -631,6 +648,9 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         html.push_str(&escape_html(&asset.relative_path));
         html.push_str("</code></td><td>");
         html.push_str(&escape_html(&asset.detected_family));
+        if let Some(notice) = &asset.notice_kind {
+            html.push_str(&format!(" ({})", escape_html(notice)));
+        }
         html.push_str("</td><td>");
         html.push_str(&asset.size_bytes.to_string());
         html.push_str("</td><td><code>");
@@ -684,6 +704,8 @@ mod tests {
         assert_eq!(classify_extension("SVG"), "svg");
         assert_eq!(classify_extension("mse-set"), "mse");
         assert_eq!(classify_extension("exe"), "unknown");
+        assert_eq!(classify_notice("LICENSE-MIT"), Some("license-notice".to_string()));
+        assert_eq!(classify_notice("NOTICE.txt"), Some("notice-file".to_string()));
     }
 
     #[test]
