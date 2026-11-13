@@ -992,6 +992,41 @@ mod tests {
     }
 
     #[test]
+    fn scans_multiple_roots_without_path_collisions_and_detects_cross_root_duplicates() {
+        let base = std::env::temp_dir().join(format!("mtg-auditor-multi-test-{}", std::process::id()));
+        let first = base.join("first");
+        let second = base.join("second");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::write(first.join("same.txt"), b"shared").unwrap();
+        std::fs::write(second.join("same.txt"), b"shared").unwrap();
+        let roots = vec![first.clone(), second.clone()];
+        let document = scan_multiple_directories_with_progress_and_cancel(
+            &roots, |_, _| {}, &AtomicBool::new(false)
+        ).unwrap();
+        assert_eq!(document.source_roots.len(), 2);
+        assert_eq!(document.files_scanned, 2);
+        assert_ne!(document.assets[0].relative_path, document.assets[1].relative_path);
+        assert_eq!(document.duplicate_files, 1);
+        assert!(document.assets.iter().all(|asset| asset.relative_path.starts_with("source-000")));
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn rejects_nested_multi_source_roots() {
+        let base = std::env::temp_dir().join(format!("mtg-auditor-multi-nested-{}", std::process::id()));
+        let child = base.join("child");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&child).unwrap();
+        let result = scan_multiple_directories_with_progress_and_cancel(
+            &[base.clone(), child], |_, _| {}, &AtomicBool::new(false)
+        );
+        assert!(result.unwrap_err().to_string().contains("chevauchent"));
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn html_escaping_blocks_markup_in_user_paths() {
         assert_eq!(escape_html("<script>&\"'"), "&lt;script&gt;&amp;&quot;&#39;");
     }
@@ -1008,6 +1043,7 @@ mod tests {
             files_scanned: 0,
             total_bytes: 0,
             duplicate_files: 0,
+            source_roots: vec![root.canonicalize().unwrap().display().to_string()],
             assets: Vec::new(),
         };
         assert!(ensure_export_outside_source(&document, &root.join("inventory.json")).is_err());
