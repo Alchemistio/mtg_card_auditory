@@ -138,6 +138,19 @@ impl AuditorApp {
         }
     }
 
+    fn export_comparison(&mut self) {
+        let Some(comparison) = self.comparison.as_ref() else {
+            self.status = "Aucune comparaison à exporter.".into();
+            return;
+        };
+        if let Some(path) = rfd::FileDialog::new().set_file_name("inventory-comparison.json").save_file() {
+            match inventory::export_comparison_json(comparison, &path) {
+                Ok(()) => self.status = format!("Rapport de comparaison exporté : {}", path.display()),
+                Err(error) => self.status = format!("Échec export comparaison : {:#}", error),
+            }
+        }
+    }
+
     fn export_contact_sheet(&mut self) {
         let Some(document) = self.local_inventory.as_ref() else {
             self.status = "Lance d'abord un inventaire local.".into();
@@ -317,12 +330,17 @@ impl eframe::App for AuditorApp {
                     if ui.button("Planche PNG…").clicked() { self.export_contact_sheet(); }
                     if ui.button("Comparer JSON…").clicked() { self.compare_local_inventory(); }
                 });
-                if let Some(comparison) = self.comparison.as_ref() {
+                if let Some((added, removed, changed, unchanged)) = self.comparison.as_ref().map(|comparison| {
+                    (comparison.added_paths.len(), comparison.removed_paths.len(),
+                     comparison.changed_assets.len(), comparison.unchanged_files)
+                }) {
                     ui.label(format!(
                         "Comparaison : +{} / −{} / modifiés {} / inchangés {}",
-                        comparison.added_paths.len(), comparison.removed_paths.len(),
-                        comparison.changed_assets.len(), comparison.unchanged_files
+                        added, removed, changed, unchanged
                     ));
+                    if ui.button("Exporter comparaison JSON…").clicked() {
+                        self.export_comparison();
+                    }
                 }
                 ui.horizontal(|ui| {
                     ui.label("Filtrer les résultats");
