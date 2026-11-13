@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les ajouts ultérieurs (retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets) sont en cours de validation sur les commits les plus récents.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Les commits jusqu'au support multi-dossiers sont validés individuellement par la CI Windows complète (formatage, Clippy, tests, build Release et artefact) lorsque leur run est terminé ; consulter l'onglet Actions pour le statut de la tête de branche.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -17,7 +17,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Téléchargement de blobs GitHub plafonné à 90 Mio par fichier, réponse JSON plafonnée à 128 Mio et taille reçue vérifiée contre la taille déclarée par l'arbre Git.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Filtrage de la liste distante par chemin, extension, plage de taille et famille technique, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
-- Scan local parallèle via Rayon, sans suivre les liens symboliques.
+- Scan local parallèle via Rayon, sans suivre les liens symboliques ; sélection multi-dossiers avec préfixes de source, détection des racines imbriquées et doublons exacts entre sources.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
 - Anciens inventaires JSON v1 lisibles malgré l'ajout de nouveaux champs optionnels.
 - Doublons binaires exacts repérés par SHA-256 et référencés au premier chemin ; aucun fichier n'est supprimé.
@@ -34,7 +34,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 
 ## Limites connues
 - Reprise après fermeture, cache GitHub, streaming des blobs volumineux et affichage du quota restant.
-- Credential Manager, estimation du temps restant et scan multi-sources.
+- Credential Manager et estimation du temps restant.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
