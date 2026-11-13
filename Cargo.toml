@@ -19,3 +19,4 @@ anyhow = "1"
 walkdir = "2"
 csv = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
+quick-xml = "0.38"
