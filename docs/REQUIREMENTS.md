@@ -8,7 +8,7 @@ Outil Windows autonome en Rust pour auditer les assets d'un dossier local ou de 
 - Branche, tag ou commit ; résolution du SHA immuable.
 - Sous-répertoire, filtres de chemin, extension, taille et type.
 - Détection de la branche par défaut.
-- Jeton à permissions minimales pour dépôts privés, masqué et jamais écrit en clair.
+- Jeton à permissions minimales pour dépôts privés, champ masqué, enregistrement facultatif et explicite dans Windows Credential Manager ; aucun secret dans les rapports, journaux ou fichiers du workspace. Les buffers contrôlés par l'application sont effacés au mieux à la libération via `zeroize`.
 - Exploration de l'arbre Git sans cloner les binaires en masse.
 - Téléchargement sélectif, cache par commit/blob SHA vérifié avec le SHA-1 Git, reprise et limites de concurrence ; taille maximale de blob et validation de cohérence entre taille déclarée et octets reçus.
 - Gestion des arbres tronqués, rate limits, erreurs 403/404/429 et réseau ; retries bornés pour les erreurs transitoires, respect prudent de `Retry-After` et diagnostic du reset de quota.
@@ -66,7 +66,7 @@ Les catégories automatiques restent des suggestions, jamais une validation.
 ## Sécurité
 - Lecture seule GitHub et sources locales.
 - Aucun secret dans logs, exports ou commits.
-- Validation des chemins et limites de taille/profondeur.
+- Validation des chemins et limites de taille/profondeur ; confinement capability-based des opérations workspace, avec tests de non-écrasement et de chemins dangereux. Les garanties TOCTOU doivent être documentées et testées selon les opérations et plateformes.
 - Ne jamais exécuter scripts, macros, HTML ou fichiers téléchargés.
 - Pas de suppression, déplacement, renommage ou normalisation automatique.
 - Promotion vers une bibliothèque approuvée uniquement après revue visuelle, provenance, licence et test d'intégration.

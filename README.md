@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Les commits jusqu'au support multi-dossiers sont validés individuellement par la CI Windows complète (formatage, Clippy, tests, build Release et artefact) lorsque leur run est terminé ; consulter l'onglet Actions pour le statut de la tête de branche.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `24d85e6` est validée : formatage, Clippy, tests, build Release et upload de l'exécutable.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -31,7 +31,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Exports JSON et CSV UTF-8, rapport HTML autonome sans JavaScript.
 - Planches raster PNG de 16 images par page, avec fichier texte d'index ; le SHA-256 source est revérifié avant génération.
 - Vue locale filtrable ; jusqu'à 500 lignes affichées à la fois, exports complets.
-- Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement ; les exports restent hors de la source.
+- Confinement capability-based (`cap-std`) des opérations GitHub sur le workspace : cache, téléchargements, journaux et manifestes utilisent un handle de répertoire et des chemins relatifs validés ; les exports locaux restent à migrer.
 
 ## Limites connues
 - Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
@@ -41,7 +41,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
-- La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
+- La protection TOCTOU n'est que partielle : le sous-système GitHub utilise désormais des opérations relatives au handle du workspace, mais les exports locaux et certaines vérifications de destinations utilisent encore `std::fs` et des chemins ambiants. Les points de réanalyse Windows et les courses concurrentes doivent encore être testés.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
 - La CI Windows complète est exécutée à chaque commit. Le statut du commit courant doit être vérifié dans l'onglet Actions ; ne pas extrapoler la validation d'un commit précédent.
 
@@ -57,7 +57,7 @@ Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
 ## Sécurité et GitHub
 L'application analyse les sources en lecture seule. Les téléchargements sont écrits dans le workspace choisi ; les exports locaux sont refusés à l'intérieur du dossier analysé. Les scripts, macros et contenus HTML ne sont jamais exécutés. Les SVG sont analysés comme XML sans rendu. Les ZIP ne sont jamais extraits.
 
-Pour un dépôt privé, utiliser un jeton à permissions minimales (Contents: read). Ne jamais le commiter ni l'inclure dans les rapports. Il n'est actuellement conservé qu'en mémoire pendant l'exécution.
+Pour un dépôt privé, utiliser un jeton à permissions minimales (Contents: read). Le champ masqué et les copies explicitement transmises aux workers utilisent `zeroize::Zeroizing<String>`. L'enregistrement est uniquement déclenché par l'utilisateur et utilise Windows Credential Manager ; aucun jeton n'est écrit dans le workspace, les rapports ou les journaux. Les copies internes des bibliothèques HTTP/TLS et du système ne sont pas sous garantie d'effacement.
 
 Le dépôt cible est configurable : aucun dépôt MTG n'est codé en dur.
 

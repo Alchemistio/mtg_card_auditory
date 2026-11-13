@@ -26,8 +26,10 @@
 - Le cache est conservé dans le workspace sous `.mtg-auditor-cache` ; les noms de segments sont validés et chaque fichier de cache est vérifié contre le SHA attendu. Une entrée invalide est écartée.
 - Les écritures sont synchronisées (`sync_all`) ; si l'écriture ou la synchronisation échoue, le fichier partiel créé par l'opération est supprimé.
 - Les écritures de fichiers téléchargés utilisent `write_all` puis `sync_all`; un fichier partiel est supprimé si l'écriture échoue.
-- Les liens symboliques présents dans les chemins de destination sont refusés.
-- Le dossier de destination est canonicalisé et doit rester dans le workspace.
+- Le sous-système GitHub (cache, fichiers téléchargés, journaux JSONL et manifestes) utilise `WorkspaceDir`, wrapper autour de `cap_std::fs::Dir` ouvert sur le workspace. Les opérations sont relatives à ce handle plutôt qu'à des chemins absolus ambiants.
+- Les chemins relatifs du workspace rejettent les composants absolus, parents, préfixes et noms contenant `:` (flux de données alternatifs Windows).
+- Les fichiers téléchargés et temporaires sont créés exclusivement via le handle de répertoire ; la publication du cache utilise un lien dur sans écrasement après vérification SHA-1 Git.
+- Ce confinement ne constitue pas encore une garantie TOCTOU complète : les exports locaux, planches de contact et certaines validations de destination utilisent toujours `std::fs`/chemins ambiants ; les points de réanalyse Windows doivent encore être éprouvés.
 - Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
 - Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence de l'une des sources analysées.
 
@@ -55,6 +57,8 @@
 - Un fichier déjà journalisé n'est sauté qu'après vérification de son SHA-1 Git et de sa taille ; cette vérification se fait en flux avec un tampon de 64 Kio, sans lecture intégrale en mémoire. Une destination modifiée, manquante ou invalide n'est jamais écrasée automatiquement.
 - Une ligne finale JSONL incomplète est ignorée après arrêt brutal ; les lignes antérieures invalides bloquent la reprise plutôt que de faire confiance à un journal corrompu.
 - Les erreurs transitoires et réponses 429/502/503/504 utilisent des retries bornés ; le quota primaire épuisé est signalé sans attente longue automatique.
-- La défense TOCTOU reste incomplète : la création exclusive protège le fichier final contre l'écrasement, mais ne neutralise pas toutes les courses sur les répertoires parents ni le remplacement de liens entre vérification et ouverture. Une approche basée sur des handles de répertoire et des opérations relatives est à étudier.
+- Première phase capability-based validée par CI : les opérations GitHub sur le workspace (cache, téléchargements, journaux, manifestes) passent par `WorkspaceDir` et `cap-std`, avec chemins relatifs contrôlés et opérations de fichiers via le handle de répertoire.
+- La migration n'est pas globale : exports JSON/CSV/HTML, planches PNG/index, comparaison d'inventaires et certaines vérifications de sources locales utilisent encore `std::fs` et des chemins ambiants.
+- La défense TOCTOU reste donc incomplète. Il reste à migrer les opérations de workspace restantes, étudier les points de réanalyse Windows et tester les scénarios de remplacement concurrent de répertoires/liens.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
 - Les analyseurs de formats actifs devront rester sans extraction/exécution automatique.

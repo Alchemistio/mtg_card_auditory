@@ -10,7 +10,7 @@
 - [ ] CI des retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
 
 ## Phase 1 — Connectivité GitHub robuste
-- [~] Effacement des buffers du jeton en mémoire à la libération via `zeroize::Zeroizing<String>` ; le tampon de saisie et les copies transmises aux workers sont également protégés. Validation CI complète après adaptation du tampon egui en attente.
+- [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
 - [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances.
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
@@ -32,7 +32,8 @@
 - [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
 - [x] Téléchargement streaming des blobs GitHub vers le cache temporaire, contrôle taille et SHA-1 Git en flux, puis copie vers la destination sans charger le blob entier en mémoire.
 - [ ] Reprise d'un blob interrompu au niveau des octets : non engagée tant que l'API source ne documente pas `Range`/ETag de façon exploitable ; aucun fragment partiel n'est réutilisé.
-- [ ] Migrer les écritures du workspace (cache, destinations, journaux et manifestes) vers des opérations relatives à des handles de répertoire ; renforcer les garanties contre les courses TOCTOU et les points de réanalyse Windows.
+- [x] Première migration capability-based des opérations GitHub (cache, destinations, journaux et manifestes) vers `WorkspaceDir`/`cap-std`, avec chemins relatifs validés ; CI Windows complète validée sur `24d85e6`.
+- [ ] Migrer les exports locaux et les autres opérations `std::fs` restantes vers des handles capability-based ; tester les points de réanalyse Windows et renforcer les garanties TOCTOU.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
