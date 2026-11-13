@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local SHA-256, les exports JSON/CSV, les premières métadonnées raster, SVG et polices, l'inspection ZIP sans extraction, l'exploration GitHub configurable et le repli sur sous-arbres en cas d'arbre récursif tronqué sont intégrés au code. La validation Windows complète du dernier commit reste en cours dans GitHub Actions. Consulter [la feuille de route](docs/ROADMAP.md).
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, les exports JSON/CSV, les premières métadonnées raster, SVG et polices, l'inspection ZIP sans extraction, l'exploration GitHub configurable et le repli sur sous-arbres en cas d'arbre récursif tronqué sont intégrés au code. La validation Windows complète du dernier commit reste en cours dans GitHub Actions. Un commit antérieur avec raster/SVG/polices a passé Clippy, les tests et le build Release Windows.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -11,7 +11,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Exploration récursive de l'arbre GitHub ; repli sur parcours de sous-arbres si l'arbre récursif est tronqué, avec garde-fous de profondeur et de cycles.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Téléchargement sélectif des blobs dans un workspace, sans écrasement volontaire des fichiers existants.
-- Scan récursif d'un dossier local, sans suivre les liens symboliques.
+- Scan local parallèle via Rayon, sans suivre les liens symboliques.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
 - Raster : format détecté et dimensions lues depuis l'en-tête, sans décodage des pixels.
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
@@ -28,7 +28,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Galerie, planches, licences, provenance, revue humaine et rapport HTML.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Un commit intermédiaire a passé Clippy, les tests et le build Release Windows ; le dernier commit doit encore être validé avant toute livraison de binaire.
+- Un commit antérieur avec raster/SVG/polices a passé Clippy, les tests et le build Release Windows ; le dernier commit incluant ZIP et scan parallèle doit encore être validé.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
