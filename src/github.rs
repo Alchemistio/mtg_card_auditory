@@ -13,6 +13,11 @@ struct TreeResponse {
 }
 
 #[derive(Deserialize)]
+struct RepositoryResponse {
+    default_branch: String,
+}
+
+#[derive(Deserialize)]
 struct BlobResponse {
     content: String,
     encoding: String,
@@ -39,12 +44,24 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
     if owner.is_empty() || repository.is_empty() {
         anyhow::bail!("Le propriétaire et le nom du dépôt sont obligatoires.");
     }
-    let reference = if branch.trim().is_empty() { "HEAD" } else { branch.trim() };
+    let reference = if branch.trim().is_empty() {
+        let repo_url = format!(
+            "https://api.github.com/repos/{}/{}",
+            urlencoding::encode(owner),
+            urlencoding::encode(repository)
+        );
+        let metadata: RepositoryResponse = api_get(&repo_url, token)?
+            .json()
+            .context("Impossible de déterminer la branche par défaut")?;
+        metadata.default_branch
+    } else {
+        branch.trim().to_string()
+    };
     let url = format!(
         "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
         urlencoding::encode(owner),
         urlencoding::encode(repository),
-        urlencoding::encode(reference)
+        urlencoding::encode(&reference)
     );
     let tree: TreeResponse = api_get(&url, token)?.json().context("Réponse GitHub invalide")?;
     if tree.truncated {
