@@ -22,11 +22,12 @@
 - [x] Écriture exclusive des blobs et manifestes (aucun écrasement), nettoyage d'un fichier partiel en cas d'erreur ; test de non-écrasement.
 - [x] Nouvelles tentatives bornées (3 retries maximum, soit 4 requêtes totales) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` ; tests de politique de retry.
 - [x] Cache GitHub local sous le workspace, indexé par owner/repository/commit/blob SHA et vérifié avec le SHA-1 Git avant réutilisation.
-- [ ] Reprise d'une opération multi-fichiers après fermeture et affichage du quota restant.
+- [x] Journal JSONL persistant des téléchargements par commit ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
+- [ ] Affichage du quota restant et de sa fenêtre de reset.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
 - [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
-- [ ] Téléchargement streaming et reprise d'une opération multi-fichiers après fermeture.
+- [ ] Téléchargement streaming des blobs volumineux et reprise d'un blob interrompu.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
