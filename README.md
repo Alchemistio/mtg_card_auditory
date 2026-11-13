@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan et de téléchargement, annulation coopérative du scan local, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `a6bf479` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Les changements suivants (durcissement du parseur d'URL et des écritures sans écrasement) sont en cours de revalidation CI.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `a6bf479` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Les changements suivants (durcissement du parseur d'URL et des écritures sans écrasement) sont en cours de revalidation CI.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -10,7 +10,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Résolution de la branche par défaut et des références branche/tag/commit vers un SHA de commit et un SHA d'arbre.
 - Exploration récursive de l'arbre GitHub ; repli sur parcours de sous-arbres si l'arbre récursif est tronqué, avec garde-fous de profondeur et de cycles. Les sous-arbres identiques réutilisés à plusieurs chemins sont conservés.
 - Exploration GitHub, téléchargement et scan local exécutés en arrière-plan.
-- Progression du scan local en nombre de fichiers traités, envoyée par lots de 100.
+- Progression du scan local en octets traités (notification par lots de 100 fichiers et à la fin).
 - Progression des téléchargements GitHub par fichier terminé.
 - Manifeste JSON de provenance pour les téléchargements : propriétaire, dépôt, référence demandée, commit SHA, tree SHA, date, chemin et blob SHA.
 - Timeout HTTP de 60 secondes, trois tentatives au maximum pour erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
