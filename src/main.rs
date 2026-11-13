@@ -331,6 +331,11 @@ impl AuditorApp {
                                 let _ = std::fs::remove_file(&destination);
                                 return Err(error.into());
                             }
+                            drop(target);
+                            if let Err(error) = github::verify_git_blob_file(&entry.sha, &destination, entry.size.unwrap_or(0)) {
+                                let _ = std::fs::remove_file(&destination);
+                                return Err(error).context("Vérification finale du fichier copié impossible");
+                            }
                             let record = models::DownloadProgressRecord {
                                 path: entry.path.clone(),
                                 blob_sha: entry.sha.clone(),
