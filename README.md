@@ -35,7 +35,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 
 ## Limites connues
 - Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
-- Journal de progression persistant par commit dans `.mtg-auditor-cache` ; les fichiers terminés sont repris uniquement si leur taille et leur SHA-1 Git correspondent encore. Les fichiers absents ou modifiés ne sont jamais écrasés. La vérification des fichiers repris est effectuée en flux avec un tampon de 64 Kio.
+- Journal de progression persistant par dépôt et commit complet dans `.mtg-auditor-cache/download-sessions/owner/repository/` ; les fichiers terminés sont repris uniquement si leur taille et leur SHA-1 Git correspondent encore. Les manifestes sont également séparés par dépôt dans `.mtg-auditor-cache/download-manifests/`. Les fichiers absents ou modifiés ne sont jamais écrasés. La vérification des fichiers repris est effectuée en flux avec un tampon de 64 Kio.
 - La reprise concerne les fichiers terminés d'une sélection relancée. La reprise d'un blob interrompu au niveau des octets n'est pas implémentée ; la documentation GitHub de l'API Git Blobs ne garantit pas la prise en charge de `Range` ou d'ETag, donc aucun fragment partiel n'est réutilisé.
 - Estimation du temps restant.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
