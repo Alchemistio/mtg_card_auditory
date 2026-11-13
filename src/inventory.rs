@@ -90,15 +90,20 @@ fn is_hidden_or_metadata(entry: &DirEntry) -> bool {
 
 fn classify_notice(file_name: &str) -> Option<String> {
     let normalized = file_name.to_ascii_uppercase();
-    let base = normalized.split('.').next().unwrap_or(&normalized);
-    match base {
-        "LICENSE" | "LICENCE" => Some("license-notice".to_string()),
-        "COPYING" => Some("copying-notice".to_string()),
-        "NOTICE" => Some("notice-file".to_string()),
-        "README" => Some("readme".to_string()),
-        "AUTHORS" | "CONTRIBUTORS" => Some("contributors".to_string()),
-        "CREDITS" => Some("credits".to_string()),
-        _ => None,
+    if normalized.starts_with("LICENSE") || normalized.starts_with("LICENCE") {
+        Some("license-notice".to_string())
+    } else if normalized.starts_with("COPYING") {
+        Some("copying-notice".to_string())
+    } else if normalized.starts_with("NOTICE") {
+        Some("notice-file".to_string())
+    } else if normalized.starts_with("README") {
+        Some("readme".to_string())
+    } else if normalized.starts_with("AUTHORS") || normalized.starts_with("CONTRIBUTORS") {
+        Some("contributors".to_string())
+    } else if normalized.starts_with("CREDITS") {
+        Some("credits".to_string())
+    } else {
+        None
     }
 }
 
