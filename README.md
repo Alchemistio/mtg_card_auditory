@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster (format, dimensions, canaux et alpha), SVG, polices et ZIP, les premières planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `6310f92` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Les ajouts raster alpha, planches et comparaison doivent encore être revalidés.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les premières planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `a4a099e` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Les derniers changements de rapport de comparaison et de gestion des limites API sont encore en validation.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -10,12 +10,14 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Résolution de la branche par défaut et des références branche/tag/commit vers un SHA de commit et un SHA d'arbre.
 - Exploration récursive de l'arbre GitHub ; repli sur parcours de sous-arbres si l'arbre récursif est tronqué, avec garde-fous de profondeur et de cycles.
 - Exploration GitHub, téléchargement et scan local exécutés en arrière-plan.
+- Timeout HTTP de 60 secondes et diagnostic spécifique des quotas GitHub épuisés ; backoff et reprise automatique restent à faire.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Téléchargement sélectif des blobs dans un workspace, sans écrasement volontaire des fichiers existants.
 - Scan local parallèle via Rayon, sans suivre les liens symboliques.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
+- Anciens inventaires JSON v1 lisibles malgré l'ajout de nouveaux champs optionnels.
 - Doublons binaires exacts repérés par SHA-256 et référencés au premier chemin ; aucun fichier n'est supprimé.
-- Comparaison avec un ancien inventaire JSON : chemins ajoutés, supprimés, modifiés et inchangés, selon SHA-256.
+- Comparaison avec un ancien inventaire JSON : chemins ajoutés, supprimés, modifiés et inchangés ; export JSON de comparaison.
 - Raster : format détecté, dimensions, type de canaux et présence d'alpha depuis le décodeur, sans décodage des pixels.
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
 - Polices : extraction initiale de la famille et sous-famille lorsque le format est pris en charge.
@@ -26,13 +28,13 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement ; les exports restent hors de la source.
 
 ## Limites connues
-- Gestion structurée des rate limits, streaming des blobs volumineux, cache et reprise.
+- Backoff automatique, reprise et cache GitHub, streaming des blobs volumineux.
 - Credential Manager, progression détaillée, annulation et scan multi-sources.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
-- Galerie visuelle, planches annotées, licences, provenance, revue humaine et export dédié des comparaisons.
+- Galerie visuelle, planches annotées, licences, provenance, revue humaine et export HTML de comparaison.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Les ajouts raster alpha, planches et comparaison doivent encore passer l'intégralité de la CI avant de livrer un nouveau binaire.
+- Le dernier ajout rapport comparaison / limites API doit encore passer l'intégralité de la CI avant de livrer un nouveau binaire.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
