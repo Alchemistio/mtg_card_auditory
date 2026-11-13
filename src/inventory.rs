@@ -26,6 +26,9 @@ pub struct AssetRecord {
     pub svg_xml_valid: Option<bool>,
     pub font_family: Option<String>,
     pub font_subfamily: Option<String>,
+    pub archive_entry_count: Option<usize>,
+    pub archive_uncompressed_bytes: Option<u64>,
+    pub archive_suspicious_paths: Option<usize>,
     pub analysis_warning: Option<String>,
     pub review_status: String,
 }
@@ -171,6 +174,61 @@ fn contains_external_css_reference(value: &str) -> bool {
     value.contains("url(http://") || value.contains("url(https://") || value.contains("url(//")
 }
 
+fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Option<usize>, Option<String>) {
+    if extension != "zip" {
+        if extension == "7z" || extension == "rar" {
+            return (None, None, None, Some("Inspection de cette archive non prise en charge pour le moment.".to_string()));
+        }
+        return (None, None, None, None);
+    }
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) => return (None, None, None, Some(format!("Ouverture ZIP impossible : {}", error))),
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(archive) => archive,
+        Err(error) => return (None, None, None, Some(format!("Structure ZIP invalide : {}", error))),
+    };
+    if archive.len() > 200_000 {
+        return (Some(archive.len()), None, None, Some("Archive ignorée : plus de 200 000 entrées.".to_string()));
+    }
+    let mut uncompressed_bytes = 0_u64;
+    let mut suspicious_paths = 0_usize;
+    let mut suspicious_ratio = false;
+    for index in 0..archive.len() {
+        let entry = match archive.by_index(index) {
+            Ok(entry) => entry,
+            Err(error) => return (Some(archive.len()), None, None, Some(format!("Entrée ZIP illisible : {}", error))),
+        };
+        let name = entry.name();
+        if entry.enclosed_name().is_none()
+            || name.contains('\\')
+            || name.contains(':')
+            || name.split('/').any(|part| part == "." || part == "..")
+        {
+            suspicious_paths += 1;
+        }
+        let size = entry.size();
+        let compressed = entry.compressed_size();
+        if size > compressed.saturating_mul(1000) && size > 1024 * 1024 {
+            suspicious_ratio = true;
+        }
+        uncompressed_bytes = uncompressed_bytes.saturating_add(size);
+        if uncompressed_bytes > 8 * 1024 * 1024 * 1024 {
+            return (Some(archive.len()), Some(uncompressed_bytes), Some(suspicious_paths),
+                Some("Alerte ZIP : taille décompressée déclarée supérieure à 8 Gio.".to_string()));
+        }
+    }
+    let warning = if suspicious_paths > 0 {
+        Some("Archive ZIP contenant des chemins suspects ; aucune extraction n'a été effectuée.".to_string())
+    } else if suspicious_ratio {
+        Some("Archive ZIP avec un ratio de compression inhabituel ; aucune extraction n'a été effectuée.".to_string())
+    } else {
+        None
+    };
+    (Some(archive.len()), Some(uncompressed_bytes), Some(suspicious_paths), warning)
+}
+
 fn sha256_file(path: &Path) -> Result<String> {
     let file = File::open(path).with_context(|| format!("Ouverture impossible : {}", path.display()))?;
     let mut reader = BufReader::with_capacity(1024 * 1024, file);
@@ -219,7 +277,9 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
             svg_metadata(path, detected_family);
         let (font_family, font_subfamily, font_warning) = font_metadata(path, detected_family);
-        let analysis_warning = raster_warning.or(svg_warning).or(font_warning);
+        let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
+            zip_metadata(path, &extension);
+        let analysis_warning = raster_warning.or(svg_warning).or(font_warning).or(archive_warning);
         total_bytes = total_bytes.saturating_add(size_bytes);
         assets.push(AssetRecord {
             id: format!("sha256:{}:{}", sha256, relative_path),
@@ -238,6 +298,9 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
             svg_xml_valid,
             font_family,
             font_subfamily,
+            archive_entry_count,
+            archive_uncompressed_bytes,
+            archive_suspicious_paths,
             analysis_warning,
             review_status: "needs-review".to_string(),
         });
