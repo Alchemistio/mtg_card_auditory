@@ -20,7 +20,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 7. Vérifier les chemins de destination, refuser les liens symboliques et ouvrir les fichiers avec création exclusive afin de ne pas écraser une destination existante.
 8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
 9. Les blobs sont actuellement récupérés via l'API Git Blobs Base64 ; streaming/cache/reprise restent à faire.
-10. Les erreurs 429 et 403 avec quota épuisé sont identifiées ; le backoff automatique reste à faire.
+10. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois tentatives avec délai exponentiel borné ; `Retry-After` numérique est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
 11. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
 
 ## Flux local actuel
@@ -50,11 +50,11 @@ Source, inventaire, analyse calculée, revue humaine et exports sont séparés. 
 Le cache et la persistance des revues restent à développer ; les sources distantes et locales ne sont jamais altérées.
 
 ## Limites techniques
-- Les requêtes HTTP utilisent actuellement reqwest bloquant dans les workers ; backoff, reprise et cache doivent être ajoutés.
+- Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture et le cache doivent encore être ajoutés.
 - Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `a6bf479` a passé Clippy, tests, build Release et upload d'artefact. Le durcissement du parseur URL et des écritures sans écrasement est soumis à une nouvelle CI. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `c1c71fd` a passé Clippy, tests, build Release et upload d'artefact. Les nouvelles tentatives HTTP sont soumises à une nouvelle CI. La signature de code pourra être ajoutée avec un certificat externe.
