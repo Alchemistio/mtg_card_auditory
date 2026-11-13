@@ -2,7 +2,7 @@
 
 ## État de l'implémentation
 Le prototype est organisé en modules Rust :
-- `main.rs` : interface egui, workers d'arrière-plan, progression du scan et des téléchargements, choix des sources et actions d'export/comparaison.
+- `main.rs` : interface egui, workers d'arrière-plan, progression du scan et des téléchargements, choix des sources, actions d'export/comparaison et commandes explicites de gestion du jeton Windows Credential Manager.
 - `github.rs` : API REST, parsing URL, timeout HTTP, erreurs de quota, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
 - `models.rs` : entrées d'arbre GitHub, objet de listing avec SHA immuables et manifeste de provenance des téléchargements.
 - `inventory.rs` : parcours local parallèle avec progression, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, repérage de notices, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
@@ -55,7 +55,7 @@ La reprise après fermeture des fichiers terminés est implémentée ; la persis
 
 ## Limites techniques
 - Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture des fichiers terminés est disponible via le journal JSONL ; les blobs partiellement téléchargés ne sont pas repris.
-- Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
+- Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring` ; une copie demeure en mémoire pendant l'utilisation, et l'effacement garanti des copies de workers reste à renforcer.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
