@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les premières planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `df73f1a` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Le repérage de noms de fichiers de notices ajouté ensuite doit encore être revalidé.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression par fichiers, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les premières planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `df73f1a` a passé Clippy, les tests, le build Release et l'upload d'artefact Windows. Le repérage de noms de fichiers de notices et la progression doivent encore être revalidés.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -10,6 +10,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Résolution de la branche par défaut et des références branche/tag/commit vers un SHA de commit et un SHA d'arbre.
 - Exploration récursive de l'arbre GitHub ; repli sur parcours de sous-arbres si l'arbre récursif est tronqué, avec garde-fous de profondeur et de cycles.
 - Exploration GitHub, téléchargement et scan local exécutés en arrière-plan.
+- Progression du scan local en nombre de fichiers traités, envoyée par lots de 100.
 - Timeout HTTP de 60 secondes et diagnostic spécifique des quotas GitHub épuisés ; backoff et reprise automatique restent à faire.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Téléchargement sélectif des blobs dans un workspace, sans écrasement volontaire des fichiers existants.
@@ -30,13 +31,13 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 
 ## Limites connues
 - Backoff automatique, reprise et cache GitHub, streaming des blobs volumineux.
-- Credential Manager, progression détaillée, annulation et scan multi-sources.
+- Credential Manager, progression en octets, estimation du temps restant, annulation et scan multi-sources.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
-- Galerie visuelle, planches annotées, provenance complète, revue humaine et export HTML de comparaison.
+- Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Le repérage de noms de notices doit encore passer la CI avant de livrer un nouveau binaire.
+- Le repérage de noms de notices et la progression doivent encore passer la CI avant de livrer un nouveau binaire.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
