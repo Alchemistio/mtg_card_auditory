@@ -3,6 +3,7 @@ use base64::Engine;
 use reqwest::blocking::{Client, Response};
 use reqwest::header::ACCEPT;
 use serde::Deserialize;
+use std::collections::HashSet;
 
 use crate::models::RemoteEntry;
 
@@ -19,6 +20,16 @@ struct RepositoryResponse {
 
 #[derive(Deserialize)]
 struct CommitResponse {
+    commit: CommitDetails,
+}
+
+#[derive(Deserialize)]
+struct CommitDetails {
+    tree: TreeSha,
+}
+
+#[derive(Deserialize)]
+struct TreeSha {
     sha: String,
 }
 
@@ -59,17 +70,66 @@ fn api_get(url: &str, token: &str) -> Result<Response> {
     Ok(response)
 }
 
+fn repository_base(owner: &str, repository: &str) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}",
+        urlencoding::encode(owner.trim()),
+        urlencoding::encode(repository.trim())
+    )
+}
+
+fn fetch_tree(owner: &str, repository: &str, tree_sha: &str, recursive: bool, token: &str) -> Result<TreeResponse> {
+    let suffix = if recursive { "?recursive=1" } else { "" };
+    let url = format!("{}/git/trees/{}{}", repository_base(owner, repository), tree_sha, suffix);
+    api_get(&url, token)?.json().context("Réponse arbre GitHub invalide")
+}
+
+fn collect_subtrees(
+    owner: &str,
+    repository: &str,
+    tree_sha: &str,
+    prefix: &str,
+    token: &str,
+    visited: &mut HashSet<String>,
+    output: &mut Vec<RemoteEntry>,
+    depth: usize,
+) -> Result<()> {
+    if depth > 128 {
+        anyhow::bail!("Profondeur d'arbre GitHub supérieure à la limite de sécurité (128).");
+    }
+    if !visited.insert(tree_sha.to_string()) {
+        return Ok(());
+    }
+    let response = fetch_tree(owner, repository, tree_sha, false, token)?;
+    if response.truncated {
+        anyhow::bail!("Un sous-arbre GitHub non récursif est lui-même tronqué ; inventaire incomplet refusé.");
+    }
+    for mut entry in response.tree {
+        let full_path = if prefix.is_empty() {
+            entry.path.clone()
+        } else {
+            format!("{}/{}", prefix, entry.path)
+        };
+        if entry.kind == "tree" {
+            let child_sha = entry.sha.clone();
+            entry.path = full_path.clone();
+            output.push(entry);
+            collect_subtrees(owner, repository, &child_sha, &full_path, token, visited, output, depth + 1)?;
+        } else {
+            entry.path = full_path;
+            output.push(entry);
+        }
+    }
+    Ok(())
+}
+
 pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: &str) -> Result<Vec<RemoteEntry>> {
     let owner = owner.trim();
     let repository = repository.trim();
     if owner.is_empty() || repository.is_empty() {
         anyhow::bail!("Le propriétaire et le nom du dépôt sont obligatoires.");
     }
-    let repo_base = format!(
-        "https://api.github.com/repos/{}/{}",
-        urlencoding::encode(owner),
-        urlencoding::encode(repository)
-    );
+    let repo_base = repository_base(owner, repository);
     let reference = if branch.trim().is_empty() {
         let metadata: RepositoryResponse = api_get(&repo_base, token)?
             .json()
@@ -82,19 +142,30 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
     let commit: CommitResponse = api_get(&commit_url, token)?
         .json()
         .context("Impossible de résoudre la référence en commit immuable")?;
-    let tree_url = format!("{}/git/trees/{}?recursive=1", repo_base, commit.sha);
-    let tree: TreeResponse = api_get(&tree_url, token)?.json().context("Réponse GitHub invalide")?;
-    if tree.truncated {
-        anyhow::bail!("Arbre GitHub tronqué. L'exploration récursive par sous-arbres sera ajoutée dans la phase de robustesse.");
+    let recursive = fetch_tree(owner, repository, &commit.commit.tree.sha, true, token)?;
+    if !recursive.truncated {
+        return Ok(recursive.tree);
     }
-    Ok(tree.tree)
+
+    let mut entries = Vec::new();
+    let mut visited = HashSet::new();
+    collect_subtrees(
+        owner,
+        repository,
+        &commit.commit.tree.sha,
+        "",
+        token,
+        &mut visited,
+        &mut entries,
+        0,
+    )?;
+    Ok(entries)
 }
 
 pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> Result<Vec<u8>> {
     let url = format!(
-        "https://api.github.com/repos/{}/{}/git/blobs/{}",
-        urlencoding::encode(owner.trim()),
-        urlencoding::encode(repository.trim()),
+        "{}/git/blobs/{}",
+        repository_base(owner, repository),
         urlencoding::encode(sha.trim())
     );
     let blob: BlobResponse = api_get(&url, token)?.json().context("Réponse blob GitHub invalide")?;
