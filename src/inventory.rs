@@ -107,7 +107,7 @@ fn classify_notice(file_name: &str) -> Option<String> {
     }
 }
 
-fn classify_extension(extension: &str) -> &'static str {
+pub fn classify_extension(extension: &str) -> &'static str {
     match extension.to_ascii_lowercase().as_str() {
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tif" | "tiff" => "raster",
         "svg" => "svg",
