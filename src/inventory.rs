@@ -48,6 +48,23 @@ pub struct InventoryDocument {
     pub assets: Vec<AssetRecord>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChangedAsset {
+    pub relative_path: String,
+    pub previous_sha256: String,
+    pub current_sha256: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InventoryComparison {
+    pub baseline_source_root: String,
+    pub current_source_root: String,
+    pub added_paths: Vec<String>,
+    pub removed_paths: Vec<String>,
+    pub changed_assets: Vec<ChangedAsset>,
+    pub unchanged_files: usize,
+}
+
 fn is_hidden_or_metadata(entry: &DirEntry) -> bool {
     entry.file_name().to_string_lossy().starts_with('.')
 }
@@ -382,6 +399,46 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
     })
 }
 
+pub fn compare_inventories(current: &InventoryDocument, baseline: &InventoryDocument) -> InventoryComparison {
+    let baseline_by_path: HashMap<&str, &AssetRecord> = baseline.assets.iter()
+        .map(|asset| (asset.relative_path.as_str(), asset))
+        .collect();
+    let current_paths: HashMap<&str, &AssetRecord> = current.assets.iter()
+        .map(|asset| (asset.relative_path.as_str(), asset))
+        .collect();
+    let mut added_paths = Vec::new();
+    let mut changed_assets = Vec::new();
+    let mut unchanged_files = 0usize;
+
+    for asset in &current.assets {
+        match baseline_by_path.get(asset.relative_path.as_str()) {
+            None => added_paths.push(asset.relative_path.clone()),
+            Some(previous) if previous.sha256 != asset.sha256 => changed_assets.push(ChangedAsset {
+                relative_path: asset.relative_path.clone(),
+                previous_sha256: previous.sha256.clone(),
+                current_sha256: asset.sha256.clone(),
+            }),
+            Some(_) => unchanged_files += 1,
+        }
+    }
+
+    let mut removed_paths: Vec<String> = baseline.assets.iter()
+        .filter(|asset| !current_paths.contains_key(asset.relative_path.as_str()))
+        .map(|asset| asset.relative_path.clone())
+        .collect();
+    added_paths.sort();
+    removed_paths.sort();
+    changed_assets.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    InventoryComparison {
+        baseline_source_root: baseline.source_root.clone(),
+        current_source_root: current.source_root.clone(),
+        added_paths,
+        removed_paths,
+        changed_assets,
+        unchanged_files,
+    }
+}
+
 fn ensure_export_outside_source(document: &InventoryDocument, destination: &Path) -> Result<()> {
     let source_root = Path::new(&document.source_root).canonicalize()?;
     let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
@@ -638,6 +695,30 @@ mod tests {
         assert_eq!(suspicious, Some(1));
         assert!(warning.is_some());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn compares_added_removed_changed_and_unchanged_files() {
+        let base = std::env::temp_dir().join(format!("mtg-auditor-compare-test-{}", std::process::id()));
+        let baseline_root = base.join("baseline");
+        let current_root = base.join("current");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&baseline_root).unwrap();
+        std::fs::create_dir_all(&current_root).unwrap();
+        std::fs::write(baseline_root.join("same.txt"), b"same").unwrap();
+        std::fs::write(baseline_root.join("changed.txt"), b"before").unwrap();
+        std::fs::write(baseline_root.join("removed.txt"), b"gone").unwrap();
+        std::fs::write(current_root.join("same.txt"), b"same").unwrap();
+        std::fs::write(current_root.join("changed.txt"), b"after").unwrap();
+        std::fs::write(current_root.join("added.txt"), b"new").unwrap();
+        let baseline = scan_directory(&baseline_root).unwrap();
+        let current = scan_directory(&current_root).unwrap();
+        let comparison = compare_inventories(&current, &baseline);
+        assert_eq!(comparison.added_paths, vec!["added.txt"]);
+        assert_eq!(comparison.removed_paths, vec!["removed.txt"]);
+        assert_eq!(comparison.changed_assets.len(), 1);
+        assert_eq!(comparison.unchanged_files, 1);
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[test]
