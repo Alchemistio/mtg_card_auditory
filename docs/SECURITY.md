@@ -47,7 +47,9 @@
 
 ## Limites restantes
 - Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
-- Le cache vérifié est local au workspace ; la reprise d'une opération multi-fichiers après fermeture n'est pas encore disponible.
+- Le journal de reprise JSONL est local au workspace et ne contient que chemin, blob SHA, taille et horodatage ; aucun jeton GitHub n'y est écrit.
+- Un fichier déjà journalisé n'est sauté qu'après vérification de son SHA-1 Git et de sa taille. Une destination modifiée, manquante ou invalide n'est jamais écrasée automatiquement.
+- Une ligne finale JSONL incomplète est ignorée après arrêt brutal ; les lignes antérieures invalides bloquent la reprise plutôt que de faire confiance à un journal corrompu.
 - Les erreurs transitoires et réponses 429/502/503/504 utilisent des retries bornés ; le quota primaire épuisé est signalé sans attente longue automatique.
 - La défense TOCTOU reste incomplète : la création exclusive protège le fichier final contre l'écrasement, mais ne neutralise pas toutes les courses sur les répertoires parents ni le remplacement de liens entre vérification et ouverture. Une approche basée sur des handles de répertoire et des opérations relatives est à étudier.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
