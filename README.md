@@ -13,7 +13,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Progression du scan local en nombre de fichiers traités, envoyée par lots de 100.
 - Progression des téléchargements GitHub par fichier terminé.
 - Manifeste JSON de provenance pour les téléchargements : propriétaire, dépôt, référence demandée, commit SHA, tree SHA, date, chemin et blob SHA.
-- Timeout HTTP de 60 secondes et diagnostic spécifique des quotas GitHub épuisés ; backoff et reprise automatique restent à faire.
+- Timeout HTTP de 60 secondes, trois tentatives au maximum pour erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
 - Scan local parallèle via Rayon, sans suivre les liens symboliques.
@@ -32,14 +32,14 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement ; les exports restent hors de la source.
 
 ## Limites connues
-- Backoff automatique, reprise et cache GitHub, streaming des blobs volumineux.
+- Reprise après fermeture, cache GitHub, streaming des blobs volumineux et affichage du quota restant.
 - Credential Manager, progression en octets, estimation du temps restant, annulation et scan multi-sources.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Le dernier jalon de provenance a passé la CI ; les derniers durcissements du parseur et des écritures doivent encore passer leur CI.
+- Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les nouvelles tentatives HTTP sont en cours de validation CI.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
