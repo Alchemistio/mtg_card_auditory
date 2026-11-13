@@ -4,7 +4,7 @@ use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, sync::atomic::{AtomicUsize, Ordering}, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicUsize, Ordering}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -401,6 +401,17 @@ pub fn scan_directory_with_progress<F>(root: &Path, progress: F) -> Result<Inven
 where
     F: Fn(usize, usize) + Sync,
 {
+    scan_directory_with_progress_and_cancel(root, progress, &AtomicBool::new(false))
+}
+
+pub fn scan_directory_with_progress_and_cancel<F>(
+    root: &Path,
+    progress: F,
+    cancelled: &AtomicBool,
+) -> Result<InventoryDocument>
+where
+    F: Fn(usize, usize) + Sync,
+{
     let canonical_root = root.canonicalize()
         .with_context(|| format!("Dossier source inaccessible : {}", root.display()))?;
     if !canonical_root.is_dir() {
@@ -414,6 +425,9 @@ where
         .into_iter()
         .filter_entry(|entry| entry.depth() == 0 || !is_hidden_or_metadata(entry))
     {
+        if cancelled.load(Ordering::Relaxed) {
+            anyhow::bail!("Scan annulé par l'utilisateur.");
+        }
         let entry = item.context("Erreur pendant le parcours du dossier")?;
         if entry.file_type().is_file() {
             paths.push(entry.path().to_path_buf());
@@ -424,7 +438,13 @@ where
     let completed = AtomicUsize::new(0);
     let mut assets: Vec<AssetRecord> = paths.par_iter()
         .map(|path| {
+            if cancelled.load(Ordering::Relaxed) {
+                anyhow::bail!("Scan annulé par l'utilisateur.");
+            }
             let asset = analyze_file(path, &canonical_root)?;
+            if cancelled.load(Ordering::Relaxed) {
+                anyhow::bail!("Scan annulé par l'utilisateur.");
+            }
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
             if done.is_multiple_of(100) || done == total_paths {
                 progress(done, total_paths);
