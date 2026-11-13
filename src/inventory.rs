@@ -592,6 +592,25 @@ mod tests {
     }
 
     #[test]
+    fn contact_sheet_exports_png_and_safe_index() {
+        let base = std::env::temp_dir().join(format!("mtg-auditor-sheet-test-{}", std::process::id()));
+        let source = base.join("source");
+        let output = base.join("output");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&output).unwrap();
+        let source_image = source.join("card.png");
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([20, 40, 60, 128])).save(&source_image).unwrap();
+        let document = scan_directory(&source).unwrap();
+        let sheet_path = output.join("sheet.png");
+        let rendered = export_contact_sheet(&document, 0, &sheet_path).unwrap();
+        assert_eq!(rendered, 1);
+        assert!(sheet_path.exists());
+        assert!(output.join("sheet.txt").exists());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn html_escaping_blocks_markup_in_user_paths() {
         assert_eq!(escape_html("<script>&\"'"), "&lt;script&gt;&amp;&quot;&#39;");
     }
