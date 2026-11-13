@@ -245,6 +245,23 @@ impl AuditorApp {
                 let mut errors = Vec::new();
                 let mut manifest_files = Vec::new();
                 let total = chosen.len();
+                let journal_name = format!(".mtg-auditor-cache/download-session-{}.jsonl", &commit_sha[..7.min(commit_sha.len())]);
+                let journal_path = canonical_root.join(&journal_name);
+                if let Some(parent) = journal_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let mut journal = std::fs::OpenOptions::new().create(true).append(true).open(&journal_path)
+                    .context("Impossible d'ouvrir le journal de reprise")?;
+                let mut completed_records = HashSet::new();
+                if journal_path.metadata()?.len() > 0 {
+                    let journal_text = std::fs::read_to_string(&journal_path)
+                        .context("Journal de reprise illisible ; aucune reprise automatique")?;
+                    for line in journal_text.lines().filter(|line| !line.trim().is_empty()) {
+                        let record: models::DownloadProgressRecord = serde_json::from_str(line)
+                            .context("Enregistrement invalide dans le journal de reprise")?;
+                        completed_records.insert((record.path, record.blob_sha, record.size_bytes));
+                    }
+                }
                 let manifest_name = format!("download-manifest-{}.json", &commit_sha[..7.min(commit_sha.len())]);
                 let manifest_conflict = chosen.iter().any(|entry| entry.path == manifest_name);
                 let progress_sender = sender.clone();
@@ -256,6 +273,29 @@ impl AuditorApp {
                         break;
                     }
                     processed = index + 1;
+                    let expected_size = entry.size.unwrap_or(0);
+                    let journal_key = (entry.path.clone(), entry.sha.clone(), expected_size);
+                    if completed_records.contains(&journal_key) {
+                        let existing_path = safe_destination(&canonical_root, &entry.path)?;
+                        if existing_path.is_file() {
+                            let existing = std::fs::read(&existing_path)
+                                .with_context(|| format!("Lecture du fichier à reprendre impossible : {}", entry.path))?;
+                            if existing.len() as u64 == expected_size
+                                && github::verify_git_blob_sha(&entry.sha, &existing).is_ok() {
+                                downloaded += 1;
+                                manifest_files.push(models::DownloadedFile {
+                                    path: entry.path.clone(),
+                                    blob_sha: entry.sha.clone(),
+                                    size_bytes: expected_size,
+                                });
+                                let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
+                                continue;
+                            }
+                        }
+                        errors.push(format!("{} : journal présent mais fichier absent ou empreinte invalide ; aucun écrasement effectué", entry.path));
+                        let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
+                        continue;
+                    }
                     let result = cached_github_blob(&canonical_root, &owner, &repository, &commit_sha, &entry.sha, entry.size, &token)
                         .and_then(|bytes| {
                             let destination = safe_destination(&canonical_root, &entry.path)?;
@@ -268,7 +308,19 @@ impl AuditorApp {
                                 anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
                             }
                             write_new_file(&destination, &bytes)
-                                .with_context(|| format!("Écriture sans écrasement impossible : {}", destination.display()))
+                                .with_context(|| format!("Écriture sans écrasement impossible : {}", destination.display()))?;
+                            let record = models::DownloadProgressRecord {
+                                path: entry.path.clone(),
+                                blob_sha: entry.sha.clone(),
+                                size_bytes: bytes.len() as u64,
+                                completed_unix_seconds: std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)?.as_secs(),
+                            };
+                            serde_json::to_writer(&mut journal, &record)?;
+                            journal.write_all(b"\\n")?;
+                            journal.sync_all()?;
+                            completed_records.insert((record.path, record.blob_sha, record.size_bytes));
+                            Ok(())
                         });
                     match result {
                         Ok(()) => {
