@@ -380,6 +380,9 @@ impl eframe::App for AuditorApp {
                                 if let Some(count) = asset.archive_entry_count {
                                     ui.label(format!("ZIP : {} entrées", count));
                                 }
+                                if let Some(notice) = &asset.notice_kind {
+                                    ui.colored_label(egui::Color32::LIGHT_GREEN, format!("Notice : {}", notice));
+                                }
                                 if let Some(first_path) = &asset.duplicate_of {
                                     ui.colored_label(egui::Color32::LIGHT_BLUE, format!("Doublon de {}", first_path));
                                 }
