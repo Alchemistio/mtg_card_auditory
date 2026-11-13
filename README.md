@@ -13,7 +13,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Progression du scan local en octets traités (notification par lots de 100 fichiers et à la fin).
 - Progression des téléchargements GitHub par fichier terminé.
 - Manifeste JSON de provenance pour les téléchargements : propriétaire, dépôt, référence demandée, commit SHA, tree SHA, date, chemin et blob SHA.
-- Timeout HTTP de 60 secondes, jusqu'à trois nouvelles tentatives (quatre requêtes au total) pour les erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
+- Timeout HTTP de 60 secondes, jusqu'à trois nouvelles tentatives (quatre requêtes au total) pour les erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After (secondes ou date HTTP) ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
 - Téléchargement de blobs GitHub plafonné à 90 Mio par fichier, réponse JSON plafonnée à 128 Mio, taille reçue vérifiée contre l'arbre Git et empreinte SHA-1 Git recalculée avant écriture ou mise en cache.
 - Cache local sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace ; les entrées sont vérifiées par SHA-1 Git et les entrées invalides sont écartées avant un nouveau téléchargement.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
