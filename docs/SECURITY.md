@@ -22,6 +22,8 @@
 - Les destinations existantes ne sont pas écrasées pour les téléchargements et planches.
 - Les fichiers téléchargés et les manifestes sont ouverts avec création exclusive (`create_new`) pour refuser un fichier déjà présent au moment de l'ouverture.
 - Les blobs GitHub sont refusés au-delà de 90 Mio ; le corps JSON est limité à 128 Mio et la taille décodée doit correspondre à la taille déclarée par Git.
+- Le SHA-1 Git de chaque blob est recalculé avec l'en-tête objet Git `blob {taille}\\0` avant écriture et avant réutilisation du cache.
+- Le cache est conservé dans le workspace sous `.mtg-auditor-cache` ; les noms de segments sont validés et chaque fichier de cache est vérifié contre le SHA attendu. Une entrée invalide est écartée.
 - Les écritures sont synchronisées (`sync_all`) ; si l'écriture ou la synchronisation échoue, le fichier partiel créé par l'opération est supprimé.
 - Les écritures de fichiers téléchargés utilisent `write_all` puis `sync_all`; un fichier partiel est supprimé si l'écriture échoue.
 - Les liens symboliques présents dans les chemins de destination sont refusés.
@@ -45,6 +47,7 @@
 
 ## Limites restantes
 - Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
+- Le cache vérifié est local au workspace ; la reprise d'une opération multi-fichiers après fermeture n'est pas encore disponible.
 - Les erreurs transitoires et réponses 429/502/503/504 utilisent des retries bornés ; le quota primaire épuisé est signalé sans attente longue automatique.
 - La défense TOCTOU reste incomplète : la création exclusive protège le fichier final contre l'écrasement, mais ne neutralise pas toutes les courses sur les répertoires parents ni le remplacement de liens entre vérification et ouverture. Une approche basée sur des handles de répertoire et des opérations relatives est à étudier.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
