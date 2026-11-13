@@ -6,7 +6,7 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [ ] Compilation Windows CI vérifiée (runs récents à contrôler après les derniers changements).
+- [ ] Compilation Windows CI vérifiée sur le dernier commit (un commit intermédiaire a passé Clippy, tests et build Release).
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -25,6 +25,8 @@
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux.
 - [x] Classification indicative par extension.
 - [x] Métadonnées raster initiales : format détecté et dimensions depuis l'en-tête.
+- [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
+- [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
 - [x] Export JSON versionné et CSV UTF-8.
 - [x] Refus des exports dans l'arborescence source.
 - [ ] Comparaison entre analyses.
@@ -32,8 +34,8 @@
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : détection du format et dimensions initiales ; alpha, orientation, limites, décodage contrôlé et miniatures à faire.
-- [ ] SVG : XML, viewBox, sécurité et aperçu.
-- [ ] Fonts : métadonnées.
+- [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
+- [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [ ] ZIP : inventaire sûr et chemins suspects.
 - [ ] MSE : packages, dépendances et couches.
 - [ ] Collecte des notices et provenance.
