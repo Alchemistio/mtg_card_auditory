@@ -7,7 +7,7 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `a6bf479` : Clippy, tests, build Release et upload d'artefact.
-- [ ] CI des derniers durcissements URL/écritures exclusives en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
+- [ ] CI des nouvelles tentatives HTTP en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
@@ -20,7 +20,8 @@
 - [x] Timeout HTTP et diagnostic structuré des rate limits (429 / 403 avec quota épuisé).
 - [x] Manifeste de provenance des téléchargements : dépôt, référence demandée, commit SHA, tree SHA, horodatage, chemins et blob SHA.
 - [x] Écriture exclusive des blobs et manifestes (aucun écrasement), nettoyage d'un fichier partiel en cas d'erreur ; test de non-écrasement.
-- [ ] Backoff automatique, reprise et affichage du quota restant.
+- [x] Nouvelles tentatives bornées (3 maximum) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` ; tests de politique de retry.
+- [ ] Reprise après fermeture, cache GitHub et affichage du quota restant.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [ ] Téléchargement streaming, taille max, cache et reprise.
 - [ ] Filtres par extension, taille, chemin et famille.
