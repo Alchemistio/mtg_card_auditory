@@ -24,6 +24,7 @@
 - [ ] Reprise après fermeture, cache GitHub et affichage du quota restant.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio) et contrôle de la taille réellement décodée contre la taille de l'arbre Git.
+- [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
 - [ ] Téléchargement streaming, cache et reprise.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
@@ -49,7 +50,7 @@
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
 - [x] Annulation coopérative du scan local depuis l'interface, vérifiée entre les étapes de parcours et d'analyse.
 - [x] Progression locale en octets, agrégée à partir des tailles des fichiers et mise à jour par lots de 100 fichiers.
-- [ ] Estimation temps restant, annulation du téléchargement GitHub et scan multi-sources.
+- [ ] Estimation temps restant et scan multi-sources.
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
