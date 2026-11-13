@@ -7,7 +7,7 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `6310f92` : Clippy, tests, build Release et upload d'artefact.
-- [ ] Revalidation du dernier commit après ajout des métadonnées alpha et planches de contact.
+- [ ] Revalidation du dernier commit après ajout des métadonnées alpha, planches et comparaison d'inventaires.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -27,6 +27,7 @@
 - [x] Scan local exécuté dans un worker d'arrière-plan.
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux.
 - [x] Détection des doublons binaires exacts par SHA-256, sans suppression.
+- [x] Comparaison de deux inventaires JSON par chemin et SHA-256 (ajouté/supprimé/modifié/identique).
 - [x] Classification indicative par extension.
 - [x] Métadonnées raster : format, dimensions, type de canaux et présence d'alpha depuis le décodeur sans décodage des pixels.
 - [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
@@ -36,7 +37,6 @@
 - [x] Génération de planches raster PNG paginées (16 éléments/page) avec index texte ; SHA vérifié avant aperçu.
 - [x] Refus des exports dans l'arborescence source.
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
-- [ ] Comparaison entre analyses.
 - [ ] Progression détaillée, annulation et reprise pour les scans longs.
 
 ## Phase 3 — Analyse des formats
@@ -56,6 +56,7 @@
 
 ## Phase 5 — Rapports et intégration MTG
 - [x] Rapport HTML autonome initial.
+- [ ] Export dédié du rapport de comparaison.
 - [ ] Statistiques et alertes enrichies.
 - [ ] Export vers staging, jamais directement vers LIBRARY.
 - [ ] Réconciliation du manifeste MTG Card Remodeler.
