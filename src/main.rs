@@ -9,6 +9,11 @@ enum ScanMessage {
     Progress(usize, usize),
     Finished(std::result::Result<inventory::InventoryDocument, String>),
 }
+
+enum DownloadMessage {
+    Progress(usize, usize, String),
+    Finished(String),
+}
 use std::{collections::HashSet, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
 
 #[derive(Default)]
@@ -27,7 +32,7 @@ struct AuditorApp {
     comparison: Option<inventory::InventoryComparison>,
     scan_receiver: Option<Receiver<ScanMessage>>,
     github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
-    download_receiver: Option<Receiver<String>>,
+    download_receiver: Option<Receiver<DownloadMessage>>,
     status: String,
     entries: Vec<models::RemoteEntry>,
     selected: HashSet<String>,
@@ -199,7 +204,9 @@ impl AuditorApp {
                 let canonical_root = root.canonicalize()?;
                 let mut downloaded = 0usize;
                 let mut errors = Vec::new();
-                for entry in chosen {
+                let total = chosen.len();
+                let progress_sender = sender.clone();
+                for (index, entry) in chosen.into_iter().enumerate() {
                     let result = github::download_blob(&owner, &repository, &entry.sha, &token)
                         .and_then(|bytes| {
                             let destination = safe_destination(&canonical_root, &entry.path)?;
@@ -218,6 +225,7 @@ impl AuditorApp {
                         Ok(()) => downloaded += 1,
                         Err(error) => errors.push(format!("{} : {:#}", entry.path, error)),
                     }
+                    let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                 }
                 if errors.is_empty() {
                     Ok(format!("{} fichier(s) téléchargé(s) dans {}. Sources GitHub inchangées.", downloaded, canonical_root.display()))
@@ -225,7 +233,7 @@ impl AuditorApp {
                     Ok(format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}", downloaded, errors.len(), errors[0]))
                 }
             })().unwrap_or_else(|error| format!("Échec du téléchargement : {:#}", error));
-            let _ = sender.send(result);
+            let _ = sender.send(DownloadMessage::Finished(result));
         });
     }
 }
@@ -314,15 +322,34 @@ impl eframe::App for AuditorApp {
                 Err(error) => self.status = format!("Erreur GitHub : {}", error),
             }
         }
-        let completed_download = self.download_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
-            Ok(result) => Some(result),
-            Err(TryRecvError::Disconnected) => Some("Le worker de téléchargement s'est arrêté sans résultat.".to_string()),
-            Err(TryRecvError::Empty) => None,
-        });
-        if let Some(result) = completed_download {
-            self.download_receiver = None;
-            self.busy = false;
-            self.status = result;
+        let mut download_messages = Vec::new();
+        if let Some(receiver) = self.download_receiver.as_ref() {
+            loop {
+                match receiver.try_recv() {
+                    Ok(message) => {
+                        let finished = matches!(&message, DownloadMessage::Finished(_));
+                        download_messages.push(message);
+                        if finished { break; }
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        download_messages.push(DownloadMessage::Finished("Le worker de téléchargement s'est arrêté sans résultat.".to_string()));
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => break,
+                }
+            }
+        }
+        for message in download_messages {
+            match message {
+                DownloadMessage::Progress(done, total, path) => {
+                    self.status = format!("Téléchargement : {} / {} — {}", done, total, path);
+                }
+                DownloadMessage::Finished(result) => {
+                    self.download_receiver = None;
+                    self.busy = false;
+                    self.status = result;
+                }
+            }
         }
         if self.busy {
             ctx.request_repaint_after(Duration::from_millis(100));
