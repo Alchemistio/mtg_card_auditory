@@ -2,26 +2,27 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local SHA-256, les exports JSON/CSV, les premières métadonnées raster (format et dimensions depuis l'en-tête) et l'exploration GitHub configurable sont intégrés au code. La validation Windows complète reste en cours dans GitHub Actions. Consulter [la feuille de route](docs/ROADMAP.md).
+**État : prototype fonctionnel en développement.** Le scan local SHA-256, les exports JSON/CSV, les premières métadonnées raster (format et dimensions depuis l'en-tête), l'exploration GitHub configurable et le repli sur sous-arbres en cas d'arbre récursif tronqué sont intégrés au code. La validation Windows complète reste en cours dans GitHub Actions. Consulter [la feuille de route](docs/ROADMAP.md).
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
 - Source GitHub configurable par URL ou propriétaire/dépôt.
-- Résolution de la branche par défaut et des références branche/tag/commit vers un SHA de commit.
-- Exploration récursive de l'arbre GitHub et sélection de fichiers.
+- Résolution de la branche par défaut et des références branche/tag/commit vers un SHA de commit et un SHA d'arbre.
+- Exploration récursive de l'arbre GitHub ; repli sur parcours de sous-arbres si l'arbre récursif est tronqué, avec garde-fous de profondeur et de cycles.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Téléchargement sélectif des blobs dans un workspace, sans écrasement volontaire des fichiers existants.
 - Scan récursif d'un dossier local, sans suivre les liens symboliques.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
 - Pour les images raster : format détecté et dimensions lues depuis l'en-tête ; aucun rendu ou aperçu visuel à ce stade.
 - Exports JSON et CSV UTF-8 ; les exports dans le dossier source scanné sont refusés.
+- Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement.
 - Tests unitaires du parsing d'URL, du classement et de l'inventaire.
 
 ## Limites connues
-- Les arbres GitHub tronqués sont détectés mais leur exploration par sous-arbres n'est pas encore implémentée.
-- Le téléchargement GitHub utilise les blobs Base64, pas encore le streaming des gros fichiers.
-- Pas encore de cache/reprise, Credential Manager, progression asynchrone ni annulation.
+- Gestion structurée des rate limits, streaming des blobs volumineux, cache et reprise à développer.
+- Credential Manager, progression asynchrone, annulation et scan multi-sources à développer.
 - Alpha/orientation, SVG, polices, archives, MSE, galerie, planches, licences et rapport HTML restent à développer.
+- La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
 - Aucun binaire Windows n'est déclaré validé avant succès de la CI.
 
