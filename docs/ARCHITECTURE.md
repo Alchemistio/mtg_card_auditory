@@ -19,13 +19,13 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 6. Sélectionner les blobs distants ; rechercher d'abord une copie dans `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` sous le workspace, puis télécharger si nécessaire.
 7. Vérifier les chemins de destination, refuser les liens symboliques et ouvrir les fichiers avec création exclusive afin de ne pas écraser une destination existante.
 8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
-9. Les blobs sont récupérés via l'API Git Blobs avec `Accept: application/vnd.github.raw`. Le flux est écrit dans un fichier temporaire avec un tampon de 64 Kio ; la taille déclarée (plafond 90 Mio) et le SHA-1 Git sont vérifiés progressivement avant publication du cache.
+9. Les blobs sont récupérés via l'API Git Blobs avec `Accept: application/vnd.github.raw+json` (média type brut documenté par GitHub). Le flux est écrit dans un fichier temporaire avec un tampon de 64 Kio ; la taille déclarée (plafond 90 Mio) et le SHA-1 Git sont vérifiés progressivement avant publication du cache.
 10. Le cache local est isolé sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace. Chaque entrée est revalidée en flux contre le SHA-1 Git attendu ; une entrée invalide est supprimée puis retéléchargée. Les liens symboliques et fichiers non réguliers sont refusés. La copie vers le workspace est exclusive et son SHA-1 est revérifié avant journalisation.
 11. Un journal JSONL par commit est conservé sous `.mtg-auditor-cache/download-session-{commit}.jsonl`. Chaque succès est synchronisé sur disque ; à la relance, seuls les fichiers dont le chemin, le blob SHA, la taille et le contenu correspondent sont sautés. Une dernière ligne incomplète après arrêt brutal est ignorée.
 12. Le journal ne contient aucun jeton. Son parent est canonicalisé dans le workspace et les liens symboliques ou fichiers non réguliers sont refusés. Une destination absente ou dont l'empreinte ne correspond pas n'est jamais écrasée ; elle produit une erreur explicite.
-13. La reprise d'un blob interrompu au niveau des octets et la concurrence bornée restent à faire.
-15. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
-14. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
+13. La reprise d'un blob interrompu au niveau des octets reste à faire : la documentation de l'API Git Blobs ne garantit pas `Range`/ETag ; aucun fragment partiel n'est réutilisé. La concurrence bornée reste à évaluer.
+14. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique ou date HTTP est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
+15. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
 
 ## Flux local actuel
 1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
@@ -61,4 +61,4 @@ La reprise après fermeture et la persistance des revues restent à développer 
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `c1c71fd` a passé Clippy, tests, build Release et upload d'artefact. Les commits récents ont passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact), y compris les changements de multi-sources dès validation du run associé. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `d8d1ae2` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.
