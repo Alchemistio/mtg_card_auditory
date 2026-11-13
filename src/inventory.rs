@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use image::ImageReader;
+use image::{ImageDecoder, ImageReader};
 use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,8 @@ pub struct AssetRecord {
     pub raster_format: Option<String>,
     pub raster_width: Option<u32>,
     pub raster_height: Option<u32>,
+    pub raster_color_type: Option<String>,
+    pub raster_has_alpha: Option<bool>,
     pub svg_viewbox: Option<String>,
     pub svg_has_external_refs: Option<bool>,
     pub svg_xml_valid: Option<bool>,
@@ -62,19 +64,27 @@ fn classify_extension(extension: &str) -> &'static str {
     }
 }
 
-fn raster_metadata(path: &Path, family: &str) -> (Option<String>, Option<u32>, Option<u32>, Option<String>) {
+fn raster_metadata(
+    path: &Path,
+    family: &str,
+) -> (Option<String>, Option<u32>, Option<u32>, Option<String>, Option<bool>, Option<String>) {
     if family != "raster" {
-        return (None, None, None, None);
+        return (None, None, None, None, None, None);
     }
     let reader = match ImageReader::open(path).and_then(|reader| reader.with_guessed_format()) {
         Ok(reader) => reader,
-        Err(error) => return (None, None, None, Some(format!("Détection du format image impossible : {}", error))),
+        Err(error) => return (None, None, None, None, None, Some(format!("Détection du format image impossible : {}", error))),
     };
     let format = reader.format().map(|value| format!("{value:?}"));
-    match reader.into_dimensions() {
-        Ok((width, height)) => (format, Some(width), Some(height), None),
-        Err(error) => (format, None, None, Some(format!("En-tête image illisible : {}", error))),
-    }
+    let decoder = match reader.into_decoder() {
+        Ok(decoder) => decoder,
+        Err(error) => return (format, None, None, None, None, Some(format!("En-tête image illisible : {}", error))),
+    };
+    let (width, height) = decoder.dimensions();
+    let color_type = decoder.color_type();
+    let color_type_name = format!("{color_type:?}");
+    let has_alpha = color_type.has_alpha();
+    (format, Some(width), Some(height), Some(color_type_name), Some(has_alpha), None)
 }
 
 fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
@@ -279,6 +289,8 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
         raster_format,
         raster_width,
         raster_height,
+        raster_color_type,
+        raster_has_alpha,
         svg_viewbox,
         svg_has_external_refs,
         svg_xml_valid,
@@ -411,6 +423,12 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         html.push_str("</code></td><td>");
         if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
             html.push_str(&format!("Raster : {}×{} ", width, height));
+        }
+        if let Some(color_type) = &asset.raster_color_type {
+            html.push_str(&format!("Canaux : {} ", escape_html(color_type)));
+        }
+        if let Some(has_alpha) = asset.raster_has_alpha {
+            html.push_str(if has_alpha { "Alpha " } else { "Sans alpha " });
         }
         if let Some(viewbox) = &asset.svg_viewbox {
             html.push_str(&format!("viewBox : {} ", escape_html(viewbox)));
