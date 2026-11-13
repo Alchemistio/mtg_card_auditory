@@ -294,6 +294,12 @@ impl eframe::App for AuditorApp {
                                 if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
                                     ui.label(format!("{}×{}", width, height));
                                 }
+                                if let Some(color_type) = &asset.raster_color_type {
+                                    ui.label(color_type);
+                                }
+                                if let Some(has_alpha) = asset.raster_has_alpha {
+                                    ui.label(if has_alpha { "Alpha" } else { "Opaque" });
+                                }
                                 if let Some(viewbox) = &asset.svg_viewbox {
                                     ui.label(format!("viewBox {}", viewbox));
                                 }
