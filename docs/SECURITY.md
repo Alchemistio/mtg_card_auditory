@@ -7,6 +7,7 @@
 - Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
 - Les rapports sont exportés hors du dossier local analysé.
 - Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
+- Les planches de contact revérifient le SHA-256 des sources avant de les décoder.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
 - Les SVG sont analysés comme XML sans rendu.
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
@@ -18,7 +19,7 @@
 - Les liens symboliques présents dans les chemins de destination sont refusés.
 - Le dossier de destination est canonicalisé et doit rester dans le workspace.
 - Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
-- Les exports JSON/CSV/HTML sont refusés si le chemin final se trouve dans l'arborescence source.
+- Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence source.
 
 ## Archives
 - ZIP : lecture des métadonnées de l'archive sans extraire de contenu.
