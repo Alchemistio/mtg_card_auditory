@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use image::ImageReader;
 use quick_xml::{events::Event, Reader};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fs::File, io::{BufReader, Read}, path::Path, time::UNIX_EPOCH};
+use std::{fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -242,6 +243,52 @@ fn sha256_file(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
+    let metadata = std::fs::metadata(path)?;
+    let relative = path.strip_prefix(canonical_root)
+        .context("Chemin hors du dossier source")?;
+    let relative_path = relative.to_string_lossy().replace('\\', "/");
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let extension = path.extension().unwrap_or_default().to_string_lossy().to_ascii_lowercase();
+    let size_bytes = metadata.len();
+    let sha256 = sha256_file(path)?;
+    let modified_unix_seconds = metadata.modified().ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs());
+    let detected_family = classify_extension(&extension);
+    let (raster_format, raster_width, raster_height, raster_warning) =
+        raster_metadata(path, detected_family);
+    let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
+        svg_metadata(path, detected_family);
+    let (font_family, font_subfamily, font_warning) = font_metadata(path, detected_family);
+    let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
+        zip_metadata(path, &extension);
+    let analysis_warning = raster_warning.or(svg_warning).or(font_warning).or(archive_warning);
+    Ok(AssetRecord {
+        id: format!("sha256:{}:{}", sha256, relative_path),
+        relative_path,
+        file_name,
+        extension,
+        size_bytes,
+        modified_unix_seconds,
+        sha256,
+        detected_family: detected_family.to_string(),
+        raster_format,
+        raster_width,
+        raster_height,
+        svg_viewbox,
+        svg_has_external_refs,
+        svg_xml_valid,
+        font_family,
+        font_subfamily,
+        archive_entry_count,
+        archive_uncompressed_bytes,
+        archive_suspicious_paths,
+        analysis_warning,
+        review_status: "needs-review".to_string(),
+    })
+}
+
 pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
     let canonical_root = root.canonicalize()
         .with_context(|| format!("Dossier source inaccessible : {}", root.display()))?;
@@ -249,8 +296,7 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         anyhow::bail!("La source sélectionnée n'est pas un dossier.");
     }
 
-    let mut assets = Vec::new();
-    let mut total_bytes = 0_u64;
+    let mut paths = Vec::<PathBuf>::new();
     for item in WalkDir::new(&canonical_root)
         .follow_links(false)
         .max_depth(128)
@@ -258,54 +304,16 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         .filter_entry(|entry| entry.depth() == 0 || !is_hidden_or_metadata(entry))
     {
         let entry = item.context("Erreur pendant le parcours du dossier")?;
-        if !entry.file_type().is_file() { continue; }
-        let path = entry.path();
-        let metadata = entry.metadata()?;
-        let relative = path.strip_prefix(&canonical_root)
-            .context("Chemin hors du dossier source")?;
-        let relative_path = relative.to_string_lossy().replace('\\', "/");
-        let file_name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-        let extension = path.extension().unwrap_or_default().to_string_lossy().to_ascii_lowercase();
-        let size_bytes = metadata.len();
-        let sha256 = sha256_file(path)?;
-        let modified_unix_seconds = metadata.modified().ok()
-            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-            .map(|duration| duration.as_secs());
-        let detected_family = classify_extension(&extension);
-        let (raster_format, raster_width, raster_height, raster_warning) =
-            raster_metadata(path, detected_family);
-        let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
-            svg_metadata(path, detected_family);
-        let (font_family, font_subfamily, font_warning) = font_metadata(path, detected_family);
-        let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
-            zip_metadata(path, &extension);
-        let analysis_warning = raster_warning.or(svg_warning).or(font_warning).or(archive_warning);
-        total_bytes = total_bytes.saturating_add(size_bytes);
-        assets.push(AssetRecord {
-            id: format!("sha256:{}:{}", sha256, relative_path),
-            relative_path,
-            file_name,
-            extension,
-            size_bytes,
-            modified_unix_seconds,
-            sha256,
-            detected_family: detected_family.to_string(),
-            raster_format,
-            raster_width,
-            raster_height,
-            svg_viewbox,
-            svg_has_external_refs,
-            svg_xml_valid,
-            font_family,
-            font_subfamily,
-            archive_entry_count,
-            archive_uncompressed_bytes,
-            archive_suspicious_paths,
-            analysis_warning,
-            review_status: "needs-review".to_string(),
-        });
+        if entry.file_type().is_file() {
+            paths.push(entry.path().to_path_buf());
+        }
     }
+
+    let mut assets: Vec<AssetRecord> = paths.par_iter()
+        .map(|path| analyze_file(path, &canonical_root))
+        .collect::<Result<Vec<_>>>()?;
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
+    let total_bytes = assets.iter().map(|asset| asset.size_bytes).sum();
     let generated_unix_seconds = std::time::SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(InventoryDocument {
         schema_version: INVENTORY_SCHEMA_VERSION,
