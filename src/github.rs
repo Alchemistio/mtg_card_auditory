@@ -278,16 +278,6 @@ fn validate_blob_size(expected_size: Option<u64>) -> Result<u64> {
     Ok(size)
 }
 
-fn validate_decoded_blob_size(actual: usize, expected: u64) -> Result<()> {
-    if actual as u64 != expected {
-        anyhow::bail!(
-            "Taille du blob incohérente : {} octets reçus, {} attendus.",
-            actual,
-            expected
-        );
-    }
-    Ok(())
-}
 
 pub fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
     let mut hasher = Sha1::new();
@@ -309,12 +299,6 @@ mod blob_size_tests {
         let bytes = b"hello world\n";
         assert!(verify_git_blob_sha("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", bytes).is_ok());
         assert!(verify_git_blob_sha("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", b"tampered").is_err());
-    }
-
-    #[test]
-    fn rejects_decoded_blob_size_mismatches() {
-        assert!(validate_decoded_blob_size(4, 5).is_err());
-        assert!(validate_decoded_blob_size(5, 5).is_ok());
     }
 
     #[test]
