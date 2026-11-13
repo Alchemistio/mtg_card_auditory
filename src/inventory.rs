@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use image::ImageReader;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs::File, io::{BufReader, Read}, path::Path, time::UNIX_EPOCH};
@@ -16,6 +17,10 @@ pub struct AssetRecord {
     pub modified_unix_seconds: Option<u64>,
     pub sha256: String,
     pub detected_family: String,
+    pub raster_format: Option<String>,
+    pub raster_width: Option<u32>,
+    pub raster_height: Option<u32>,
+    pub analysis_warning: Option<String>,
     pub review_status: String,
 }
 
@@ -42,6 +47,21 @@ fn classify_extension(extension: &str) -> &'static str {
         "mse-set" | "mse-game" | "mse-style" => "mse",
         "json" | "xml" | "html" | "htm" | "txt" | "md" | "css" => "text",
         _ => "unknown",
+    }
+}
+
+fn raster_metadata(path: &Path, family: &str) -> (Option<String>, Option<u32>, Option<u32>, Option<String>) {
+    if family != "raster" {
+        return (None, None, None, None);
+    }
+    let reader = match ImageReader::open(path).and_then(|reader| reader.with_guessed_format()) {
+        Ok(reader) => reader,
+        Err(error) => return (None, None, None, Some(format!("Détection du format image impossible : {}", error))),
+    };
+    let format = reader.format().map(|value| format!("{value:?}"));
+    match reader.into_dimensions() {
+        Ok((width, height)) => (format, Some(width), Some(height), None),
+        Err(error) => (format, None, None, Some(format!("En-tête image illisible : {}", error))),
     }
 }
 
@@ -87,16 +107,23 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         let modified_unix_seconds = metadata.modified().ok()
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_secs());
+        let detected_family = classify_extension(&extension);
+        let (raster_format, raster_width, raster_height, analysis_warning) =
+            raster_metadata(path, detected_family);
         total_bytes = total_bytes.saturating_add(size_bytes);
         assets.push(AssetRecord {
             id: format!("sha256:{}:{}", sha256, relative_path),
             relative_path,
             file_name,
-            extension: extension.clone(),
+            extension,
             size_bytes,
             modified_unix_seconds,
             sha256,
-            detected_family: classify_extension(&extension).to_string(),
+            detected_family: detected_family.to_string(),
+            raster_format,
+            raster_width,
+            raster_height,
+            analysis_warning,
             review_status: "needs-review".to_string(),
         });
     }
@@ -172,6 +199,7 @@ mod tests {
         assert!(result.assets[0].relative_path < result.assets[1].relative_path);
         assert_eq!(result.assets[0].sha256, result.assets[1].sha256);
         assert_eq!(result.assets[0].sha256.len(), 64);
+        assert!(result.assets[0].analysis_warning.is_some());
         std::fs::remove_dir_all(root).unwrap();
     }
 
