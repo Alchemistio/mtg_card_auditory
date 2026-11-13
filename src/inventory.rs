@@ -112,13 +112,32 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
     })
 }
 
+fn ensure_export_outside_source(document: &InventoryDocument, destination: &Path) -> Result<()> {
+    let source_root = Path::new(&document.source_root).canonicalize()?;
+    let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
+    let canonical_parent = parent.canonicalize()
+        .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
+    if canonical_parent.starts_with(&source_root) {
+        anyhow::bail!("Export refusé : choisis un dossier de sortie situé hors de la source analysée.");
+    }
+    if destination.exists() {
+        let canonical_destination = destination.canonicalize()?;
+        if canonical_destination.starts_with(&source_root) {
+            anyhow::bail!("Export refusé : la destination résout vers un fichier de la source analysée.");
+        }
+    }
+    Ok(())
+}
+
 pub fn export_json(document: &InventoryDocument, destination: &Path) -> Result<()> {
+    ensure_export_outside_source(document, destination)?;
     let file = File::create(destination)
         .with_context(|| format!("Création impossible : {}", destination.display()))?;
     serde_json::to_writer_pretty(file, document).context("Écriture JSON impossible")
 }
 
 pub fn export_csv(document: &InventoryDocument, destination: &Path) -> Result<()> {
+    ensure_export_outside_source(document, destination)?;
     let mut writer = csv::Writer::from_path(destination)
         .with_context(|| format!("Création CSV impossible : {}", destination.display()))?;
     for asset in &document.assets {
@@ -153,6 +172,23 @@ mod tests {
         assert!(result.assets[0].relative_path < result.assets[1].relative_path);
         assert_eq!(result.assets[0].sha256, result.assets[1].sha256);
         assert_eq!(result.assets[0].sha256.len(), 64);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn refuses_export_inside_source_tree() {
+        let root: PathBuf = std::env::temp_dir().join(format!("mtg-auditor-export-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let document = InventoryDocument {
+            schema_version: INVENTORY_SCHEMA_VERSION,
+            source_root: root.canonicalize().unwrap().display().to_string(),
+            generated_unix_seconds: 0,
+            files_scanned: 0,
+            total_bytes: 0,
+            assets: Vec::new(),
+        };
+        assert!(ensure_export_outside_source(&document, &root.join("inventory.json")).is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 }
