@@ -8,7 +8,7 @@ Le prototype est organisé en modules Rust :
 - `inventory.rs` : parcours local parallèle avec progression, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, repérage de notices, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
 - `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
 
-Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. Des drapeaux atomiques partagés permettent de demander l'arrêt du scan local ou du téléchargement GitHub ; un fichier en cours d'analyse ou un blob en cours de téléchargement peut se terminer avant l'arrêt. L'annulation coopérative du scan local est implémentée ; elle est vérifiée entre les étapes de parcours et d'analyse. L'annulation des téléchargements GitHub et la progression en octets restent à faire.
+Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. Des drapeaux atomiques partagés permettent de demander l'arrêt du scan local ou du téléchargement GitHub ; un fichier en cours d'analyse ou un blob en cours de téléchargement peut se terminer avant l'arrêt. L'annulation coopérative du scan local est implémentée ; elle est vérifiée entre les étapes de parcours et d'analyse. L'annulation des téléchargements GitHub est vérifiée entre deux blobs ; le blob en cours termine avant l'arrêt.
 
 ## Flux GitHub actuel
 1. Saisir une URL HTTPS canonique `github.com/owner/repository` ou propriétaire/dépôt ; le parseur vérifie l'hôte exact et refuse les identifiants, ports, query strings, fragments et sous-chemins.
@@ -24,8 +24,8 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 11. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
 
 ## Flux local actuel
-1. Choisir un dossier source.
-2. Parcourir récursivement sans suivre les liens symboliques, avec profondeur maximale.
+1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
+2. Parcourir chaque dossier récursivement sans suivre les liens symboliques, avec profondeur maximale ; les chemins multi-sources sont préfixés par `source-0001`, `source-0002`, etc.
 3. Calculer SHA-256 en blocs et relever taille/date/extension ; progression en octets traités, notifiée par lots de 100 fichiers.
 4. Classifier indicativement par extension et repérer les fichiers de type LICENSE/NOTICE/README sans en déduire de statut légal.
 5. Extraire dimensions, format, type de canaux et alpha raster sans décodage complet ; analyser le XML SVG sans rendu ; relever famille/sous-famille des polices prises en charge ; inspecter la table centrale ZIP sans extraction.
@@ -33,7 +33,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 7. Comparer avec un inventaire JSON antérieur par chemin et SHA-256.
 8. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source.
 9. Générer des planches raster PNG de 16 éléments/page et un index texte ; le SHA est revérifié avant décodage.
-10. Les rapports de comparaison JSON sont écrits hors des deux sources comparées.
+10. Les rapports de comparaison JSON sont écrits hors des deux sources comparées. Pour un inventaire multi-sources, les exports et planches vérifient chaque racine source ; les planches résolvent chaque préfixe vers le dossier correspondant.
 
 ## Séparation des états
 Source, inventaire, analyse calculée, revue humaine et exports sont séparés. Une revue visuelle ou juridique ne peut jamais être validée par heuristique. Les classifications automatiques restent des suggestions.
@@ -57,4 +57,4 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `c1c71fd` a passé Clippy, tests, build Release et upload d'artefact. Les retries HTTP, plafonds de taille, filtres distants, annulation et progression en octets sont soumis à une nouvelle CI. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `c1c71fd` a passé Clippy, tests, build Release et upload d'artefact. Les commits récents ont passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact), y compris les changements de multi-sources dès validation du run associé. La signature de code pourra être ajoutée avec un certificat externe.
