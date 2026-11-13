@@ -4,7 +4,7 @@ use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -31,6 +31,7 @@ pub struct AssetRecord {
     pub archive_uncompressed_bytes: Option<u64>,
     pub archive_suspicious_paths: Option<usize>,
     pub analysis_warning: Option<String>,
+    pub duplicate_of: Option<String>,
     pub review_status: String,
 }
 
@@ -41,6 +42,7 @@ pub struct InventoryDocument {
     pub generated_unix_seconds: u64,
     pub files_scanned: usize,
     pub total_bytes: u64,
+    pub duplicate_files: usize,
     pub assets: Vec<AssetRecord>,
 }
 
@@ -286,6 +288,7 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
         archive_uncompressed_bytes,
         archive_suspicious_paths,
         analysis_warning,
+        duplicate_of: None,
         review_status: "needs-review".to_string(),
     })
 }
@@ -314,7 +317,17 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         .map(|path| analyze_file(path, &canonical_root))
         .collect::<Result<Vec<_>>>()?;
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
-    let total_bytes = assets.iter().map(|asset| asset.size_bytes).sum();
+    let mut first_path_by_hash = HashMap::<String, String>::new();
+    let mut duplicate_files = 0usize;
+    for asset in &mut assets {
+        if let Some(first_path) = first_path_by_hash.get(&asset.sha256) {
+            asset.duplicate_of = Some(first_path.clone());
+            duplicate_files += 1;
+        } else {
+            first_path_by_hash.insert(asset.sha256.clone(), asset.relative_path.clone());
+        }
+    }
+    let total_bytes = assets.iter().fold(0_u64, |total, asset| total.saturating_add(asset.size_bytes));
     let generated_unix_seconds = std::time::SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(InventoryDocument {
         schema_version: INVENTORY_SCHEMA_VERSION,
@@ -322,6 +335,7 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         generated_unix_seconds,
         files_scanned: assets.len(),
         total_bytes,
+        duplicate_files,
         assets,
     })
 }
@@ -402,6 +416,8 @@ mod tests {
         assert_eq!(result.assets[0].sha256, result.assets[1].sha256);
         assert_eq!(result.assets[0].sha256.len(), 64);
         assert!(result.assets[0].analysis_warning.is_some());
+        assert_eq!(result.duplicate_files, 1);
+        assert_eq!(result.assets[1].duplicate_of.as_deref(), Some("b/a.png"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -435,6 +451,7 @@ mod tests {
             generated_unix_seconds: 0,
             files_scanned: 0,
             total_bytes: 0,
+            duplicate_files: 0,
             assets: Vec::new(),
         };
         assert!(ensure_export_outside_source(&document, &root.join("inventory.json")).is_err());
