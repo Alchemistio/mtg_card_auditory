@@ -362,6 +362,7 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
     let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
         zip_metadata(path, &extension);
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
+    let notice_kind = classify_notice(&file_name);
     Ok(AssetRecord {
         id: format!("sha256:{}:{}", sha256, relative_path),
         relative_path,
@@ -385,7 +386,7 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
         archive_uncompressed_bytes,
         archive_suspicious_paths,
         analysis_warning,
-        notice_kind: classify_notice(&file_name),
+        notice_kind,
         duplicate_of: None,
         review_status: "needs-review".to_string(),
     })
