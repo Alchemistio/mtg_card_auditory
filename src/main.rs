@@ -25,6 +25,8 @@ struct AuditorApp {
     github_commit_sha: String,
     github_tree_sha: String,
     subdirectory: String,
+    remote_filter: String,
+    remote_extension_filter: String,
     token: String,
     workspace: String,
     local_source: String,
@@ -576,9 +578,27 @@ impl eframe::App for AuditorApp {
             });
             ui.separator();
             ui.heading("Fichiers distants");
+            ui.horizontal(|ui| {
+                ui.label("Filtrer le chemin");
+                ui.text_edit_singleline(&mut self.remote_filter);
+                ui.label("Extension");
+                ui.text_edit_singleline(&mut self.remote_extension_filter);
+            });
+            let remote_filter = self.remote_filter.trim().to_lowercase();
+            let extension_filter = self.remote_extension_filter.trim().trim_start_matches('.').to_lowercase();
             egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                 for entry in &self.entries {
                     if entry.kind != "blob" { continue; }
+                    if !remote_filter.is_empty() && !entry.path.to_lowercase().contains(&remote_filter) {
+                        continue;
+                    }
+                    if !extension_filter.is_empty() {
+                        let extension = Path::new(&entry.path).extension()
+                            .and_then(|value| value.to_str())
+                            .unwrap_or_default()
+                            .to_lowercase();
+                        if extension != extension_filter { continue; }
+                    }
                     let mut checked = self.selected.contains(&entry.path);
                     ui.horizontal(|ui| {
                         if ui.checkbox(&mut checked, "").changed() {
