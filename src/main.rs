@@ -280,9 +280,6 @@ impl AuditorApp {
                     }
                     let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                 }
-                if worker_cancelled.load(Ordering::Relaxed) {
-                    was_cancelled = true;
-                }
                 let manifest_path = canonical_root.join(&manifest_name);
                 let manifest_status = if manifest_conflict {
                     "Manifeste ignoré : un chemin distant sélectionné porte le même nom.".to_string()
