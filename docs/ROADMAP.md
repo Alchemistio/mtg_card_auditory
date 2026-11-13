@@ -6,7 +6,7 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [ ] Compilation Windows CI vérifiée sur le dernier commit (un commit antérieur avec raster/SVG/polices a passé tout le pipeline).
+- [ ] Compilation Windows CI vérifiée sur le dernier commit (le commit ZIP+scan parallèle a passé Clippy, tests et build Release).
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -14,6 +14,7 @@
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
 - [x] Si l'arbre récursif est tronqué, parcourir les sous-arbres avec détection de cycle et limite de profondeur.
 - [x] Sous-dossier filtré côté interface.
+- [x] Exploration et téléchargement GitHub dans des workers d'arrière-plan.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [ ] Gestion structurée des rate limits, temporisation et reprise.
 - [ ] Téléchargement streaming, taille max, cache et reprise.
@@ -22,16 +23,19 @@
 ## Phase 2 — Sources locales et inventaire
 - [ ] Sélection multi-dossiers.
 - [x] Parcours local parallèle via Rayon, sans suivre les liens symboliques.
+- [x] Scan local exécuté dans un worker d'arrière-plan.
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux.
+- [x] Détection des doublons binaires exacts par SHA-256, sans suppression.
 - [x] Classification indicative par extension.
 - [x] Métadonnées raster initiales : format détecté et dimensions depuis l'en-tête.
 - [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
 - [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
 - [x] Inspection ZIP sans extraction : nombre d'entrées, taille déclarée, chemins suspects et ratios anormaux.
-- [x] Export JSON versionné et CSV UTF-8.
+- [x] Export JSON versionné, CSV UTF-8 et rapport HTML autonome hors ligne.
 - [x] Refus des exports dans l'arborescence source.
+- [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
 - [ ] Comparaison entre analyses.
-- [ ] Progression réelle, annulation et reprise pour les scans longs.
+- [ ] Progression détaillée, annulation et reprise pour les scans longs.
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : détection du format et dimensions initiales ; alpha, orientation, limites, décodage contrôlé et miniatures à faire.
@@ -45,18 +49,18 @@
 - [ ] Planches de contact paginées.
 - [ ] Galerie HTML hors ligne.
 - [ ] Filtres, comparaison et étiquettes.
-- [ ] Doublons binaires et candidats visuels.
+- [ ] Candidats visuels similaires (les doublons binaires exacts sont déjà identifiés).
 - [ ] Revue humaine persistante.
 
 ## Phase 5 — Rapports et intégration MTG
-- [ ] Rapport HTML.
-- [ ] Statistiques et alertes.
+- [x] Rapport HTML autonome initial.
+- [ ] Statistiques et alertes enrichies.
 - [ ] Export vers staging, jamais directement vers LIBRARY.
 - [ ] Réconciliation du manifeste MTG Card Remodeler.
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [ ] CI test, clippy, build.
+- [ ] CI test, clippy, build sur le dernier commit.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
