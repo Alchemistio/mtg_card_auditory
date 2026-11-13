@@ -4,7 +4,7 @@ use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, sync::atomic::{AtomicUsize, Ordering}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -393,6 +393,13 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
 }
 
 pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
+    scan_directory_with_progress(root, |_, _| {})
+}
+
+pub fn scan_directory_with_progress<F>(root: &Path, progress: F) -> Result<InventoryDocument>
+where
+    F: Fn(usize, usize) + Sync,
+{
     let canonical_root = root.canonicalize()
         .with_context(|| format!("Dossier source inaccessible : {}", root.display()))?;
     if !canonical_root.is_dir() {
@@ -412,8 +419,17 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
         }
     }
 
+    let total_paths = paths.len();
+    let completed = AtomicUsize::new(0);
     let mut assets: Vec<AssetRecord> = paths.par_iter()
-        .map(|path| analyze_file(path, &canonical_root))
+        .map(|path| {
+            let asset = analyze_file(path, &canonical_root)?;
+            let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+            if done % 100 == 0 || done == total_paths {
+                progress(done, total_paths);
+            }
+            Ok(asset)
+        })
         .collect::<Result<Vec<_>>>()?;
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
     let mut first_path_by_hash = HashMap::<String, String>::new();
