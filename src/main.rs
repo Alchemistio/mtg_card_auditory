@@ -250,6 +250,16 @@ impl AuditorApp {
                 if let Some(parent) = journal_path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
+                let canonical_journal_parent = journal_path.parent()
+                    .context("Dossier parent du journal absent")?.canonicalize()?;
+                if !canonical_journal_parent.starts_with(&canonical_root) {
+                    anyhow::bail!("Le journal de reprise sort du workspace.");
+                }
+                if let Ok(metadata) = std::fs::symlink_metadata(&journal_path) {
+                    if metadata.file_type().is_symlink() || !metadata.is_file() {
+                        anyhow::bail!("Le journal de reprise doit être un fichier régulier, sans lien symbolique.");
+                    }
+                }
                 let mut journal = std::fs::OpenOptions::new().create(true).append(true).open(&journal_path)
                     .context("Impossible d'ouvrir le journal de reprise")?;
                 let mut completed_records = HashSet::new();
