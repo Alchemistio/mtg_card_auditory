@@ -23,7 +23,8 @@
 - [x] Nouvelles tentatives bornées (3 maximum) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` ; tests de politique de retry.
 - [ ] Reprise après fermeture, cache GitHub et affichage du quota restant.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
-- [ ] Téléchargement streaming, taille max, cache et reprise.
+- [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio) et contrôle de la taille réellement décodée contre la taille de l'arbre Git.
+- [ ] Téléchargement streaming, cache et reprise.
 - [ ] Filtres par extension, taille, chemin et famille.
 
 ## Phase 2 — Sources locales et inventaire
