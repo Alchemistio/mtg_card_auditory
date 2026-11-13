@@ -16,9 +16,12 @@
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
 
 ## Chemins et liens
-- Les chemins GitHub sont composés uniquement de composants relatifs normaux.
+- Les URL de dépôt sont analysées avec un parseur URL dédié : HTTPS uniquement, hôte exactement `github.com`, absence d'identifiants/port/query/fragment, et chemin limité à `owner/repository`.
+- Les noms owner/repository sont limités aux caractères autorisés par le parseur ; les sous-chemins arbitraires sont rejetés.
 - Les chemins contenant racine, préfixe, parent ou composant spécial sont rejetés.
 - Les destinations existantes ne sont pas écrasées pour les téléchargements et planches.
+- Les fichiers téléchargés et les manifestes sont ouverts avec création exclusive (`create_new`) pour refuser un fichier déjà présent au moment de l'ouverture.
+- Les écritures de fichiers téléchargés utilisent `write_all` puis `sync_all`; un fichier partiel est supprimé si l'écriture échoue.
 - Les liens symboliques présents dans les chemins de destination sont refusés.
 - Le dossier de destination est canonicalisé et doit rester dans le workspace.
 - Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
@@ -41,6 +44,6 @@
 ## Limites restantes
 - Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
 - Les erreurs de quota sont détectées mais aucun backoff automatique n'est encore appliqué.
-- La défense contre les changements concurrents du système de fichiers (TOCTOU) devra être renforcée lors de la mise en place du moteur asynchrone.
+- La défense TOCTOU reste incomplète : la création exclusive protège le fichier final contre l'écrasement, mais ne neutralise pas toutes les courses sur les répertoires parents ni le remplacement de liens entre vérification et ouverture. Une approche basée sur des handles de répertoire et des opérations relatives est à étudier.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
 - Les analyseurs de formats actifs devront rester sans extraction/exécution automatique.
