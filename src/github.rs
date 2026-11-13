@@ -3,7 +3,7 @@ use base64::Engine;
 use reqwest::blocking::{Client, Response};
 use reqwest::header::ACCEPT;
 use serde::Deserialize;
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, io::Read, time::Duration};
 
 use crate::models::{RemoteEntry, RepositoryTree};
 
@@ -260,20 +260,73 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
     })
 }
 
-pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> Result<Vec<u8>> {
+const MAX_BLOB_BYTES: u64 = 90 * 1024 * 1024;
+const MAX_BLOB_RESPONSE_BYTES: u64 = 128 * 1024 * 1024;
+
+fn validate_blob_size(expected_size: Option<u64>) -> Result<u64> {
+    let size = expected_size.context("Taille du blob absente dans l'arbre GitHub ; téléchargement refusé.")?;
+    if size > MAX_BLOB_BYTES {
+        anyhow::bail!(
+            "Blob trop volumineux : {} octets, limite actuelle {} octets.",
+            size,
+            MAX_BLOB_BYTES
+        );
+    }
+    Ok(size)
+}
+
+pub fn download_blob(
+    owner: &str,
+    repository: &str,
+    sha: &str,
+    token: &str,
+    expected_size: Option<u64>,
+) -> Result<Vec<u8>> {
+    let expected_size = validate_blob_size(expected_size)?;
     let url = format!(
         "{}/git/blobs/{}",
         repository_base(owner, repository),
         urlencoding::encode(sha.trim())
     );
-    let blob: BlobResponse = api_get(&url, token)?.json().context("Réponse blob GitHub invalide")?;
+    let response = api_get(&url, token)?;
+    if response.content_length().is_some_and(|length| length > MAX_BLOB_RESPONSE_BYTES) {
+        anyhow::bail!("Réponse blob GitHub supérieure à la limite de sécurité.");
+    }
+    let mut limited = response.take(MAX_BLOB_RESPONSE_BYTES + 1);
+    let mut body = Vec::new();
+    limited.read_to_end(&mut body).context("Lecture de la réponse blob impossible")?;
+    if body.len() as u64 > MAX_BLOB_RESPONSE_BYTES {
+        anyhow::bail!("Réponse blob GitHub tronquée : taille supérieure à la limite de sécurité.");
+    }
+    let blob: BlobResponse = serde_json::from_slice(&body).context("Réponse blob GitHub invalide")?;
     if blob.encoding != "base64" {
         anyhow::bail!("Encodage de blob non pris en charge : {}", blob.encoding);
     }
     let compact = blob.content.replace('\n', "");
-    base64::engine::general_purpose::STANDARD
+    let bytes = base64::engine::general_purpose::STANDARD
         .decode(compact)
-        .context("Décodage base64 impossible")
+        .context("Décodage base64 impossible")?;
+    if bytes.len() as u64 != expected_size {
+        anyhow::bail!(
+            "Taille du blob incohérente : {} octets reçus, {} attendus.",
+            bytes.len(),
+            expected_size
+        );
+    }
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod blob_size_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unknown_and_oversized_blob_lengths() {
+        assert!(validate_blob_size(None).is_err());
+        assert!(validate_blob_size(Some(MAX_BLOB_BYTES + 1)).is_err());
+        assert_eq!(validate_blob_size(Some(0)).unwrap(), 0);
+        assert_eq!(validate_blob_size(Some(MAX_BLOB_BYTES)).unwrap(), MAX_BLOB_BYTES);
+    }
 }
 
 #[cfg(test)]
