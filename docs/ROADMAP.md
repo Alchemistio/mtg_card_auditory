@@ -20,7 +20,7 @@
 - [x] Timeout HTTP et diagnostic structuré des rate limits (429 / 403 avec quota épuisé).
 - [x] Manifeste de provenance des téléchargements : dépôt, référence demandée, commit SHA, tree SHA, horodatage, chemins et blob SHA.
 - [x] Écriture exclusive des blobs et manifestes (aucun écrasement), nettoyage d'un fichier partiel en cas d'erreur ; test de non-écrasement.
-- [x] Nouvelles tentatives bornées (3 retries maximum, soit 4 requêtes totales) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` ; tests de politique de retry.
+- [x] Nouvelles tentatives bornées (3 retries maximum, soit 4 requêtes totales) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` numérique ou date HTTP ; tests de politique de retry.
 - [x] Cache GitHub local sous le workspace, indexé par owner/repository/commit/blob SHA et vérifié avec le SHA-1 Git avant réutilisation.
 - [x] Journal JSONL persistant des téléchargements par commit ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
 - [ ] Affichage du quota restant et de sa fenêtre de reset.
