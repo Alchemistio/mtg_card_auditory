@@ -361,6 +361,17 @@ mod blob_size_tests {
     }
 
     #[test]
+    fn verifies_git_blob_file_incrementally() {
+        let path = std::env::temp_dir().join(format!("mtg-auditor-blob-test-{}.tmp", std::process::id()));
+        let bytes = b"hello world\n";
+        std::fs::write(&path, bytes).unwrap();
+        assert!(verify_git_blob_file("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", &path, bytes.len() as u64).is_ok());
+        assert!(verify_git_blob_file("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", &path, 1).is_err());
+        assert!(verify_git_blob_file("0000000000000000000000000000000000000000", &path, bytes.len() as u64).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn rejects_unknown_and_oversized_blob_lengths() {
         assert!(validate_blob_size(None).is_err());
         assert!(validate_blob_size(Some(MAX_BLOB_BYTES + 1)).is_err());
