@@ -25,10 +25,10 @@
 - [x] Journal JSONL persistant des téléchargements par commit ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
 - [ ] Affichage du quota restant et de sa fenêtre de reset.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
-- [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
+- [x] Taille maximale par blob (90 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
 - [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
 - [x] Téléchargement streaming des blobs GitHub vers le cache temporaire, contrôle taille et SHA-1 Git en flux, puis copie vers la destination sans charger le blob entier en mémoire.
-- [ ] Reprise d'un blob interrompu au niveau des octets (Range/ETag ou mécanisme équivalent).
+- [ ] Reprise d'un blob interrompu au niveau des octets : non engagée tant que l'API source ne documente pas `Range`/ETag de façon exploitable ; aucun fragment partiel n'est réutilisé.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
