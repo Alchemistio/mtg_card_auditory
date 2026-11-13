@@ -421,11 +421,20 @@ fn cached_github_blob(
     let canonical_cache = cache_root.canonicalize()?;
     if !canonical_cache.starts_with(workspace) { anyhow::bail!("Le cache GitHub sort du workspace."); }
     let cache_file = canonical_cache.join(format!("{}.blob", blob_sha));
-    if cache_file.exists() {
+    if let Ok(metadata) = std::fs::symlink_metadata(&cache_file) {
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            anyhow::bail!("Entrée de cache non régulière ou lien symbolique refusé.");
+        }
         if github::verify_git_blob_file(blob_sha, &cache_file, size).is_ok() { return Ok(cache_file); }
         std::fs::remove_file(&cache_file).context("Impossible d'écarter une entrée de cache invalide")?;
     }
     let temporary = canonical_cache.join(format!(".{}.{}.tmp", blob_sha, std::process::id()));
+    if let Ok(metadata) = std::fs::symlink_metadata(&temporary) {
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            anyhow::bail!("Fichier temporaire de cache non régulier ou lien symbolique refusé.");
+        }
+        std::fs::remove_file(&temporary).context("Impossible de nettoyer un fichier temporaire abandonné")?;
+    }
     github::download_blob_to_file(owner, repository, blob_sha, token, expected_size, &temporary)
         .context("Téléchargement streaming du blob impossible")?;
     match std::fs::rename(&temporary, &cache_file) {
