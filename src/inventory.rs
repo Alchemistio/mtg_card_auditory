@@ -624,11 +624,21 @@ pub fn export_comparison_json(comparison: &InventoryComparison, destination: &Pa
     let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
     let canonical_parent = parent.canonicalize()
         .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
-    for source in [&comparison.baseline_source_root, &comparison.current_source_root] {
-        let canonical_source = Path::new(source).canonicalize()?;
-        if canonical_parent.starts_with(&canonical_source) {
-            anyhow::bail!("Export refusé : le rapport de comparaison doit être écrit hors des deux sources.");
-        }
+    let baseline_roots = if comparison.baseline_source_roots.is_empty() {
+        vec![comparison.baseline_source_root.clone()]
+    } else {
+        comparison.baseline_source_roots.clone()
+    };
+    let current_roots = if comparison.current_source_roots.is_empty() {
+        vec![comparison.current_source_root.clone()]
+    } else {
+        comparison.current_source_roots.clone()
+    };
+    let canonical_sources = baseline_roots.iter().chain(current_roots.iter())
+        .map(|source| Path::new(source).canonicalize())
+        .collect::<std::io::Result<Vec<_>>>()?;
+    if canonical_sources.iter().any(|source| canonical_parent.starts_with(source)) {
+        anyhow::bail!("Export refusé : le rapport de comparaison doit être écrit hors de toutes les sources comparées.");
     }
     if destination.exists() {
         let canonical_destination = destination.canonicalize()?;
