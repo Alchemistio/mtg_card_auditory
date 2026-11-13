@@ -256,9 +256,15 @@ impl AuditorApp {
                 if journal_path.metadata()?.len() > 0 {
                     let journal_text = std::fs::read_to_string(&journal_path)
                         .context("Journal de reprise illisible ; aucune reprise automatique")?;
-                    for line in journal_text.lines().filter(|line| !line.trim().is_empty()) {
-                        let record: models::DownloadProgressRecord = serde_json::from_str(line)
-                            .context("Enregistrement invalide dans le journal de reprise")?;
+                    let journal_lines: Vec<&str> = journal_text.split_terminator('\\n').collect();
+                    for (line_index, line) in journal_lines.iter().enumerate() {
+                        if line.trim().is_empty() { continue; }
+                        let is_unterminated_tail = line_index + 1 == journal_lines.len() && !journal_text.ends_with('\\n');
+                        let record: models::DownloadProgressRecord = match serde_json::from_str(line) {
+                            Ok(record) => record,
+                            Err(_) if is_unterminated_tail => break,
+                            Err(error) => return Err(error).context("Enregistrement invalide dans le journal de reprise"),
+                        };
                         completed_records.insert((record.path, record.blob_sha, record.size_bytes));
                     }
                 }
