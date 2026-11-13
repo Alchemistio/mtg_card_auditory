@@ -125,6 +125,10 @@ impl AuditorApp {
                         anyhow::bail!("Le fichier existe déjà dans le workspace : {}", destination.display());
                     }
                     if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent)?; }
+                    let canonical_parent = destination.parent().unwrap().canonicalize()?;
+                    if !canonical_parent.starts_with(root.canonicalize()?) {
+                        anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
+                    }
                     std::fs::write(destination, bytes)?;
                     Ok(())
                 });
@@ -143,11 +147,24 @@ impl AuditorApp {
 }
 
 fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
-    let mut destination = root.to_path_buf();
+    let canonical_root = root.canonicalize()?;
+    let mut destination = canonical_root.clone();
     for component in Path::new(relative).components() {
         match component {
-            std::path::Component::Normal(part) => destination.push(part),
+            std::path::Component::Normal(part) => {
+                destination.push(part);
+                if let Ok(metadata) = std::fs::symlink_metadata(&destination) {
+                    if metadata.file_type().is_symlink() {
+                        anyhow::bail!("Lien symbolique refusé dans le workspace : {}", destination.display());
+                    }
+                }
+            }
             _ => anyhow::bail!("Chemin distant non sûr : {}", relative),
+        }
+    }
+    if let Some(parent) = destination.parent() {
+        if parent.exists() && !parent.canonicalize()?.starts_with(&canonical_root) {
+            anyhow::bail!("Le chemin de destination sort du workspace : {}", relative);
         }
     }
     Ok(destination)
@@ -244,7 +261,7 @@ impl eframe::App for AuditorApp {
             ui.separator();
             ui.label(&self.status);
             if self.busy { ui.spinner(); }
-            ui.small("Inventaire local SHA-256, exports JSON/CSV et exploration GitHub par URL. Les sources ne sont jamais modifiées.");
+            ui.small("Inventaire local SHA-256, métadonnées raster initiales, exports JSON/CSV et exploration GitHub par URL. Les sources ne sont jamais modifiées.");
         });
     }
 }
