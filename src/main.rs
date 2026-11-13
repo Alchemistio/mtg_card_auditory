@@ -6,7 +6,7 @@ use anyhow::Context;
 use eframe::egui;
 
 enum ScanMessage {
-    Progress(usize, usize),
+    Progress(u64, u64),
     Finished(std::result::Result<inventory::InventoryDocument, String>),
 }
 
@@ -360,7 +360,7 @@ impl eframe::App for AuditorApp {
         for message in scan_messages {
             match message {
                 ScanMessage::Progress(done, total) => {
-                    self.status = format!("Analyse en cours : {} / {} fichiers…", done, total);
+                    self.status = format!("Analyse en cours : {} / {} octets…", done, total);
                 }
                 ScanMessage::Finished(result) => {
                     self.scan_receiver = None;
