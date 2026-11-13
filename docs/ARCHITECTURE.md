@@ -57,4 +57,4 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `c1c71fd` a passé Clippy, tests, build Release et upload d'artefact. Les nouvelles tentatives HTTP sont soumises à une nouvelle CI. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `c1c71fd` a passé Clippy, tests, build Release et upload d'artefact. Les retries HTTP, plafonds de taille, filtres distants, annulation et progression en octets sont soumis à une nouvelle CI. La signature de code pourra être ajoutée avec un certificat externe.
