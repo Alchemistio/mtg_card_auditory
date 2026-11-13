@@ -18,14 +18,14 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 5. Filtrer par sous-dossier, puis filtrer localement la liste distante par chemin, extension, plage de taille et famille technique (classification indicative par extension).
 6. Sélectionner les blobs distants ; rechercher d'abord une copie dans `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` sous le workspace, puis télécharger si nécessaire.
 7. Vérifier les chemins de destination, refuser les liens symboliques et ouvrir les fichiers avec création exclusive afin de ne pas écraser une destination existante.
-8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
+8. Écrire un manifeste JSON sous `.mtg-auditor-cache/download-manifests/owner/repository/`, liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
 9. Les blobs sont récupérés via l'API Git Blobs avec `Accept: application/vnd.github.raw+json` (média type brut documenté par GitHub). Le flux est écrit dans un fichier temporaire avec un tampon de 64 Kio ; la taille déclarée (plafond 90 Mio) et le SHA-1 Git sont vérifiés progressivement avant publication du cache.
 10. Le cache local est isolé sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace. Chaque entrée est revalidée en flux contre le SHA-1 Git attendu ; une entrée invalide est supprimée puis retéléchargée. Les liens symboliques et fichiers non réguliers sont refusés. La copie vers le workspace est exclusive et son SHA-1 est revérifié avant journalisation.
-11. Un journal JSONL par commit est conservé sous `.mtg-auditor-cache/download-session-{commit}.jsonl`. Chaque succès est synchronisé sur disque ; à la relance, seuls les fichiers dont le chemin, le blob SHA, la taille et le contenu correspondent sont sautés ; le contenu est revérifié en flux avec un tampon de 64 Kio, sans charger le fichier entier en mémoire. Une dernière ligne incomplète après arrêt brutal est ignorée.
+11. Un journal JSONL par dépôt et commit complet est conservé sous `.mtg-auditor-cache/download-sessions/owner/repository/download-session-{commit}.jsonl`. Chaque succès est synchronisé sur disque ; à la relance, seuls les fichiers dont le chemin, le blob SHA, la taille et le contenu correspondent sont sautés ; le contenu est revérifié en flux avec un tampon de 64 Kio, sans charger le fichier entier en mémoire. Une dernière ligne incomplète après arrêt brutal est ignorée.
 12. Le journal ne contient aucun jeton. Son parent est canonicalisé dans le workspace et les liens symboliques ou fichiers non réguliers sont refusés. Une destination absente ou dont l'empreinte ne correspond pas n'est jamais écrasée ; elle produit une erreur explicite.
 13. La reprise d'un blob interrompu au niveau des octets reste à faire : la documentation de l'API Git Blobs ne garantit pas `Range`/ETag ; aucun fragment partiel n'est réutilisé. La concurrence bornée reste à évaluer.
 14. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique ou date HTTP est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
-15. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
+15. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents. Les écritures doivent migrer vers des opérations relatives à des handles de répertoire (approche capability-based) avant de revendiquer une défense complète.
 
 ## Flux local actuel
 1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
@@ -55,7 +55,7 @@ La reprise après fermeture des fichiers terminés est implémentée ; la persis
 
 ## Limites techniques
 - Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture des fichiers terminés est disponible via le journal JSONL ; les blobs partiellement téléchargés ne sont pas repris.
-- Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring` ; une copie demeure en mémoire pendant l'utilisation, et l'effacement garanti des copies de workers reste à renforcer.
+- Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring`. Le champ applicatif et les copies explicites envoyées aux workers utilisent `zeroize::Zeroizing<String>` ; les copies internes éventuelles des bibliothèques HTTP/TLS et les dumps mémoire avant libération restent hors de garantie.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
