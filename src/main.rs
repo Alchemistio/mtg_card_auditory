@@ -430,7 +430,7 @@ fn cached_github_blob(
         .context("Téléchargement streaming du blob impossible")?;
     match std::fs::rename(&temporary, &cache_file) {
         Ok(()) => Ok(cache_file),
-        Err(error) if cache_file.exists() => {
+        Err(_error) if cache_file.exists() => {
             let _ = std::fs::remove_file(&temporary);
             github::verify_git_blob_file(blob_sha, &cache_file, size)?;
             Ok(cache_file)
