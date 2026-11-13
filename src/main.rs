@@ -253,6 +253,7 @@ impl AuditorApp {
                             requested_reference: if requested_reference.trim().is_empty() { "default-branch".to_string() } else { requested_reference },
                             commit_sha: commit_sha.clone(),
                             tree_sha: tree_sha.clone(),
+                            downloaded_unix_seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs(),
                             downloaded_files: manifest_files,
                         };
                         let file = std::fs::File::create(&manifest_path)?;
