@@ -6,7 +6,7 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [x] CI Windows complète sur commit `f83a9e3` : Clippy, tests, build Release et upload d'artefact.
+- [x] CI Windows complète sur commit `a6bf479` : Clippy, tests, build Release et upload d'artefact.
 - [ ] CI des derniers durcissements URL/écritures exclusives en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
 
 ## Phase 1 — Connectivité GitHub robuste
