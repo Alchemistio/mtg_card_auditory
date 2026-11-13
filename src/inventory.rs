@@ -397,6 +397,7 @@ pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
     scan_directory_with_progress(root, |_, _| {})
 }
 
+#[cfg(test)]
 pub fn scan_directory_with_progress<F>(root: &Path, progress: F) -> Result<InventoryDocument>
 where
     F: Fn(usize, usize) + Sync,
