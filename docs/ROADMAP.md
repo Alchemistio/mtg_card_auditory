@@ -20,7 +20,7 @@
 - [x] Timeout HTTP et diagnostic structuré des rate limits (429 / 403 avec quota épuisé).
 - [x] Manifeste de provenance des téléchargements : dépôt, référence demandée, commit SHA, tree SHA, horodatage, chemins et blob SHA.
 - [x] Écriture exclusive des blobs et manifestes (aucun écrasement), nettoyage d'un fichier partiel en cas d'erreur ; test de non-écrasement.
-- [x] Nouvelles tentatives bornées (3 maximum) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` ; tests de politique de retry.
+- [x] Nouvelles tentatives bornées (3 retries maximum, soit 4 requêtes totales) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` ; tests de politique de retry.
 - [ ] Reprise après fermeture, cache GitHub et affichage du quota restant.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio) et contrôle de la taille réellement décodée contre la taille de l'arbre Git.
