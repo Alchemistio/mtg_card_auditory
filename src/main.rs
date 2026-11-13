@@ -29,6 +29,7 @@ struct AuditorApp {
     remote_extension_filter: String,
     remote_min_size: String,
     remote_max_size: String,
+    remote_family_filter: String,
     token: String,
     workspace: String,
     local_source: String,
@@ -589,9 +590,12 @@ impl eframe::App for AuditorApp {
                 ui.add(egui::TextEdit::singleline(&mut self.remote_min_size).desired_width(70.0));
                 ui.label("max.");
                 ui.add(egui::TextEdit::singleline(&mut self.remote_max_size).desired_width(70.0));
+                ui.label("Famille");
+                ui.add(egui::TextEdit::singleline(&mut self.remote_family_filter).desired_width(90.0));
             });
             let remote_filter = self.remote_filter.trim().to_lowercase();
             let extension_filter = self.remote_extension_filter.trim().trim_start_matches('.').to_lowercase();
+            let family_filter = self.remote_family_filter.trim().to_lowercase();
             let minimum_size = self.remote_min_size.trim().parse::<u64>().ok();
             let maximum_size = self.remote_max_size.trim().parse::<u64>().ok();
             egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
@@ -607,6 +611,11 @@ impl eframe::App for AuditorApp {
                             .to_lowercase();
                         if extension != extension_filter { continue; }
                     }
+                    let family = Path::new(&entry.path).extension()
+                        .and_then(|value| value.to_str())
+                        .map(inventory::classify_extension)
+                        .unwrap_or("unknown");
+                    if !family_filter.is_empty() && family != family_filter { continue; }
                     let size = entry.size.unwrap_or(0);
                     if minimum_size.is_some_and(|minimum| size < minimum) { continue; }
                     if maximum_size.is_some_and(|maximum| size > maximum) { continue; }
