@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fs::File, io::{BufReader, Read}, path::{Path, PathBuf}, time::UNIX_EPOCH};
+use std::{fs::File, io::{BufReader, Read}, path::Path, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -131,6 +131,7 @@ pub fn export_csv(document: &InventoryDocument, destination: &Path) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn classifies_known_and_unknown_extensions() {
