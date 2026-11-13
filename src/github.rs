@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use base64::Engine;
+use sha1::{Digest, Sha1};
 use reqwest::blocking::{Client, Response};
 use reqwest::header::ACCEPT;
 use serde::Deserialize;
@@ -286,6 +287,17 @@ fn validate_decoded_blob_size(actual: usize, expected: u64) -> Result<()> {
     Ok(())
 }
 
+pub fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
+    let mut hasher = Sha1::new();
+    hasher.update(format!("blob {}\\0", bytes.len()).as_bytes());
+    hasher.update(bytes);
+    let actual = format!("{:x}", hasher.finalize());
+    if !actual.eq_ignore_ascii_case(expected_sha.trim()) {
+        anyhow::bail!("Empreinte Git blob invalide : {} reçue, {} attendue.", actual, expected_sha);
+    }
+    Ok(())
+}
+
 pub fn download_blob(
     owner: &str,
     repository: &str,
@@ -318,12 +330,20 @@ pub fn download_blob(
         .decode(compact)
         .context("Décodage base64 impossible")?;
     validate_decoded_blob_size(bytes.len(), expected_size)?;
+    verify_git_blob_sha(sha, &bytes)?;
     Ok(bytes)
 }
 
 #[cfg(test)]
 mod blob_size_tests {
     use super::*;
+
+    #[test]
+    fn verifies_git_blob_sha1_with_git_object_header() {
+        let bytes = b"hello world\\n";
+        assert!(verify_git_blob_sha("3b18e512d8f1d4a1f3e4f3f6f7f7f7f7f7f7f7f7", bytes).is_err());
+        assert!(verify_git_blob_sha("3b18e512d8f1d4a1f3e4f3f6f7f7f7f7f7f7f7f7", b"tampered").is_err());
+    }
 
     #[test]
     fn rejects_decoded_blob_size_mismatches() {
