@@ -392,6 +392,7 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
     })
 }
 
+#[cfg(test)]
 pub fn scan_directory(root: &Path) -> Result<InventoryDocument> {
     scan_directory_with_progress(root, |_, _| {})
 }
