@@ -18,7 +18,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Raster : format détecté, dimensions, type de canaux et présence d'alpha depuis le décodeur, sans décodage des pixels.
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
 - Polices : extraction initiale de la famille et sous-famille lorsque le format est pris en charge.
-- ZIP : lecture de la table centrale, comptage des entrées, taille décompressée déclarée, chemins suspects et ratios anormaux ; aucune extraction.
+- ZIP : lecture de la table centrale, comptage des entrées, taille décompressée déclarée, chemins suspects et ratios anormaux ; aucun décompactage ; archives de plus de 512 Mio ignorées.
 - Exports JSON et CSV UTF-8, rapport HTML autonome sans JavaScript.
 - Planches raster PNG de 16 images par page, avec fichier texte d'index ; le SHA-256 source est revérifié avant génération.
 - Vue locale filtrable ; jusqu'à 500 lignes affichées à la fois, exports complets.
@@ -31,7 +31,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Galerie visuelle, planches annotées, licences, provenance, revue humaine et comparaison entre inventaires.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Le dernier ajout raster alpha et planches doit encore passer l'intégralité de la CI avant de livrer un nouveau binaire.
+- Les ajouts raster alpha et planches doivent encore passer l'intégralité de la CI avant de livrer un nouveau binaire.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
