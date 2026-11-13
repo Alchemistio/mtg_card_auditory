@@ -6,8 +6,8 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [x] CI Windows complète sur commit `a4a099e` : Clippy, tests, build Release et upload d'artefact.
-- [ ] Revalidation des dernières extensions de rapport et de sécurité.
+- [x] CI Windows complète sur commit `df73f1a` : Clippy, tests, build Release et upload d'artefact.
+- [ ] Revalidation des derniers ajouts de repérage des fichiers de notices.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -32,6 +32,7 @@
 - [x] Export JSON versionné, CSV UTF-8 et rapport HTML autonome hors ligne.
 - [x] Export JSON versionné du rapport de comparaison, hors des deux sources.
 - [x] Classification indicative par extension.
+- [x] Repérage des fichiers LICENSE/LICENCE/COPYING/NOTICE/README/AUTHORS/CREDITS sans interprétation juridique.
 - [x] Métadonnées raster : format, dimensions, type de canaux et présence d'alpha depuis le décodeur sans décodage des pixels.
 - [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
 - [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
@@ -47,7 +48,7 @@
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
 - [ ] MSE : packages, dépendances et couches.
-- [ ] Collecte des notices et provenance.
+- [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle
 - [~] Première planche de contact raster paginée avec index.
