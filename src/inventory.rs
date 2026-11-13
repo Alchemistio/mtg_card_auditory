@@ -387,6 +387,74 @@ pub fn export_csv(document: &InventoryDocument, destination: &Path) -> Result<()
     Ok(())
 }
 
+pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, destination: &Path) -> Result<usize> {
+    ensure_export_outside_source(document, destination)?;
+    if destination.exists() {
+        anyhow::bail!("Le fichier de planche existe déjà : {}", destination.display());
+    }
+    let sidecar = destination.with_extension("txt");
+    ensure_export_outside_source(document, &sidecar)?;
+    if sidecar.exists() {
+        anyhow::bail!("Le fichier d'index existe déjà : {}", sidecar.display());
+    }
+    let raster_assets: Vec<&AssetRecord> = document.assets.iter()
+        .filter(|asset| asset.detected_family == "raster" && asset.raster_width.is_some() && asset.raster_height.is_some())
+        .collect();
+    let page_size = 16usize;
+    let start = page_index.saturating_mul(page_size);
+    if start >= raster_assets.len() {
+        anyhow::bail!("Cette page de planche est vide ; {} fichier(s) raster indexé(s).", raster_assets.len());
+    }
+    let selected = &raster_assets[start..raster_assets.len().min(start + page_size)];
+    let mut canvas = image::RgbaImage::from_pixel(880, 720, image::Rgba([245, 246, 248, 255]));
+    let mut index_text = String::from("Index de la planche de contact\n");
+    let source_root = Path::new(&document.source_root);
+    let mut rendered = 0usize;
+    for (slot, asset) in selected.iter().enumerate() {
+        let source = source_root.join(&asset.relative_path);
+        let file_size = std::fs::metadata(&source).map(|metadata| metadata.len()).unwrap_or(u64::MAX);
+        if file_size > 100 * 1024 * 1024 {
+            index_text.push_str(&format!("{:02}\tIGNORÉ (fichier > 100 Mio)\t{}\n", slot + 1, asset.relative_path));
+            continue;
+        }
+        let dimensions = ImageReader::open(&source)
+            .and_then(|reader| reader.with_guessed_format())
+            .and_then(|reader| reader.into_dimensions());
+        let (width, height) = match dimensions {
+            Ok(dimensions) => dimensions,
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tILLISIBLE\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        if u64::from(width).saturating_mul(u64::from(height)) > 30_000_000 {
+            index_text.push_str(&format!("{:02}\tIGNORÉ (plus de 30 Mpx)\t{}\n", slot + 1, asset.relative_path));
+            continue;
+        }
+        let decoded = ImageReader::open(&source)
+            .and_then(|reader| reader.with_guessed_format())
+            .map_err(anyhow::Error::from)
+            .and_then(|reader| reader.decode().map_err(anyhow::Error::from));
+        let image = match decoded {
+            Ok(image) => image.thumbnail(200, 160).to_rgba8(),
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tDÉCODAGE IMPOSSIBLE\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        let column = slot % 4;
+        let row = slot / 4;
+        let x = (column as i64) * 220 + ((200 - image.width()) / 2) as i64 + 10;
+        let y = (row as i64) * 180 + ((160 - image.height()) / 2) as i64 + 10;
+        image::imageops::overlay(&mut canvas, &image, x, y);
+        rendered += 1;
+        index_text.push_str(&format!("{:02}\t{}\n", slot + 1, asset.relative_path));
+    }
+    canvas.save(destination).context("Écriture de la planche PNG impossible")?;
+    std::fs::write(&sidecar, index_text).context("Écriture de l'index de planche impossible")?;
+    Ok(rendered)
+}
+
 fn escape_html(value: &str) -> String {
     value.replace('&', "&amp;")
         .replace('<', "&lt;")
