@@ -14,7 +14,7 @@ enum DownloadMessage {
     Progress(usize, usize, String),
     Finished(String),
 }
-use std::{collections::HashSet, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
+use std::{collections::HashSet, io::Write, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
 
 #[derive(Default)]
 struct AuditorApp {
@@ -226,7 +226,17 @@ impl AuditorApp {
                             if !canonical_parent.starts_with(&canonical_root) {
                                 anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
                             }
-                            std::fs::write(destination, bytes)?;
+                            let mut file = std::fs::OpenOptions::new()
+                                .write(true)
+                                .create_new(true)
+                                .open(&destination)
+                                .with_context(|| format!("Impossible de créer le fichier sans écrasement : {}", destination.display()))?;
+                            if let Err(error) = file.write_all(&bytes) {
+                                drop(file);
+                                let _ = std::fs::remove_file(&destination);
+                                return Err(error.into());
+                            }
+                            file.sync_all()?;
                             Ok(())
                         });
                     match result {
@@ -260,8 +270,13 @@ impl AuditorApp {
                             downloaded_unix_seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs(),
                             downloaded_files: manifest_files,
                         };
-                        let file = std::fs::File::create(&manifest_path)?;
-                        serde_json::to_writer_pretty(file, &manifest)?;
+                        let file = std::fs::OpenOptions::new()
+                            .write(true)
+                            .create_new(true)
+                            .open(&manifest_path)
+                            .context("Impossible de créer le manifeste sans écraser un fichier existant")?;
+                        serde_json::to_writer_pretty(&file, &manifest)?;
+                        file.sync_all()?;
                         format!(" Manifeste de provenance : {}", manifest_path.display())
                     }
                 } else {
