@@ -14,7 +14,8 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Progression des téléchargements GitHub par fichier terminé.
 - Manifeste JSON de provenance pour les téléchargements : propriétaire, dépôt, référence demandée, commit SHA, tree SHA, date, chemin et blob SHA.
 - Timeout HTTP de 60 secondes, jusqu'à trois nouvelles tentatives (quatre requêtes au total) pour les erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
-- Téléchargement de blobs GitHub plafonné à 90 Mio par fichier, réponse JSON plafonnée à 128 Mio et taille reçue vérifiée contre la taille déclarée par l'arbre Git.
+- Téléchargement de blobs GitHub plafonné à 90 Mio par fichier, réponse JSON plafonnée à 128 Mio, taille reçue vérifiée contre l'arbre Git et empreinte SHA-1 Git recalculée avant écriture ou mise en cache.
+- Cache local sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace ; les entrées sont vérifiées par SHA-1 Git et les entrées invalides sont écartées avant un nouveau téléchargement.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Filtrage de la liste distante par chemin, extension, plage de taille et famille technique, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
 - Scan local parallèle via Rayon, sans suivre les liens symboliques ; sélection multi-dossiers avec préfixes de source, détection des racines imbriquées et doublons exacts entre sources.
@@ -33,7 +34,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement ; les exports restent hors de la source.
 
 ## Limites connues
-- Reprise après fermeture, cache GitHub, streaming des blobs volumineux et affichage du quota restant.
+- Streaming des blobs volumineux et affichage du quota restant. Le cache GitHub local par commit/blob est maintenant activé et chaque entrée est vérifiée avec le SHA-1 Git avant réutilisation ; la reprise après fermeture reste à développer.
 - Credential Manager et estimation du temps restant.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
