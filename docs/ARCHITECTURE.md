@@ -2,7 +2,7 @@
 
 ## État de l'implémentation
 Le prototype est organisé en modules Rust :
-- `main.rs` : interface egui, workers d'arrière-plan, progression du scan, choix des sources et actions d'export/comparaison.
+- `main.rs` : interface egui, workers d'arrière-plan, progression du scan et des téléchargements, choix des sources et actions d'export/comparaison.
 - `github.rs` : API REST, parsing URL, timeout HTTP, erreurs de quota, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
 - `models.rs` : entrées d'arbre GitHub.
 - `inventory.rs` : parcours local parallèle avec progression, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, repérage de notices, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
@@ -55,4 +55,4 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `df73f1a` a passé Clippy, tests, build Release et upload d'artefact ; le repérage des fichiers de notices et la progression par fichiers doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `df73f1a` a passé Clippy, tests, build Release et upload d'artefact ; la progression détaillée et le repérage de notices doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
