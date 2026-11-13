@@ -19,6 +19,7 @@ struct AuditorApp {
     local_filter: String,
     contact_page: String,
     local_inventory: Option<inventory::InventoryDocument>,
+    comparison: Option<inventory::InventoryComparison>,
     scan_receiver: Option<Receiver<std::result::Result<inventory::InventoryDocument, String>>>,
     github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
     download_receiver: Option<Receiver<String>>,
@@ -107,6 +108,32 @@ impl AuditorApp {
             match inventory::export_html(document, &path) {
                 Ok(()) => self.status = format!("Rapport HTML exporté : {}", path.display()),
                 Err(error) => self.status = format!("Échec export HTML : {:#}", error),
+            }
+        }
+    }
+
+    fn compare_local_inventory(&mut self) {
+        if self.local_inventory.is_none() {
+            self.status = "Lance d'abord un inventaire local.".into();
+            return;
+        }
+        if let Some(path) = rfd::FileDialog::new().add_filter("Inventaire JSON", &["json"]).pick_file() {
+            let result = (|| -> anyhow::Result<inventory::InventoryComparison> {
+                let file = std::fs::File::open(&path)?;
+                let baseline: inventory::InventoryDocument = serde_json::from_reader(file)?;
+                let current = self.local_inventory.as_ref().context("Inventaire courant absent")?;
+                Ok(inventory::compare_inventories(current, &baseline))
+            })();
+            match result {
+                Ok(comparison) => {
+                    self.status = format!(
+                        "Comparaison terminée : {} ajouté(s), {} supprimé(s), {} modifié(s), {} inchangé(s).",
+                        comparison.added_paths.len(), comparison.removed_paths.len(),
+                        comparison.changed_assets.len(), comparison.unchanged_files
+                    );
+                    self.comparison = Some(comparison);
+                }
+                Err(error) => self.status = format!("Comparaison impossible : {:#}", error),
             }
         }
     }
@@ -288,7 +315,15 @@ impl eframe::App for AuditorApp {
                     ui.label("Page planche");
                     ui.add(egui::TextEdit::singleline(&mut self.contact_page).desired_width(36.0));
                     if ui.button("Planche PNG…").clicked() { self.export_contact_sheet(); }
+                    if ui.button("Comparer JSON…").clicked() { self.compare_local_inventory(); }
                 });
+                if let Some(comparison) = self.comparison.as_ref() {
+                    ui.label(format!(
+                        "Comparaison : +{} / −{} / modifiés {} / inchangés {}",
+                        comparison.added_paths.len(), comparison.removed_paths.len(),
+                        comparison.changed_assets.len(), comparison.unchanged_files
+                    ));
+                }
                 ui.horizontal(|ui| {
                     ui.label("Filtrer les résultats");
                     ui.text_edit_singleline(&mut self.local_filter);
