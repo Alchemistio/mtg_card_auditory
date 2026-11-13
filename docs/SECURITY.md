@@ -5,6 +5,7 @@
 - Les dossiers locaux sont parcourus en lecture seule.
 - Aucun fichier source n'est supprimé, déplacé, renommé, normalisé ou écrasé.
 - Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
+- Un manifeste de provenance relie les blobs téléchargés au dépôt, à la référence, au commit SHA et au tree SHA.
 - Les rapports sont exportés hors du dossier local analysé.
 - Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
 - Les planches de contact revérifient le SHA-256 des sources avant de les décoder et refusent les liens symboliques.
