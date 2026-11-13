@@ -513,8 +513,16 @@ impl WorkspaceDir {
 }
 
 fn validate_relative_path(relative: &Path) -> anyhow::Result<()> {
-    if relative.as_os_str().is_empty() || relative.components().any(|component| !matches!(component, std::path::Component::Normal(_))) {
+    if relative.as_os_str().is_empty() {
         anyhow::bail!("Chemin relatif workspace invalide : {}", relative.display());
+    }
+    for component in relative.components() {
+        let std::path::Component::Normal(name) = component else {
+            anyhow::bail!("Composant de chemin interdit dans le workspace : {}", relative.display());
+        };
+        if name.to_string_lossy().contains(':') {
+            anyhow::bail!("Flux de données alternatif Windows refusé : {}", relative.display());
+        }
     }
     Ok(())
 }
@@ -972,6 +980,7 @@ mod write_tests {
         assert_eq!(workspace.inner.read(&nested).unwrap(), b"original");
         assert!(super::safe_workspace_relative("../outside").is_err());
         assert!(super::safe_workspace_relative("C:\\outside").is_err());
+        assert!(super::safe_workspace_relative("folder/file.txt:alternate").is_err());
         drop(workspace);
         fs::remove_dir_all(directory).unwrap();
     }
