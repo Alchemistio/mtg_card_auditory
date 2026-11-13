@@ -1,0 +1,12 @@
+# Sécurité
+- Le logiciel ne modifie jamais le dépôt GitHub distant ni les sources locales.
+- Les téléchargements et rapports restent dans le workspace choisi.
+- Les chemins distants sont validés composant par composant.
+- Jeton masqué, conservé en mémoire, jamais journalisé ou exporté.
+- Permissions recommandées : Contents read.
+- Les téléchargements sont des données, jamais du code à exécuter.
+- Archives inspectées sans extraction automatique par défaut.
+- Limites de taille et d'expansion avant toute extraction.
+- Les aperçus SVG bloquent les références réseau externes.
+- Les doublons ne déclenchent aucune suppression.
+- Les rapports documentent fichiers ignorés, erreurs et limites.
