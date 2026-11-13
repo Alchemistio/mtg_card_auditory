@@ -42,7 +42,7 @@
 - Le champ du jeton est masqué.
 - Le jeton peut être enregistré explicitement dans Windows Credential Manager via la bibliothèque `keyring` ; il n'est jamais écrit dans les fichiers du workspace.
 - Le chargement et l'enregistrement sont déclenchés explicitement par l'utilisateur ; aucun enregistrement automatique.
-- Le champ applicatif et les copies explicitement transmises aux workers utilisent `zeroize::Zeroizing<String>` : leur allocation est écrasée à la libération normale de la valeur.
+- Le tampon temporaire de saisie egui, le champ applicatif et les copies explicitement transmises aux workers utilisent `zeroize::Zeroizing<String>` : leur allocation est écrasée à la libération normale de la valeur.
 - Le chargement depuis Windows Credential Manager crée initialement une `String` retournée par la bibliothèque ; elle est immédiatement enveloppée dans `Zeroizing`. Les détails internes de la bibliothèque, du système HTTP/TLS et les copies temporaires éventuelles ne sont pas sous contrôle complet de l'application.
 - L'effacement mémoire réduit la durée de vie des secrets mais ne protège pas contre un processus compromis, un dump mémoire pris avant libération, le swap, ni toutes les copies internes de dépendances.
 - Ne jamais écrire le jeton dans les journaux, exports ou fichiers de configuration.

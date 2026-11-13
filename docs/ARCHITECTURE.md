@@ -55,7 +55,7 @@ La reprise après fermeture des fichiers terminés est implémentée ; la persis
 
 ## Limites techniques
 - Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture des fichiers terminés est disponible via le journal JSONL ; les blobs partiellement téléchargés ne sont pas repris.
-- Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring`. Le champ applicatif et les copies explicites envoyées aux workers utilisent `zeroize::Zeroizing<String>` ; les copies internes éventuelles des bibliothèques HTTP/TLS et les dumps mémoire avant libération restent hors de garantie.
+- Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring`. Le tampon temporaire de saisie egui, le champ applicatif et les copies explicites envoyées aux workers utilisent `zeroize::Zeroizing<String>` ; les copies internes éventuelles des bibliothèques HTTP/TLS et les dumps mémoire avant libération restent hors de garantie.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.

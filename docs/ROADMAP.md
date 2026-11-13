@@ -10,7 +10,8 @@
 - [ ] CI des retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
 
 ## Phase 1 — Connectivité GitHub robuste
-- [x] Effacement des buffers du jeton en mémoire à la libération via `zeroize::Zeroizing<String>` ; les copies transmises aux workers sont également protégées.
+- [~] Effacement des buffers du jeton en mémoire à la libération via `zeroize::Zeroizing<String>` ; le tampon de saisie et les copies transmises aux workers sont également protégés. Validation CI complète après adaptation du tampon egui en attente.
+- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances.
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
