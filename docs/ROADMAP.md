@@ -25,8 +25,8 @@
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio) et contrôle de la taille réellement décodée contre la taille de l'arbre Git.
 - [ ] Téléchargement streaming, cache et reprise.
-- [x] Filtrage de la liste distante par chemin et extension.
-- [ ] Filtres distants par taille et famille.
+- [x] Filtrage de la liste distante par chemin, extension et plage de taille.
+- [ ] Filtre distant par famille.
 
 ## Phase 2 — Sources locales et inventaire
 - [ ] Sélection multi-dossiers.
