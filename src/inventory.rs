@@ -73,6 +73,7 @@ pub struct ChangedAsset {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InventoryComparison {
+    pub schema_version: u32,
     pub baseline_source_root: String,
     pub current_source_root: String,
     pub added_paths: Vec<String>,
@@ -446,6 +447,7 @@ pub fn compare_inventories(current: &InventoryDocument, baseline: &InventoryDocu
     removed_paths.sort();
     changed_assets.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     InventoryComparison {
+        schema_version: 1,
         baseline_source_root: baseline.source_root.clone(),
         current_source_root: current.source_root.clone(),
         added_paths,
@@ -453,6 +455,29 @@ pub fn compare_inventories(current: &InventoryDocument, baseline: &InventoryDocu
         changed_assets,
         unchanged_files,
     }
+}
+
+pub fn export_comparison_json(comparison: &InventoryComparison, destination: &Path) -> Result<()> {
+    let parent = destination.parent().context("Le chemin d'export n'a pas de dossier parent")?;
+    let canonical_parent = parent.canonicalize()
+        .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
+    for source in [&comparison.baseline_source_root, &comparison.current_source_root] {
+        let canonical_source = Path::new(source).canonicalize()?;
+        if canonical_parent.starts_with(&canonical_source) {
+            anyhow::bail!("Export refusé : le rapport de comparaison doit être écrit hors des deux sources.");
+        }
+    }
+    if destination.exists() {
+        let canonical_destination = destination.canonicalize()?;
+        for source in [&comparison.baseline_source_root, &comparison.current_source_root] {
+            if canonical_destination.starts_with(Path::new(source).canonicalize()?) {
+                anyhow::bail!("Export refusé : la destination résout vers une des sources comparées.");
+            }
+        }
+    }
+    let file = File::create(destination)
+        .with_context(|| format!("Création impossible : {}", destination.display()))?;
+    serde_json::to_writer_pretty(file, comparison).context("Écriture du rapport de comparaison impossible")
 }
 
 fn ensure_export_outside_source(document: &InventoryDocument, destination: &Path) -> Result<()> {
