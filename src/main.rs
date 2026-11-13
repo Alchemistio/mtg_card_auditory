@@ -41,6 +41,7 @@ struct AuditorApp {
     scan_cancel: Option<Arc<AtomicBool>>, 
     github_receiver: Option<Receiver<std::result::Result<models::RepositoryTree, String>>>,
     download_receiver: Option<Receiver<DownloadMessage>>,
+    download_cancel: Option<Arc<AtomicBool>>, 
     status: String,
     entries: Vec<models::RemoteEntry>,
     selected: HashSet<String>,
@@ -200,6 +201,13 @@ impl AuditorApp {
         }
     }
 
+    fn cancel_download(&mut self) {
+        if let Some(cancelled) = self.download_cancel.as_ref() {
+            cancelled.store(true, Ordering::Relaxed);
+            self.status = "Annulation demandée ; le blob en cours peut terminer avant l'arrêt…".into();
+        }
+    }
+
     fn download_selected(&mut self) {
         let root = PathBuf::from(self.workspace.trim());
         if self.workspace.trim().is_empty() {
@@ -220,7 +228,10 @@ impl AuditorApp {
         let tree_sha = self.github_tree_sha.clone();
         let requested_reference = self.branch.clone();
         let (sender, receiver) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancelled = Arc::clone(&cancelled);
         self.download_receiver = Some(receiver);
+        self.download_cancel = Some(cancelled);
         self.busy = true;
         self.status = "Téléchargement GitHub en arrière-plan…".into();
         std::thread::spawn(move || {
@@ -234,7 +245,14 @@ impl AuditorApp {
                 let manifest_name = format!("download-manifest-{}.json", &commit_sha[..7.min(commit_sha.len())]);
                 let manifest_conflict = chosen.iter().any(|entry| entry.path == manifest_name);
                 let progress_sender = sender.clone();
+                let mut processed = 0usize;
+                let mut was_cancelled = false;
                 for (index, entry) in chosen.into_iter().enumerate() {
+                    if worker_cancelled.load(Ordering::Relaxed) {
+                        was_cancelled = true;
+                        break;
+                    }
+                    processed = index + 1;
                     let result = github::download_blob(&owner, &repository, &entry.sha, &token, entry.size)
                         .and_then(|bytes| {
                             let destination = safe_destination(&canonical_root, &entry.path)?;
@@ -262,6 +280,9 @@ impl AuditorApp {
                     }
                     let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                 }
+                if worker_cancelled.load(Ordering::Relaxed) {
+                    was_cancelled = true;
+                }
                 let manifest_path = canonical_root.join(&manifest_name);
                 let manifest_status = if manifest_conflict {
                     "Manifeste ignoré : un chemin distant sélectionné porte le même nom.".to_string()
@@ -288,10 +309,15 @@ impl AuditorApp {
                 } else {
                     String::new()
                 };
-                if errors.is_empty() {
-                    Ok(format!("{} fichier(s) téléchargé(s) dans {}.{} Sources GitHub inchangées.", downloaded, canonical_root.display(), manifest_status))
+                let cancellation_status = if was_cancelled {
+                    format!(" Téléchargement annulé après {}/{} fichier(s) traité(s).", processed, total)
                 } else {
-                    Ok(format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}.{}", downloaded, errors.len(), errors[0], manifest_status))
+                    String::new()
+                };
+                if errors.is_empty() {
+                    Ok(format!("{} fichier(s) téléchargé(s) dans {}.{}{} Sources GitHub inchangées.", downloaded, canonical_root.display(), manifest_status, cancellation_status))
+                } else {
+                    Ok(format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}.{}{}", downloaded, errors.len(), errors[0], manifest_status, cancellation_status))
                 }
             })().unwrap_or_else(|error| format!("Échec du téléchargement : {:#}", error));
             let _ = sender.send(DownloadMessage::Finished(result));
@@ -425,6 +451,7 @@ impl eframe::App for AuditorApp {
                 }
                 DownloadMessage::Finished(result) => {
                     self.download_receiver = None;
+                    self.download_cancel = None;
                     self.busy = false;
                     self.status = result;
                 }
@@ -578,6 +605,9 @@ impl eframe::App for AuditorApp {
                     self.download_selected();
                 }
                 ui.label(format!("{} fichier(s) sélectionné(s)", self.selected.len()));
+                if ui.add_enabled(self.download_cancel.is_some(), egui::Button::new("Annuler le téléchargement")).clicked() {
+                    self.cancel_download();
+                }
             });
             ui.separator();
             ui.heading("Fichiers distants");
