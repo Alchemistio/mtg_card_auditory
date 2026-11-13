@@ -19,20 +19,35 @@ pub struct AssetRecord {
     pub modified_unix_seconds: Option<u64>,
     pub sha256: String,
     pub detected_family: String,
+    #[serde(default)]
     pub raster_format: Option<String>,
+    #[serde(default)]
     pub raster_width: Option<u32>,
+    #[serde(default)]
     pub raster_height: Option<u32>,
+    #[serde(default)]
     pub raster_color_type: Option<String>,
+    #[serde(default)]
     pub raster_has_alpha: Option<bool>,
+    #[serde(default)]
     pub svg_viewbox: Option<String>,
+    #[serde(default)]
     pub svg_has_external_refs: Option<bool>,
+    #[serde(default)]
     pub svg_xml_valid: Option<bool>,
+    #[serde(default)]
     pub font_family: Option<String>,
+    #[serde(default)]
     pub font_subfamily: Option<String>,
+    #[serde(default)]
     pub archive_entry_count: Option<usize>,
+    #[serde(default)]
     pub archive_uncompressed_bytes: Option<u64>,
+    #[serde(default)]
     pub archive_suspicious_paths: Option<usize>,
+    #[serde(default)]
     pub analysis_warning: Option<String>,
+    #[serde(default)]
     pub duplicate_of: Option<String>,
     pub review_status: String,
 }
@@ -44,6 +59,7 @@ pub struct InventoryDocument {
     pub generated_unix_seconds: u64,
     pub files_scanned: usize,
     pub total_bytes: u64,
+    #[serde(default)]
     pub duplicate_files: usize,
     pub assets: Vec<AssetRecord>,
 }
