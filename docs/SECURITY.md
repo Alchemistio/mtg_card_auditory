@@ -23,7 +23,7 @@
 - ZIP : lecture des métadonnées de l'archive sans extraire de contenu.
 - Les chemins absolus, parent, points, antislashs et préfixes de volume sont signalés.
 - Les ratios de compression inhabituels et tailles décompressées déclarées importantes sont signalés.
-- Le nombre d'entrées et la taille déclarée sont plafonnés.
+- Le nombre d'entrées (200 000) et la taille décompressée déclarée (8 Gio) sont plafonnés.
 - Les formats 7z/RAR ne sont pas encore inspectés.
 
 ## Secrets GitHub
