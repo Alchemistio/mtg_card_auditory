@@ -21,6 +21,7 @@
 - Les chemins contenant racine, préfixe, parent ou composant spécial sont rejetés.
 - Les destinations existantes ne sont pas écrasées pour les téléchargements et planches.
 - Les fichiers téléchargés et les manifestes sont ouverts avec création exclusive (`create_new`) pour refuser un fichier déjà présent au moment de l'ouverture.
+- Les écritures sont synchronisées (`sync_all`) ; si l'écriture ou la synchronisation échoue, le fichier partiel créé par l'opération est supprimé.
 - Les écritures de fichiers téléchargés utilisent `write_all` puis `sync_all`; un fichier partiel est supprimé si l'écriture échoue.
 - Les liens symboliques présents dans les chemins de destination sont refusés.
 - Le dossier de destination est canonicalisé et doit rester dans le workspace.
