@@ -6,7 +6,7 @@
 - Aucun fichier source n'est supprimé, déplacé, renommé, normalisé ou écrasé.
 - Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
 - Un manifeste de provenance relie les blobs téléchargés au dépôt, à la référence, au commit SHA et au tree SHA.
-- Les rapports sont exportés hors du dossier local analysé.
+- Les rapports sont exportés hors de tous les dossiers locaux analysés, y compris en mode multi-sources.
 - Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
 - Les planches de contact revérifient le SHA-256 des sources avant de les décoder et refusent les liens symboliques.
 - Les rapports de comparaison JSON sont exportés hors des deux sources comparées.
@@ -27,7 +27,7 @@
 - Les liens symboliques présents dans les chemins de destination sont refusés.
 - Le dossier de destination est canonicalisé et doit rester dans le workspace.
 - Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
-- Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence source.
+- Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence de l'une des sources analysées.
 
 ## Archives
 - ZIP : lecture des métadonnées de l'archive sans extraire de contenu.
@@ -45,7 +45,7 @@
 
 ## Limites restantes
 - Le téléchargement des blobs utilise actuellement l'API Base64 et n'est pas encore optimisé pour les gros fichiers.
-- Les erreurs de quota sont détectées mais aucun backoff automatique n'est encore appliqué.
+- Les erreurs transitoires et réponses 429/502/503/504 utilisent des retries bornés ; le quota primaire épuisé est signalé sans attente longue automatique.
 - La défense TOCTOU reste incomplète : la création exclusive protège le fichier final contre l'écrasement, mais ne neutralise pas toutes les courses sur les répertoires parents ni le remplacement de liens entre vérification et ouverture. Une approche basée sur des handles de répertoire et des opérations relatives est à étudier.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
 - Les analyseurs de formats actifs devront rester sans extraction/exécution automatique.
