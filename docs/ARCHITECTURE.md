@@ -8,7 +8,7 @@ Le prototype est organisé en modules Rust :
 - `inventory.rs` : parcours local parallèle avec progression, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, repérage de notices, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
 - `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
 
-Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. L'annulation et la progression en octets ne sont pas encore implémentées.
+Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. Un drapeau atomique partagé permet de demander l'arrêt du scan local ; une analyse de fichier déjà engagée peut se terminer avant l'arrêt. L'annulation coopérative du scan local est implémentée ; elle est vérifiée entre les étapes de parcours et d'analyse. L'annulation des téléchargements GitHub et la progression en octets restent à faire.
 
 ## Flux GitHub actuel
 1. Saisir une URL HTTPS canonique `github.com/owner/repository` ou propriétaire/dépôt ; le parseur vérifie l'hôte exact et refuse les identifiants, ports, query strings, fragments et sous-chemins.
