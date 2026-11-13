@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local, les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les ajouts ultérieurs (retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets) sont en cours de validation sur les commits les plus récents.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les ajouts ultérieurs (retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets) sont en cours de validation sur les commits les plus récents.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -34,7 +34,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 
 ## Limites connues
 - Reprise après fermeture, cache GitHub, streaming des blobs volumineux et affichage du quota restant.
-- Credential Manager, estimation du temps restant, annulation du téléchargement GitHub et scan multi-sources.
+- Credential Manager, estimation du temps restant et scan multi-sources.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
