@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local SHA-256, les exports JSON/CSV, les premières métadonnées raster, SVG et polices, l'exploration GitHub configurable et le repli sur sous-arbres en cas d'arbre récursif tronqué sont intégrés au code. La validation Windows complète du dernier commit reste en cours dans GitHub Actions. Consulter [la feuille de route](docs/ROADMAP.md).
+**État : prototype fonctionnel en développement.** Le scan local SHA-256, les exports JSON/CSV, les premières métadonnées raster, SVG et polices, l'inspection ZIP sans extraction, l'exploration GitHub configurable et le repli sur sous-arbres en cas d'arbre récursif tronqué sont intégrés au code. La validation Windows complète du dernier commit reste en cours dans GitHub Actions. Consulter [la feuille de route](docs/ROADMAP.md).
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -16,14 +16,15 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Raster : format détecté et dimensions lues depuis l'en-tête, sans décodage des pixels.
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
 - Polices : extraction initiale de la famille et sous-famille lorsque le format est pris en charge.
+- ZIP : lecture de la table centrale, comptage des entrées, taille décompressée déclarée, chemins suspects et ratios anormaux ; aucune extraction.
 - Exports JSON et CSV UTF-8 ; les exports dans le dossier source scanné sont refusés.
 - Garde-fous contre les chemins distants dangereux et les liens symboliques dans les destinations de téléchargement.
-- Tests unitaires du parsing d'URL, du classement, de l'inventaire et de la lecture SVG.
+- Tests unitaires du parsing d'URL, du classement, de l'inventaire, du SVG et de la détection de chemins ZIP suspects.
 
 ## Limites connues
 - Gestion structurée des rate limits, streaming des blobs volumineux, cache et reprise.
 - Credential Manager, progression asynchrone, annulation et scan multi-sources.
-- Alpha/orientation, miniatures, aperçu SVG sandboxé, analyse CSS approfondie, formats de polices additionnels, archives ZIP et MSE.
+- Alpha/orientation, miniatures, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie, planches, licences, provenance, revue humaine et rapport HTML.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
@@ -39,7 +40,7 @@ Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
     cargo build --release
 
 ## Sécurité et GitHub
-L'application analyse les sources en lecture seule. Les téléchargements sont écrits dans le workspace choisi ; les exports locaux sont refusés à l'intérieur du dossier analysé. Les scripts, macros et contenus HTML ne sont jamais exécutés. Les SVG sont analysés comme XML sans rendu.
+L'application analyse les sources en lecture seule. Les téléchargements sont écrits dans le workspace choisi ; les exports locaux sont refusés à l'intérieur du dossier analysé. Les scripts, macros et contenus HTML ne sont jamais exécutés. Les SVG sont analysés comme XML sans rendu. Les ZIP ne sont jamais extraits.
 
 Pour un dépôt privé, utiliser un jeton à permissions minimales (Contents: read). Ne jamais le commiter ni l'inclure dans les rapports. Il n'est actuellement conservé qu'en mémoire pendant l'exécution.
 
