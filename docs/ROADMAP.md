@@ -31,7 +31,7 @@
 - [x] Métadonnées raster : format, dimensions, type de canaux et présence d'alpha depuis le décodeur sans décodage des pixels.
 - [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
 - [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
-- [x] Inspection ZIP sans extraction : nombre d'entrées, taille déclarée, chemins suspects et ratios anormaux.
+- [x] Inspection ZIP sans extraction : nombre d'entrées, taille déclarée, chemins suspects et ratios anormaux ; fichier limité à 512 Mio.
 - [x] Export JSON versionné, CSV UTF-8 et rapport HTML autonome hors ligne.
 - [x] Génération de planches raster PNG paginées (16 éléments/page) avec index texte ; SHA vérifié avant aperçu.
 - [x] Refus des exports dans l'arborescence source.
