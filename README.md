@@ -13,7 +13,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Progression du scan local en octets traités (notification par lots de 100 fichiers et à la fin).
 - Progression des téléchargements GitHub par fichier terminé.
 - Manifeste JSON de provenance pour les téléchargements : propriétaire, dépôt, référence demandée, commit SHA, tree SHA, date, chemin et blob SHA.
-- Timeout HTTP de 60 secondes, trois tentatives au maximum pour erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
+- Timeout HTTP de 60 secondes, jusqu'à trois nouvelles tentatives (quatre requêtes au total) pour les erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
 - Téléchargement de blobs GitHub plafonné à 90 Mio par fichier, réponse JSON plafonnée à 128 Mio et taille reçue vérifiée contre la taille déclarée par l'arbre Git.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
 - Filtrage de la liste distante par chemin, extension, plage de taille et famille technique, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
