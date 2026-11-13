@@ -2,13 +2,13 @@
 
 ## État de l'implémentation
 Le prototype est organisé en modules Rust :
-- `main.rs` : interface egui, workers d'arrière-plan, choix des sources et actions d'export/comparaison.
+- `main.rs` : interface egui, workers d'arrière-plan, progression du scan, choix des sources et actions d'export/comparaison.
 - `github.rs` : API REST, parsing URL, timeout HTTP, erreurs de quota, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
 - `models.rs` : entrées d'arbre GitHub.
-- `inventory.rs` : parcours local parallèle, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
+- `inventory.rs` : parcours local parallèle avec progression, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, repérage de notices, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
 - `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
 
-Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. L'annulation et la progression détaillée ne sont pas encore implémentées.
+Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. L'annulation et la progression en octets ne sont pas encore implémentées.
 
 ## Flux GitHub actuel
 1. Saisir une URL github.com ou propriétaire/dépôt.
@@ -24,8 +24,8 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 ## Flux local actuel
 1. Choisir un dossier source.
 2. Parcourir récursivement sans suivre les liens symboliques, avec profondeur maximale.
-3. Calculer SHA-256 en blocs et relever taille/date/extension.
-4. Classifier indicativement par extension.
+3. Calculer SHA-256 en blocs et relever taille/date/extension ; progression en nombre de fichiers traités.
+4. Classifier indicativement par extension et repérer les fichiers de type LICENSE/NOTICE/README sans en déduire de statut légal.
 5. Extraire dimensions, format, type de canaux et alpha raster sans décodage complet ; analyser le XML SVG sans rendu ; relever famille/sous-famille des polices prises en charge ; inspecter la table centrale ZIP sans extraction.
 6. Détecter les doublons exacts par SHA-256 sans supprimer ni modifier les fichiers.
 7. Comparer avec un inventaire JSON antérieur par chemin et SHA-256.
@@ -55,4 +55,4 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `a4a099e` a passé Clippy, tests, build Release et upload d'artefact ; les changements de rapport de comparaison et de gestion des limites API doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `df73f1a` a passé Clippy, tests, build Release et upload d'artefact ; le repérage des fichiers de notices et la progression par fichiers doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
