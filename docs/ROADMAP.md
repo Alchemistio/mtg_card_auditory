@@ -27,6 +27,7 @@
 - [x] Métadonnées raster initiales : format détecté et dimensions depuis l'en-tête.
 - [x] Métadonnées SVG initiales : XML bien formé, viewBox et détection indicative de références externes.
 - [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
+- [x] Inspection ZIP sans extraction : nombre d'entrées, taille déclarée, chemins suspects et ratios anormaux.
 - [x] Export JSON versionné et CSV UTF-8.
 - [x] Refus des exports dans l'arborescence source.
 - [ ] Comparaison entre analyses.
@@ -36,7 +37,7 @@
 - [~] Raster : détection du format et dimensions initiales ; alpha, orientation, limites, décodage contrôlé et miniatures à faire.
 - [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
-- [ ] ZIP : inventaire sûr et chemins suspects.
+- [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
 - [ ] MSE : packages, dépendances et couches.
 - [ ] Collecte des notices et provenance.
 
