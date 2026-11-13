@@ -1,0 +1,8 @@
+/target/
+/dist/
+/workspace/
+/.audit-cache/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
