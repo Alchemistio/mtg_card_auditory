@@ -6,9 +6,10 @@
 - Aucun fichier source n'est supprimé, déplacé, renommé, normalisé ou écrasé.
 - Les fichiers téléchargés sont écrits uniquement dans le workspace choisi.
 - Les rapports sont exportés hors du dossier local analysé.
-- Les rapports HTML sont autonomes, échappent les données inventoriées et n'embarquent aucun JavaScript.
+- Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
 - Les planches de contact revérifient le SHA-256 des sources avant de les décoder et refusent les liens symboliques.
 - Les rapports de comparaison JSON sont exportés hors des deux sources comparées.
+- Le repérage de noms LICENSE/NOTICE/README est une simple aide à l'inventaire ; il ne certifie aucune licence ni droit de redistribution.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
 - Les SVG sont analysés comme XML sans rendu.
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
