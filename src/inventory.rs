@@ -1041,6 +1041,33 @@ mod tests {
     }
 
     #[test]
+    fn refuses_comparison_export_inside_any_multi_source_root() {
+        let base = std::env::temp_dir().join(format!("mtg-auditor-multi-export-{}", std::process::id()));
+        let baseline = base.join("baseline");
+        let current_a = base.join("current-a");
+        let current_b = base.join("current-b");
+        std::fs::create_dir_all(&baseline).unwrap();
+        std::fs::create_dir_all(&current_a).unwrap();
+        std::fs::create_dir_all(&current_b).unwrap();
+        let comparison = InventoryComparison {
+            schema_version: 1,
+            baseline_source_root: baseline.canonicalize().unwrap().display().to_string(),
+            current_source_root: current_a.canonicalize().unwrap().display().to_string(),
+            baseline_source_roots: vec![baseline.canonicalize().unwrap().display().to_string()],
+            current_source_roots: vec![
+                current_a.canonicalize().unwrap().display().to_string(),
+                current_b.canonicalize().unwrap().display().to_string(),
+            ],
+            added_paths: Vec::new(),
+            removed_paths: Vec::new(),
+            changed_assets: Vec::new(),
+            unchanged_files: 0,
+        };
+        assert!(export_comparison_json(&comparison, &current_b.join("comparison.json")).is_err());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn html_escaping_blocks_markup_in_user_paths() {
         assert_eq!(escape_html("<script>&\"'"), "&lt;script&gt;&amp;&quot;&#39;");
     }
