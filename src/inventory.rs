@@ -411,7 +411,7 @@ pub fn scan_directory_with_progress_and_cancel<F>(
     cancelled: &AtomicBool,
 ) -> Result<InventoryDocument>
 where
-    F: Fn(usize, usize) + Sync,
+    F: Fn(u64, u64) + Sync,
 {
     let canonical_root = root.canonicalize()
         .with_context(|| format!("Dossier source inaccessible : {}", root.display()))?;
