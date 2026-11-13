@@ -6,18 +6,19 @@
 - [x] Fenêtre desktop initiale.
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
-- [x] CI Windows complète sur commit `df73f1a` : Clippy, tests, build Release et upload d'artefact.
-- [ ] Revalidation des derniers ajouts de repérage des notices et de progression.
+- [x] CI Windows complète sur commit `f83a9e3` : Clippy, tests, build Release et upload d'artefact.
+- [ ] Revalidation des derniers ajouts de provenance GitHub.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
-- [x] Si l'arbre récursif est tronqué, parcourir les sous-arbres avec détection de cycle et limite de profondeur.
+- [x] Si l'arbre récursif est tronqué, parcourir les sous-arbres avec détection de cycle sur la pile active (les arbres identiques réutilisés à plusieurs chemins restent inventoriés).
 - [x] Sous-dossier filtré côté interface.
 - [x] Exploration et téléchargement GitHub dans des workers d'arrière-plan.
 - [x] Progression de téléchargement par fichier.
 - [x] Timeout HTTP et diagnostic structuré des rate limits (429 / 403 avec quota épuisé).
+- [x] Manifeste de provenance des téléchargements : dépôt, référence demandée, commit SHA, tree SHA, horodatage, chemins et blob SHA.
 - [ ] Backoff automatique, reprise et affichage du quota restant.
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [ ] Téléchargement streaming, taille max, cache et reprise.
