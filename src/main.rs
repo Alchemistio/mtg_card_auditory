@@ -1,4 +1,5 @@
 mod github;
+mod inventory;
 mod models;
 
 use eframe::egui;
@@ -12,6 +13,8 @@ struct AuditorApp {
     subdirectory: String,
     token: String,
     workspace: String,
+    local_source: String,
+    local_inventory: Option<inventory::InventoryDocument>,
     status: String,
     entries: Vec<models::RemoteEntry>,
     selected: HashSet<String>,
@@ -36,6 +39,52 @@ impl AuditorApp {
         self.busy = false;
     }
 
+    fn scan_local(&mut self) {
+        if self.local_source.trim().is_empty() {
+            self.status = "Choisis un dossier source à analyser.".into();
+            return;
+        }
+        self.busy = true;
+        self.status = "Inventaire local et calcul SHA-256 en cours…".into();
+        match inventory::scan_directory(Path::new(self.local_source.trim())) {
+            Ok(document) => {
+                self.status = format!(
+                    "Inventaire terminé : {} fichiers, {} octets. Sources en lecture seule.",
+                    document.files_scanned, document.total_bytes
+                );
+                self.local_inventory = Some(document);
+            }
+            Err(error) => self.status = format!("Erreur d'inventaire : {:#}", error),
+        }
+        self.busy = false;
+    }
+
+    fn export_local_json(&mut self) {
+        let Some(document) = self.local_inventory.as_ref() else {
+            self.status = "Aucun inventaire à exporter.".into();
+            return;
+        };
+        if let Some(path) = rfd::FileDialog::new().set_file_name("asset-inventory.json").save_file() {
+            match inventory::export_json(document, &path) {
+                Ok(()) => self.status = format!("Inventaire JSON exporté : {}", path.display()),
+                Err(error) => self.status = format!("Échec export JSON : {:#}", error),
+            }
+        }
+    }
+
+    fn export_local_csv(&mut self) {
+        let Some(document) = self.local_inventory.as_ref() else {
+            self.status = "Aucun inventaire à exporter.".into();
+            return;
+        };
+        if let Some(path) = rfd::FileDialog::new().set_file_name("asset-inventory.csv").save_file() {
+            match inventory::export_csv(document, &path) {
+                Ok(()) => self.status = format!("Inventaire CSV exporté : {}", path.display()),
+                Err(error) => self.status = format!("Échec export CSV : {:#}", error),
+            }
+        }
+    }
+
     fn download_selected(&mut self) {
         let root = PathBuf::from(self.workspace.trim());
         if self.workspace.trim().is_empty() {
@@ -55,6 +104,7 @@ impl AuditorApp {
         }
         self.busy = true;
         let mut downloaded = 0usize;
+        let mut errors = Vec::new();
         for entry in chosen {
             let result = github::download_blob(&self.owner, &self.repository, &entry.sha, &self.token)
                 .and_then(|bytes| {
@@ -68,11 +118,15 @@ impl AuditorApp {
                 });
             match result {
                 Ok(()) => downloaded += 1,
-                Err(error) => self.status = format!("Erreur pour {} : {:#}", entry.path, error),
+                Err(error) => errors.push(format!("{} : {:#}", entry.path, error)),
             }
         }
         self.busy = false;
-        self.status = format!("{} fichier(s) téléchargé(s) dans {}. Sources GitHub inchangées.", downloaded, root.display());
+        self.status = if errors.is_empty() {
+            format!("{} fichier(s) téléchargé(s) dans {}. Sources GitHub inchangées.", downloaded, root.display())
+        } else {
+            format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}", downloaded, errors.len(), errors[0])
+        };
     }
 }
 
@@ -93,6 +147,28 @@ impl eframe::App for AuditorApp {
             ui.heading("MTG Asset Auditor");
             ui.label("Audit local et exploration de dépôts GitHub configurables");
             ui.separator();
+
+            ui.heading("Source locale");
+            ui.horizontal(|ui| {
+                ui.text_edit_singleline(&mut self.local_source);
+                if ui.button("Choisir un dossier…").clicked() {
+                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                        self.local_source = path.display().to_string();
+                    }
+                }
+                if ui.add_enabled(!self.busy, egui::Button::new("Analyser")).clicked() {
+                    self.scan_local();
+                }
+            });
+            if let Some(document) = self.local_inventory.as_ref() {
+                ui.label(format!("{} fichiers • {} octets • schéma v{}", document.files_scanned, document.total_bytes, document.schema_version));
+                ui.horizontal(|ui| {
+                    if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
+                    if ui.button("Exporter CSV…").clicked() { self.export_local_csv(); }
+                });
+            }
+
+            ui.separator();
             ui.heading("Source GitHub");
             ui.horizontal(|ui| {
                 ui.label("Propriétaire");
@@ -101,7 +177,7 @@ impl eframe::App for AuditorApp {
                 ui.text_edit_singleline(&mut self.repository);
             });
             ui.horizontal(|ui| {
-                ui.label("Branche (vide = HEAD)");
+                ui.label("Branche / tag / commit (vide = défaut)");
                 ui.text_edit_singleline(&mut self.branch);
             });
             ui.horizontal(|ui| {
@@ -115,6 +191,7 @@ impl eframe::App for AuditorApp {
             if ui.add_enabled(!self.busy, egui::Button::new("Explorer le dépôt")).clicked() {
                 self.connect();
             }
+
             ui.separator();
             ui.heading("Espace de travail");
             ui.horizontal(|ui| {
@@ -133,7 +210,7 @@ impl eframe::App for AuditorApp {
             });
             ui.separator();
             ui.heading("Fichiers distants");
-            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                 for entry in &self.entries {
                     if entry.kind != "blob" { continue; }
                     let mut checked = self.selected.contains(&entry.path);
@@ -150,7 +227,7 @@ impl eframe::App for AuditorApp {
             ui.separator();
             ui.label(&self.status);
             if self.busy { ui.spinner(); }
-            ui.small("Socle initial : exploration GitHub et téléchargement sélectif. Les analyseurs et rapports arrivent par étapes.");
+            ui.small("Socle en développement : inventaire local SHA-256 et exports JSON/CSV. Les sources ne sont jamais modifiées.");
         });
     }
 }
