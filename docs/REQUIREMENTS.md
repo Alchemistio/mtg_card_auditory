@@ -58,7 +58,7 @@ Les catégories automatiques restent des suggestions, jamais une validation.
 
 ## Performance et ergonomie
 - Traitement parallèle, limites mémoire et réseau.
-- Progression en octets, journal, annulation coopérative du scan local et des téléchargements GitHub entre deux blobs, puis reprise.
+- Progression en octets, journal persistant des téléchargements GitHub et annulation coopérative du scan local et des téléchargements entre deux blobs. À la relance, les fichiers terminés ne sont sautés qu'après vérification de leur taille et de leur SHA-1 Git ; les destinations invalides ne sont pas écrasées.
 - Cible de référence : 37 371 fichiers / environ 1,75 Go.
 - Interface française en premier.
 - Exécutable Windows x64 autonome, sans Python/Node/Docker/runtime externe.
