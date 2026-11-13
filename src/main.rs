@@ -954,6 +954,7 @@ mod write_tests {
         assert_eq!(workspace.inner.read(&nested).unwrap(), b"original");
         assert!(super::safe_workspace_relative("../outside").is_err());
         assert!(super::safe_workspace_relative("C:\\outside").is_err());
+        drop(workspace);
         fs::remove_dir_all(directory).unwrap();
     }
 
