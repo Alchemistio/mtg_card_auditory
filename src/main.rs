@@ -4,6 +4,7 @@ mod models;
 
 use anyhow::Context;
 use eframe::egui;
+use zeroize::Zeroizing;
 
 enum ScanMessage {
     Progress(u64, u64),
@@ -30,7 +31,7 @@ struct AuditorApp {
     remote_min_size: String,
     remote_max_size: String,
     remote_family_filter: String,
-    token: String,
+    token: Zeroizing<String>,
     workspace: String,
     local_source: String,
     local_filter: String,
@@ -55,7 +56,7 @@ impl AuditorApp {
             .and_then(|entry| entry.get_password().context("Lecture du jeton enregistré impossible"));
         match result {
             Ok(token) => {
-                self.token = token;
+                self.token = Zeroizing::new(token);
                 self.status = "Jeton GitHub chargé depuis le Gestionnaire d’identifiants Windows.".into();
             }
             Err(error) => self.status = format!("Aucun jeton disponible ou lecture impossible : {:#}", error),
@@ -82,7 +83,7 @@ impl AuditorApp {
             .and_then(|entry| entry.delete_credential().context("Suppression du jeton enregistré impossible"));
         match result {
             Ok(()) => {
-                self.token.clear();
+                self.token = Zeroizing::default();
                 self.status = "Jeton supprimé du Gestionnaire d’identifiants Windows et du champ courant.".into();
             }
             Err(error) => self.status = format!("Suppression impossible (jeton absent ou magasin indisponible) : {:#}", error),
@@ -93,7 +94,7 @@ impl AuditorApp {
         let owner = self.owner.clone();
         let repository = self.repository.clone();
         let branch = self.branch.clone();
-        let token = self.token.clone();
+        let token = Zeroizing::new(self.token.to_string());
         let (sender, receiver) = mpsc::channel();
         self.github_receiver = Some(receiver);
         self.busy = true;
@@ -266,7 +267,7 @@ impl AuditorApp {
         }
         let owner = self.owner.clone();
         let repository = self.repository.clone();
-        let token = self.token.clone();
+        let token = Zeroizing::new(self.token.to_string());
         let commit_sha = self.github_commit_sha.clone();
         let tree_sha = self.github_tree_sha.clone();
         let requested_reference = self.branch.clone();
