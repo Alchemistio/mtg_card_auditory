@@ -41,7 +41,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
 - La défense contre les modifications concurrentes du système de fichiers (TOCTOU) n'est pas complète.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
-- Le commit `c1c71fd` a passé la CI Windows complète (formatage, Clippy, tests, build Release et artefact). Les fonctionnalités ajoutées après ce commit restent en cours de validation CI.
+- La CI Windows complète est exécutée à chaque commit. Le statut du commit courant doit être vérifié dans l'onglet Actions ; ne pas extrapoler la validation d'un commit précédent.
 
 ## Développement
 Prérequis : Rust stable et Visual Studio Build Tools (MSVC).
