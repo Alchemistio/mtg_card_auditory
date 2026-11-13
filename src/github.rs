@@ -82,5 +82,7 @@ pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> R
         anyhow::bail!("Encodage de blob non pris en charge : {}", blob.encoding);
     }
     let compact = blob.content.replace('\n', "");
-    Ok(base64::engine::general_purpose::STANDARD.decode(compact).context("Décodage base64 impossible")?)
+    base64::engine::general_purpose::STANDARD
+        .decode(compact)
+        .context("Décodage base64 impossible")
 }
