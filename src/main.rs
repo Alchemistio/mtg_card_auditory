@@ -22,6 +22,8 @@ struct AuditorApp {
     owner: String,
     repository: String,
     branch: String,
+    github_commit_sha: String,
+    github_tree_sha: String,
     subdirectory: String,
     token: String,
     workspace: String,
@@ -31,7 +33,7 @@ struct AuditorApp {
     local_inventory: Option<inventory::InventoryDocument>,
     comparison: Option<inventory::InventoryComparison>,
     scan_receiver: Option<Receiver<ScanMessage>>,
-    github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
+    github_receiver: Option<Receiver<std::result::Result<models::RepositoryTree, String>>>,
     download_receiver: Option<Receiver<DownloadMessage>>,
     status: String,
     entries: Vec<models::RemoteEntry>,
@@ -194,6 +196,9 @@ impl AuditorApp {
         let owner = self.owner.clone();
         let repository = self.repository.clone();
         let token = self.token.clone();
+        let commit_sha = self.github_commit_sha.clone();
+        let tree_sha = self.github_tree_sha.clone();
+        let requested_reference = self.branch.clone();
         let (sender, receiver) = mpsc::channel();
         self.download_receiver = Some(receiver);
         self.busy = true;
@@ -204,6 +209,7 @@ impl AuditorApp {
                 let canonical_root = root.canonicalize()?;
                 let mut downloaded = 0usize;
                 let mut errors = Vec::new();
+                let mut manifest_files = Vec::new();
                 let total = chosen.len();
                 let progress_sender = sender.clone();
                 for (index, entry) in chosen.into_iter().enumerate() {
@@ -222,15 +228,44 @@ impl AuditorApp {
                             Ok(())
                         });
                     match result {
-                        Ok(()) => downloaded += 1,
+                        Ok(()) => {
+                            downloaded += 1;
+                            manifest_files.push(models::DownloadedFile {
+                                path: entry.path.clone(),
+                                blob_sha: entry.sha.clone(),
+                                size_bytes: entry.size.unwrap_or(0),
+                            });
+                        }
                         Err(error) => errors.push(format!("{} : {:#}", entry.path, error)),
                     }
                     let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                 }
-                if errors.is_empty() {
-                    Ok(format!("{} fichier(s) téléchargé(s) dans {}. Sources GitHub inchangées.", downloaded, canonical_root.display()))
+                let manifest_path = canonical_root.join(format!("download-manifest-{}.json", &commit_sha[..7.min(commit_sha.len())]));
+                let manifest_status = if !manifest_files.is_empty() && !commit_sha.is_empty() {
+                    if manifest_path.exists() {
+                        "Manifeste existant non écrasé.".to_string()
+                    } else {
+                        let manifest = models::DownloadManifest {
+                            schema_version: 1,
+                            provider: "github".to_string(),
+                            owner: owner.clone(),
+                            repository: repository.clone(),
+                            requested_reference: if requested_reference.trim().is_empty() { "default-branch".to_string() } else { requested_reference },
+                            commit_sha: commit_sha.clone(),
+                            tree_sha: tree_sha.clone(),
+                            downloaded_files: manifest_files,
+                        };
+                        let file = std::fs::File::create(&manifest_path)?;
+                        serde_json::to_writer_pretty(file, &manifest)?;
+                        format!(" Manifeste de provenance : {}", manifest_path.display())
+                    }
                 } else {
-                    Ok(format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}", downloaded, errors.len(), errors[0]))
+                    String::new()
+                };
+                if errors.is_empty() {
+                    Ok(format!("{} fichier(s) téléchargé(s) dans {}.{} Sources GitHub inchangées.", downloaded, canonical_root.display(), manifest_status))
+                } else {
+                    Ok(format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}.{}", downloaded, errors.len(), errors[0], manifest_status))
                 }
             })().unwrap_or_else(|error| format!("Échec du téléchargement : {:#}", error));
             let _ = sender.send(DownloadMessage::Finished(result));
@@ -311,13 +346,15 @@ impl eframe::App for AuditorApp {
             self.github_receiver = None;
             self.busy = false;
             match result {
-                Ok(entries) => {
+                Ok(listing) => {
                     let prefix = self.subdirectory.trim_matches('/').to_string();
-                    self.entries = entries.into_iter()
+                    self.github_commit_sha = listing.commit_sha;
+                    self.github_tree_sha = listing.tree_sha;
+                    self.entries = listing.entries.into_iter()
                         .filter(|entry| prefix.is_empty() || entry.path == prefix || entry.path.starts_with(&format!("{}/", prefix)))
                         .collect();
                     self.selected.clear();
-                    self.status = format!("{} entrées trouvées. Sources distantes inchangées.", self.entries.len());
+                    self.status = format!("{} entrées trouvées — commit {}. Sources distantes inchangées.", self.entries.len(), &self.github_commit_sha[..7.min(self.github_commit_sha.len())]);
                 }
                 Err(error) => self.status = format!("Erreur GitHub : {}", error),
             }
