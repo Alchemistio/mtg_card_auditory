@@ -17,6 +17,8 @@ struct AuditorApp {
     local_source: String,
     local_inventory: Option<inventory::InventoryDocument>,
     scan_receiver: Option<Receiver<std::result::Result<inventory::InventoryDocument, String>>>,
+    github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
+    download_receiver: Option<Receiver<String>>,
     status: String,
     entries: Vec<models::RemoteEntry>,
     selected: HashSet<String>,
@@ -25,20 +27,19 @@ struct AuditorApp {
 
 impl AuditorApp {
     fn connect(&mut self) {
+        let owner = self.owner.clone();
+        let repository = self.repository.clone();
+        let branch = self.branch.clone();
+        let token = self.token.clone();
+        let (sender, receiver) = mpsc::channel();
+        self.github_receiver = Some(receiver);
         self.busy = true;
-        self.status = "Exploration de l'arbre GitHub…".into();
-        match github::list_repository_tree(&self.owner, &self.repository, &self.branch, &self.token) {
-            Ok(entries) => {
-                let prefix = self.subdirectory.trim_matches('/');
-                self.entries = entries.into_iter()
-                    .filter(|e| prefix.is_empty() || e.path == prefix || e.path.starts_with(&format!("{}/", prefix)))
-                    .collect();
-                self.selected.clear();
-                self.status = format!("{} entrées trouvées. Sources distantes inchangées.", self.entries.len());
-            }
-            Err(error) => self.status = format!("Erreur GitHub : {:#}", error),
-        }
-        self.busy = false;
+        self.status = "Exploration GitHub en arrière-plan…".into();
+        std::thread::spawn(move || {
+            let result = github::list_repository_tree(&owner, &repository, &branch, &token)
+                .map_err(|error| format!("{:#}", error));
+            let _ = sender.send(result);
+        });
     }
 
     fn parse_url(&mut self) {
@@ -100,46 +101,54 @@ impl AuditorApp {
             self.status = "Choisis d'abord un dossier de travail.".into();
             return;
         }
-        if let Err(error) = std::fs::create_dir_all(&root) {
-            self.status = format!("Impossible de créer le workspace : {}", error);
-            return;
-        }
         let chosen: Vec<_> = self.entries.iter()
-            .filter(|e| self.selected.contains(&e.path) && e.kind == "blob")
+            .filter(|entry| self.selected.contains(&entry.path) && entry.kind == "blob")
             .cloned().collect();
         if chosen.is_empty() {
             self.status = "Aucun fichier sélectionné.".into();
             return;
         }
+        let owner = self.owner.clone();
+        let repository = self.repository.clone();
+        let token = self.token.clone();
+        let (sender, receiver) = mpsc::channel();
+        self.download_receiver = Some(receiver);
         self.busy = true;
-        let mut downloaded = 0usize;
-        let mut errors = Vec::new();
-        for entry in chosen {
-            let result = github::download_blob(&self.owner, &self.repository, &entry.sha, &self.token)
-                .and_then(|bytes| {
-                    let destination = safe_destination(&root, &entry.path)?;
-                    if destination.exists() {
-                        anyhow::bail!("Le fichier existe déjà dans le workspace : {}", destination.display());
+        self.status = "Téléchargement GitHub en arrière-plan…".into();
+        std::thread::spawn(move || {
+            let result = (|| -> anyhow::Result<String> {
+                std::fs::create_dir_all(&root)?;
+                let canonical_root = root.canonicalize()?;
+                let mut downloaded = 0usize;
+                let mut errors = Vec::new();
+                for entry in chosen {
+                    let result = github::download_blob(&owner, &repository, &entry.sha, &token)
+                        .and_then(|bytes| {
+                            let destination = safe_destination(&canonical_root, &entry.path)?;
+                            if destination.exists() {
+                                anyhow::bail!("Le fichier existe déjà : {}", destination.display());
+                            }
+                            if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent)?; }
+                            let canonical_parent = destination.parent().context("Parent de destination absent")?.canonicalize()?;
+                            if !canonical_parent.starts_with(&canonical_root) {
+                                anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
+                            }
+                            std::fs::write(destination, bytes)?;
+                            Ok(())
+                        });
+                    match result {
+                        Ok(()) => downloaded += 1,
+                        Err(error) => errors.push(format!("{} : {:#}", entry.path, error)),
                     }
-                    if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent)?; }
-                    let canonical_parent = destination.parent().unwrap().canonicalize()?;
-                    if !canonical_parent.starts_with(root.canonicalize()?) {
-                        anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
-                    }
-                    std::fs::write(destination, bytes)?;
-                    Ok(())
-                });
-            match result {
-                Ok(()) => downloaded += 1,
-                Err(error) => errors.push(format!("{} : {:#}", entry.path, error)),
-            }
-        }
-        self.busy = false;
-        self.status = if errors.is_empty() {
-            format!("{} fichier(s) téléchargé(s) dans {}. Sources GitHub inchangées.", downloaded, root.display())
-        } else {
-            format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}", downloaded, errors.len(), errors[0])
-        };
+                }
+                if errors.is_empty() {
+                    Ok(format!("{} fichier(s) téléchargé(s) dans {}. Sources GitHub inchangées.", downloaded, canonical_root.display()))
+                } else {
+                    Ok(format!("{} fichier(s) téléchargé(s), {} erreur(s). Première erreur : {}", downloaded, errors.len(), errors[0]))
+                }
+            })().unwrap_or_else(|error| format!("Échec du téléchargement : {:#}", error));
+            let _ = sender.send(result);
+        });
     }
 }
 
@@ -187,6 +196,36 @@ impl eframe::App for AuditorApp {
                 }
                 Err(error) => self.status = format!("Erreur d'inventaire : {}", error),
             }
+        }
+        let completed_github = self.github_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(TryRecvError::Disconnected) => Some(Err("Le worker GitHub s'est arrêté sans résultat.".to_string())),
+            Err(TryRecvError::Empty) => None,
+        });
+        if let Some(result) = completed_github {
+            self.github_receiver = None;
+            self.busy = false;
+            match result {
+                Ok(entries) => {
+                    let prefix = self.subdirectory.trim_matches('/').to_string();
+                    self.entries = entries.into_iter()
+                        .filter(|entry| prefix.is_empty() || entry.path == prefix || entry.path.starts_with(&format!("{}/", prefix)))
+                        .collect();
+                    self.selected.clear();
+                    self.status = format!("{} entrées trouvées. Sources distantes inchangées.", self.entries.len());
+                }
+                Err(error) => self.status = format!("Erreur GitHub : {}", error),
+            }
+        }
+        let completed_download = self.download_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(TryRecvError::Disconnected) => Some("Le worker de téléchargement s'est arrêté sans résultat.".to_string()),
+            Err(TryRecvError::Empty) => None,
+        });
+        if let Some(result) = completed_download {
+            self.download_receiver = None;
+            self.busy = false;
+            self.status = result;
         }
         if self.busy {
             ctx.request_repaint_after(Duration::from_millis(100));
