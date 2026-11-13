@@ -18,9 +18,30 @@ struct RepositoryResponse {
 }
 
 #[derive(Deserialize)]
+struct CommitResponse {
+    sha: String,
+}
+
+#[derive(Deserialize)]
 struct BlobResponse {
     content: String,
     encoding: String,
+}
+
+pub fn parse_repository_url(input: &str) -> Result<(String, String)> {
+    let trimmed = input.trim().trim_end_matches('/');
+    let without_scheme = trimmed.strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .unwrap_or(trimmed);
+    let without_host = without_scheme.strip_prefix("github.com/")
+        .context("URL GitHub attendue (github.com/owner/repository)")?;
+    let mut parts = without_host.split('/');
+    let owner = parts.next().unwrap_or_default();
+    let repository = parts.next().unwrap_or_default().trim_end_matches(".git");
+    if owner.is_empty() || repository.is_empty() || owner.contains(':') || owner.contains('@') {
+        anyhow::bail!("URL de dépôt GitHub invalide.");
+    }
+    Ok((owner.to_string(), repository.to_string()))
 }
 
 fn api_get(url: &str, token: &str) -> Result<Response> {
@@ -44,26 +65,25 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
     if owner.is_empty() || repository.is_empty() {
         anyhow::bail!("Le propriétaire et le nom du dépôt sont obligatoires.");
     }
+    let repo_base = format!(
+        "https://api.github.com/repos/{}/{}",
+        urlencoding::encode(owner),
+        urlencoding::encode(repository)
+    );
     let reference = if branch.trim().is_empty() {
-        let repo_url = format!(
-            "https://api.github.com/repos/{}/{}",
-            urlencoding::encode(owner),
-            urlencoding::encode(repository)
-        );
-        let metadata: RepositoryResponse = api_get(&repo_url, token)?
+        let metadata: RepositoryResponse = api_get(&repo_base, token)?
             .json()
             .context("Impossible de déterminer la branche par défaut")?;
         metadata.default_branch
     } else {
         branch.trim().to_string()
     };
-    let url = format!(
-        "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
-        urlencoding::encode(owner),
-        urlencoding::encode(repository),
-        urlencoding::encode(&reference)
-    );
-    let tree: TreeResponse = api_get(&url, token)?.json().context("Réponse GitHub invalide")?;
+    let commit_url = format!("{}/commits/{}", repo_base, urlencoding::encode(&reference));
+    let commit: CommitResponse = api_get(&commit_url, token)?
+        .json()
+        .context("Impossible de résoudre la référence en commit immuable")?;
+    let tree_url = format!("{}/git/trees/{}?recursive=1", repo_base, commit.sha);
+    let tree: TreeResponse = api_get(&tree_url, token)?.json().context("Réponse GitHub invalide")?;
     if tree.truncated {
         anyhow::bail!("Arbre GitHub tronqué. L'exploration récursive par sous-arbres sera ajoutée dans la phase de robustesse.");
     }
@@ -85,4 +105,23 @@ pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> R
     base64::engine::general_purpose::STANDARD
         .decode(compact)
         .context("Décodage base64 impossible")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_supported_github_repository_urls() {
+        assert_eq!(parse_repository_url("https://github.com/octocat/Hello-World").unwrap(),
+            ("octocat".to_string(), "Hello-World".to_string()));
+        assert_eq!(parse_repository_url("https://github.com/octocat/Hello-World.git/").unwrap(),
+            ("octocat".to_string(), "Hello-World".to_string()));
+    }
+
+    #[test]
+    fn rejects_non_github_urls() {
+        assert!(parse_repository_url("https://example.com/octocat/repo").is_err());
+        assert!(parse_repository_url("https://github.com/octocat").is_err());
+    }
 }
