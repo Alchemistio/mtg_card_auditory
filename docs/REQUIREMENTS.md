@@ -10,7 +10,7 @@ Outil Windows autonome en Rust pour auditer les assets d'un dossier local ou de 
 - Détection de la branche par défaut.
 - Jeton à permissions minimales pour dépôts privés, masqué et jamais écrit en clair.
 - Exploration de l'arbre Git sans cloner les binaires en masse.
-- Téléchargement sélectif, cache par commit/blob SHA, reprise et limites de concurrence.
+- Téléchargement sélectif, cache par commit/blob SHA, reprise et limites de concurrence ; taille maximale de blob et validation de cohérence entre taille déclarée et octets reçus.
 - Gestion des arbres tronqués, rate limits, erreurs 403/404/429 et réseau ; retries bornés pour les erreurs transitoires, respect prudent de `Retry-After` et diagnostic du reset de quota.
 - Aucun dépôt cible codé en dur.
 
