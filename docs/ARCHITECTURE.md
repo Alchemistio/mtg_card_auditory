@@ -2,10 +2,10 @@
 
 ## État de l'implémentation
 Le prototype est organisé en modules Rust :
-- `main.rs` : interface egui, workers d'arrière-plan, choix des sources et actions d'export.
+- `main.rs` : interface egui, workers d'arrière-plan, choix des sources et actions d'export/comparaison.
 - `github.rs` : API REST, parsing URL, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
 - `models.rs` : entrées d'arbre GitHub.
-- `inventory.rs` : parcours local parallèle, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, doublons exacts, planches raster PNG paginées et exports JSON/CSV/HTML.
+- `inventory.rs` : parcours local parallèle, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
 - `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
 
 Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'affichage pendant le scan local ou les opérations GitHub. L'annulation et la progression détaillée ne sont pas encore implémentées.
@@ -27,7 +27,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 4. Classifier indicativement par extension.
 5. Extraire dimensions, format, type de canaux et alpha raster sans décodage complet ; analyser le XML SVG sans rendu ; relever famille/sous-famille des polices prises en charge ; inspecter la table centrale ZIP sans extraction.
 6. Détecter les doublons exacts par SHA-256 sans supprimer ni modifier les fichiers.
-7. Détecter les doublons exacts par SHA-256 sans supprimer les sources.
+7. Comparer avec un inventaire JSON antérieur par chemin et SHA-256.
 8. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source.
 9. Générer des planches raster PNG de 16 éléments/page et un index texte ; le SHA est revérifié avant décodage.
 
@@ -39,7 +39,7 @@ Source, inventaire, analyse calculée, revue humaine et exports sont séparés. 
 - `runs/run-id/inventory.json`
 - `runs/run-id/assets.csv`
 - `runs/run-id/report.html`
-- `runs/run-id/contact-sheets/` (à implémenter)
+- `runs/run-id/contact-sheets/`
 - `runs/run-id/gallery/index.html` (à implémenter)
 - `runs/run-id/logs/` (à implémenter)
 
@@ -50,7 +50,7 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
-- Les miniatures, aperçu SVG sandboxé, MSE, licences/provenance et comparaison d'inventaires sont à faire.
+- Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `45e601e` a passé Clippy, tests, build Release et upload d'artefact ; les changements UI/HTML/doublons postérieurs doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `6310f92` a passé Clippy, tests, build Release et upload d'artefact ; les changements raster alpha, planches et comparaison doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
