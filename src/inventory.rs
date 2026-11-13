@@ -389,6 +389,9 @@ pub fn export_csv(document: &InventoryDocument, destination: &Path) -> Result<()
 
 pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, destination: &Path) -> Result<usize> {
     ensure_export_outside_source(document, destination)?;
+    if destination.extension().and_then(|extension| extension.to_str()).is_none_or(|extension| !extension.eq_ignore_ascii_case("png")) {
+        anyhow::bail!("La planche de contact doit être exportée au format PNG.");
+    }
     if destination.exists() {
         anyhow::bail!("Le fichier de planche existe déjà : {}", destination.display());
     }
@@ -412,6 +415,10 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
     let mut rendered = 0usize;
     for (slot, asset) in selected.iter().enumerate() {
         let source = source_root.join(&asset.relative_path);
+        if std::fs::symlink_metadata(&source).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(true) {
+            index_text.push_str(&format!("{:02}\tLIEN SYMBOLIQUE OU SOURCE ABSENTE\t{}\n", slot + 1, asset.relative_path));
+            continue;
+        }
         let current_hash = match sha256_file(&source) {
             Ok(hash) => hash,
             Err(_) => {
