@@ -58,7 +58,7 @@ Les catégories automatiques restent des suggestions, jamais une validation.
 
 ## Performance et ergonomie
 - Traitement parallèle, limites mémoire et réseau.
-- Progression, journal, annulation coopérative du scan local, annulation des téléchargements et reprise.
+- Progression en octets, journal, annulation coopérative du scan local, annulation des téléchargements et reprise.
 - Cible de référence : 37 371 fichiers / environ 1,75 Go.
 - Interface française en premier.
 - Exécutable Windows x64 autonome, sans Python/Node/Docker/runtime externe.
