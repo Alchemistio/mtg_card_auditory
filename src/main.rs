@@ -191,8 +191,8 @@ impl eframe::App for AuditorApp {
             match result {
                 Ok(document) => {
                     self.status = format!(
-                        "Inventaire terminé : {} fichiers, {} octets. Sources en lecture seule.",
-                        document.files_scanned, document.total_bytes
+                        "Inventaire terminé : {} fichiers, {} octets, {} doublon(s) exact(s). Sources en lecture seule.",
+                        document.files_scanned, document.total_bytes, document.duplicate_files
                     );
                     self.local_inventory = Some(document);
                 }
@@ -250,7 +250,7 @@ impl eframe::App for AuditorApp {
                 }
             });
             if let Some(document) = self.local_inventory.as_ref() {
-                ui.label(format!("{} fichiers • {} octets • schéma v{}", document.files_scanned, document.total_bytes, document.schema_version));
+                ui.label(format!("{} fichiers • {} octets • {} doublons exacts • schéma v{}", document.files_scanned, document.total_bytes, document.duplicate_files, document.schema_version));
                 ui.horizontal(|ui| {
                     if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
                     if ui.button("Exporter CSV…").clicked() { self.export_local_csv(); }
@@ -285,6 +285,9 @@ impl eframe::App for AuditorApp {
                             }
                             if let Some(count) = asset.archive_entry_count {
                                 ui.label(format!("ZIP : {} entrées", count));
+                            }
+                            if let Some(first_path) = &asset.duplicate_of {
+                                ui.colored_label(egui::Color32::LIGHT_BLUE, format!("Doublon de {}", first_path));
                             }
                             if let Some(warning) = &asset.analysis_warning {
                                 ui.colored_label(egui::Color32::YELLOW, warning);
