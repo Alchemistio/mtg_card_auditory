@@ -4,6 +4,11 @@ mod models;
 
 use anyhow::Context;
 use eframe::egui;
+
+enum ScanMessage {
+    Progress(usize, usize),
+    Finished(std::result::Result<inventory::InventoryDocument, String>),
+}
 use std::{collections::HashSet, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
 
 #[derive(Default)]
@@ -20,7 +25,7 @@ struct AuditorApp {
     contact_page: String,
     local_inventory: Option<inventory::InventoryDocument>,
     comparison: Option<inventory::InventoryComparison>,
-    scan_receiver: Option<Receiver<std::result::Result<inventory::InventoryDocument, String>>>,
+    scan_receiver: Option<Receiver<ScanMessage>>,
     github_receiver: Option<Receiver<std::result::Result<Vec<models::RemoteEntry>, String>>>,
     download_receiver: Option<Receiver<String>>,
     status: String,
@@ -68,8 +73,11 @@ impl AuditorApp {
         self.busy = true;
         self.status = "Inventaire local parallèle et calcul SHA-256 en arrière-plan…".into();
         std::thread::spawn(move || {
-            let result = inventory::scan_directory(&source).map_err(|error| format!("{:#}", error));
-            let _ = sender.send(result);
+            let progress_sender = sender.clone();
+            let result = inventory::scan_directory_with_progress(&source, |done, total| {
+                let _ = progress_sender.send(ScanMessage::Progress(done, total));
+            }).map_err(|error| format!("{:#}", error));
+            let _ = sender.send(ScanMessage::Finished(result));
         });
     }
 
@@ -248,23 +256,42 @@ fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
 
 impl eframe::App for AuditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let completed_scan = self.scan_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
-            Ok(result) => Some(result),
-            Err(TryRecvError::Disconnected) => Some(Err("Le worker d'inventaire s'est arrêté sans résultat.".to_string())),
-            Err(TryRecvError::Empty) => None,
-        });
-        if let Some(result) = completed_scan {
-            self.scan_receiver = None;
-            self.busy = false;
-            match result {
-                Ok(document) => {
-                    self.status = format!(
-                        "Inventaire terminé : {} fichiers, {} octets, {} doublon(s) exact(s). Sources en lecture seule.",
-                        document.files_scanned, document.total_bytes, document.duplicate_files
-                    );
-                    self.local_inventory = Some(document);
+        let mut scan_messages = Vec::new();
+        if let Some(receiver) = self.scan_receiver.as_ref() {
+            loop {
+                match receiver.try_recv() {
+                    Ok(message) => {
+                        let finished = matches!(message, ScanMessage::Finished(_));
+                        scan_messages.push(message);
+                        if finished { break; }
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        scan_messages.push(ScanMessage::Finished(Err("Le worker d'inventaire s'est arrêté sans résultat.".to_string())));
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => break,
                 }
-                Err(error) => self.status = format!("Erreur d'inventaire : {}", error),
+            }
+        }
+        for message in scan_messages {
+            match message {
+                ScanMessage::Progress(done, total) => {
+                    self.status = format!("Analyse en cours : {} / {} fichiers…", done, total);
+                }
+                ScanMessage::Finished(result) => {
+                    self.scan_receiver = None;
+                    self.busy = false;
+                    match result {
+                        Ok(document) => {
+                            self.status = format!(
+                                "Inventaire terminé : {} fichiers, {} octets, {} doublon(s) exact(s). Sources en lecture seule.",
+                                document.files_scanned, document.total_bytes, document.duplicate_files
+                            );
+                            self.local_inventory = Some(document);
+                        }
+                        Err(error) => self.status = format!("Erreur d'inventaire : {}", error),
+                    }
+                }
             }
         }
         let completed_github = self.github_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
