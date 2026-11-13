@@ -293,7 +293,7 @@ fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
 
 pub fn verify_git_blob_reader<R: Read>(expected_sha: &str, reader: &mut R, expected_size: u64) -> Result<()> {
     let mut hasher = Sha1::new();
-    hasher.update(format!("blob {}\\0", expected_size).as_bytes());
+    hasher.update(format!("blob {}\0", expected_size).as_bytes());
     let mut buffer = [0u8; 64 * 1024];
     let mut total = 0u64;
     loop {

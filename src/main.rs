@@ -493,7 +493,7 @@ impl WorkspaceDir {
         Ok(self.inner.read_to_string(relative)?)
     }
 
-    fn symlink_metadata(&self, relative: &Path) -> anyhow::Result<std::fs::Metadata> {
+    fn symlink_metadata(&self, relative: &Path) -> anyhow::Result<cap_std::fs::Metadata> {
         Ok(self.inner.symlink_metadata(relative)?)
     }
 
