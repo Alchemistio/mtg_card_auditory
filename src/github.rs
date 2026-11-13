@@ -82,28 +82,83 @@ pub fn parse_repository_url(input: &str) -> Result<(String, String)> {
     Ok((owner.to_string(), repository.to_string()))
 }
 
+const MAX_HTTP_RETRIES: usize = 3;
+const MAX_RETRY_AFTER_SECS: u64 = 10;
+
+fn retry_delay(attempt: usize, retry_after: Option<&str>) -> Duration {
+    if let Some(seconds) = retry_after.and_then(|value| value.trim().parse::<u64>().ok()) {
+        return Duration::from_secs(seconds.min(MAX_RETRY_AFTER_SECS));
+    }
+    Duration::from_millis(500_u64.saturating_mul(1_u64 << attempt.min(4)))
+}
+
+fn retryable_status(status: reqwest::StatusCode, retry_after_present: bool) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status == reqwest::StatusCode::BAD_GATEWAY
+        || status == reqwest::StatusCode::SERVICE_UNAVAILABLE
+        || status == reqwest::StatusCode::GATEWAY_TIMEOUT
+        || (status == reqwest::StatusCode::FORBIDDEN && retry_after_present)
+}
+
 fn api_get(url: &str, token: &str) -> Result<Response> {
     let client = Client::builder()
         .user_agent("mtg-asset-auditor")
         .timeout(Duration::from_secs(60))
         .build()?;
-    let mut request = client.get(url).header(ACCEPT, "application/vnd.github+json");
-    if !token.trim().is_empty() {
-        request = request.bearer_auth(token.trim());
-    }
-    let response = request.send().with_context(|| format!("Requête GitHub impossible : {}", url))?;
-    let status = response.status();
-    if !status.is_success() {
-        let remaining = response.headers().get("x-ratelimit-remaining").and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
-        let reset = response.headers().get("x-ratelimit-reset").and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
-        let retry_after = response.headers().get("retry-after").and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
+
+    for attempt in 0..=MAX_HTTP_RETRIES {
+        let mut request = client.get(url).header(ACCEPT, "application/vnd.github+json");
+        if !token.trim().is_empty() {
+            request = request.bearer_auth(token.trim());
+        }
+
+        let response = match request.send() {
+            Ok(response) => response,
+            Err(error) if attempt < MAX_HTTP_RETRIES && (error.is_timeout() || error.is_connect()) => {
+                std::thread::sleep(retry_delay(attempt, None));
+                continue;
+            }
+            Err(error) => {
+                return Err(error).with_context(|| format!("Requête GitHub impossible : {}", url));
+            }
+        };
+
+        let status = response.status();
+        if status.is_success() {
+            return Ok(response);
+        }
+
+        let remaining = response.headers().get("x-ratelimit-remaining")
+            .and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
+        let reset = response.headers().get("x-ratelimit-reset")
+            .and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
+        let retry_after = response.headers().get("retry-after")
+            .and_then(|value| value.to_str().ok()).map(str::to_owned);
+        let retryable = retryable_status(status, retry_after.is_some());
         let body = response.text().unwrap_or_default();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS || (status == reqwest::StatusCode::FORBIDDEN && remaining == "0") {
-            anyhow::bail!("Limite de l'API GitHub atteinte. Retry-After={} s ; reset Unix={} ; détail={}", retry_after, reset, body);
+
+        if retryable && attempt < MAX_HTTP_RETRIES {
+            std::thread::sleep(retry_delay(attempt, retry_after.as_deref()));
+            continue;
+        }
+
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS
+            || (status == reqwest::StatusCode::FORBIDDEN && remaining == "0")
+            || (status == reqwest::StatusCode::FORBIDDEN && retry_after.is_some())
+        {
+            anyhow::bail!(
+                "Limite de l'API GitHub atteinte après {} tentative(s). Retry-After={} s ; quota restant={} ; reset Unix={} ; détail={}",
+                attempt + 1,
+                retry_after.as_deref().unwrap_or("non communiqué"),
+                if remaining.is_empty() { "inconnu" } else { &remaining },
+                if reset.is_empty() { "inconnu" } else { &reset },
+                body
+            );
         }
         anyhow::bail!("GitHub a répondu {}: {}", status, body);
     }
-    Ok(response)
+
+    anyhow::bail!("Échec inattendu des tentatives HTTP GitHub.")
 }
 
 fn repository_base(owner: &str, repository: &str) -> String {
@@ -224,6 +279,25 @@ pub fn download_blob(owner: &str, repository: &str, sha: &str, token: &str) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retries_transient_github_responses_only() {
+        assert!(retryable_status(reqwest::StatusCode::TOO_MANY_REQUESTS, false));
+        assert!(retryable_status(reqwest::StatusCode::BAD_GATEWAY, false));
+        assert!(retryable_status(reqwest::StatusCode::SERVICE_UNAVAILABLE, false));
+        assert!(retryable_status(reqwest::StatusCode::FORBIDDEN, true));
+        assert!(!retryable_status(reqwest::StatusCode::FORBIDDEN, false));
+        assert!(!retryable_status(reqwest::StatusCode::NOT_FOUND, true));
+    }
+
+    #[test]
+    fn retry_delay_is_bounded_and_honors_retry_after_seconds() {
+        assert_eq!(retry_delay(0, None), Duration::from_millis(500));
+        assert_eq!(retry_delay(2, None), Duration::from_millis(2000));
+        assert_eq!(retry_delay(0, Some("4")), Duration::from_secs(4));
+        assert_eq!(retry_delay(0, Some("999")), Duration::from_secs(MAX_RETRY_AFTER_SECS));
+        assert_eq!(retry_delay(0, Some("invalid")), Duration::from_millis(500));
+    }
 
     #[test]
     fn parses_supported_github_repository_urls() {
