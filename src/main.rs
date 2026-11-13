@@ -781,7 +781,11 @@ impl eframe::App for AuditorApp {
             });
             ui.horizontal(|ui| {
                 ui.label("Jeton GitHub (dépôt privé)");
-                ui.add(egui::TextEdit::singleline(&mut self.token).password(true).desired_width(300.0));
+                let mut token_edit = Zeroizing::new(self.token.to_string());
+                let response = ui.add(egui::TextEdit::singleline(&mut *token_edit).password(true).desired_width(300.0));
+                if response.changed() {
+                    self.token = Zeroizing::new(token_edit.to_string());
+                }
             });
             ui.horizontal(|ui| {
                 if ui.button("Charger le jeton enregistré").clicked() { self.load_github_token(); }
