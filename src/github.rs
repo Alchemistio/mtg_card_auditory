@@ -290,6 +290,65 @@ pub fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+pub fn verify_git_blob_file(expected_sha: &str, path: &Path, expected_size: u64) -> Result<()> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha1::new();
+    hasher.update(format!("blob {}\\0", expected_size).as_bytes());
+    let mut buffer = [0u8; 64 * 1024];
+    let mut total = 0u64;
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 { break; }
+        total = total.saturating_add(count as u64);
+        if total > expected_size { anyhow::bail!("Fichier cache plus grand que la taille attendue."); }
+        hasher.update(&buffer[..count]);
+    }
+    if total != expected_size { anyhow::bail!("Fichier cache incomplet : {} octets, {} attendus.", total, expected_size); }
+    let actual = format!("{:x}", hasher.finalize());
+    if !actual.eq_ignore_ascii_case(expected_sha.trim()) {
+        anyhow::bail!("Empreinte Git blob invalide : {} reçue, {} attendue.", actual, expected_sha);
+    }
+    Ok(())
+}
+
+pub fn download_blob_to_file(owner: &str, repository: &str, sha: &str, token: &str,
+    expected_size: Option<u64>, destination: &Path) -> Result<()> {
+    let expected_size = validate_blob_size(expected_size)?;
+    let url = format!("{}/git/blobs/{}", repository_base(owner, repository), urlencoding::encode(sha.trim()));
+    let mut response = api_get_with_accept(&url, token, "application/vnd.github.raw")?;
+    if response.content_length().is_some_and(|length| length > expected_size) {
+        anyhow::bail!("Réponse blob GitHub supérieure à la taille déclarée.");
+    }
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(destination)
+        .with_context(|| format!("Fichier temporaire déjà présent ou inaccessible : {}", destination.display()))?;
+    let result = (|| -> Result<()> {
+        let mut hasher = Sha1::new();
+        hasher.update(format!("blob {}\\0", expected_size).as_bytes());
+        let mut buffer = [0u8; 64 * 1024];
+        let mut total = 0u64;
+        loop {
+            let count = response.read(&mut buffer).context("Lecture du flux blob GitHub impossible")?;
+            if count == 0 { break; }
+            total = total.checked_add(count as u64).context("Taille du blob débordée")?;
+            if total > expected_size { anyhow::bail!("Blob GitHub plus grand que la taille déclarée."); }
+            hasher.update(&buffer[..count]);
+            file.write_all(&buffer[..count])?;
+        }
+        if total != expected_size { anyhow::bail!("Blob GitHub incomplet : {} octets reçus, {} attendus.", total, expected_size); }
+        let actual = format!("{:x}", hasher.finalize());
+        if !actual.eq_ignore_ascii_case(sha.trim()) {
+            anyhow::bail!("Empreinte Git blob invalide : {} reçue, {} attendue.", actual, sha);
+        }
+        file.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        drop(file);
+        let _ = std::fs::remove_file(destination);
+    }
+    result
+}
+
 #[cfg(test)]
 mod blob_size_tests {
     use super::*;
