@@ -27,7 +27,8 @@
 - [ ] Dépôts privés et stockage du jeton dans Windows Credential Manager.
 - [x] Taille maximale par blob (90 Mio), réponse JSON bornée (128 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
 - [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
-- [ ] Téléchargement streaming des blobs volumineux et reprise d'un blob interrompu.
+- [x] Téléchargement streaming des blobs GitHub vers le cache temporaire, contrôle taille et SHA-1 Git en flux, puis copie vers la destination sans charger le blob entier en mémoire.
+- [ ] Reprise d'un blob interrompu au niveau des octets (Range/ETag ou mécanisme équivalent).
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
