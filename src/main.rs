@@ -262,11 +262,9 @@ impl eframe::App for AuditorApp {
                     self.scan_local();
                 }
             });
-            if self.local_inventory.is_some() {
-                let (files_scanned, total_bytes, duplicate_files, schema_version) = {
-                    let document = self.local_inventory.as_ref().unwrap();
-                    (document.files_scanned, document.total_bytes, document.duplicate_files, document.schema_version)
-                };
+            if let Some((files_scanned, total_bytes, duplicate_files, schema_version)) = self.local_inventory.as_ref().map(|document| {
+                (document.files_scanned, document.total_bytes, document.duplicate_files, document.schema_version)
+            }) {
                 ui.label(format!("{} fichiers • {} octets • {} doublons exacts • schéma v{}", files_scanned, total_bytes, duplicate_files, schema_version));
                 ui.horizontal(|ui| {
                     if ui.button("Exporter JSON…").clicked() { self.export_local_json(); }
