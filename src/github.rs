@@ -293,7 +293,7 @@ pub fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
 pub fn verify_git_blob_file(expected_sha: &str, path: &Path, expected_size: u64) -> Result<()> {
     let mut file = File::open(path)?;
     let mut hasher = Sha1::new();
-    hasher.update(format!("blob {}\\0", expected_size).as_bytes());
+    hasher.update(format!("blob {}\0", expected_size).as_bytes());
     let mut buffer = [0u8; 64 * 1024];
     let mut total = 0u64;
     loop {
@@ -323,7 +323,7 @@ pub fn download_blob_to_file(owner: &str, repository: &str, sha: &str, token: &s
         .with_context(|| format!("Fichier temporaire déjà présent ou inaccessible : {}", destination.display()))?;
     let result = (|| -> Result<()> {
         let mut hasher = Sha1::new();
-        hasher.update(format!("blob {}\\0", expected_size).as_bytes());
+        hasher.update(format!("blob {}\0", expected_size).as_bytes());
         let mut buffer = [0u8; 64 * 1024];
         let mut total = 0u64;
         loop {
