@@ -356,10 +356,10 @@ impl AuditorApp {
                         let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                         continue;
                     }
-                    let result = cached_github_blob(&canonical_root, &owner, &repository, &commit_sha, &entry.sha, entry.size, &token)
+                    let result = cached_github_blob(&workspace_fs, &owner, &repository, &commit_sha, &entry.sha, entry.size, &token)
                         .and_then(|cache_file| {
                             let destination = safe_workspace_relative(&entry.path)?;
-                            let mut source = std::fs::File::open(&cache_file)?;
+                            let mut source = workspace_fs.open_read(&cache_file)?;
                             let mut target = workspace_fs.create_new(&destination)
                                 .with_context(|| format!("Écriture capability sans écrasement impossible : {}", entry.path))?;
                             if let Err(error) = std::io::copy(&mut source, &mut target).and_then(|_| target.sync_all()) {
@@ -526,7 +526,7 @@ fn safe_workspace_relative(relative: &str) -> anyhow::Result<PathBuf> {
 }
 
 fn cached_github_blob(
-    workspace: &Path,
+    workspace: &WorkspaceDir,
     owner: &str,
     repository: &str,
     commit_sha: &str,
@@ -535,44 +535,62 @@ fn cached_github_blob(
     token: &str,
 ) -> anyhow::Result<PathBuf> {
     fn safe_segment(value: &str) -> bool {
-        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-            && value != "." && value != ".."
+        !value.is_empty()
+            && value != "."
+            && value != ".."
+            && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
     }
     if !safe_segment(owner) || !safe_segment(repository) || !safe_segment(commit_sha) || !safe_segment(blob_sha) {
         anyhow::bail!("Identifiant de cache GitHub invalide.");
     }
     let size = expected_size.context("Taille du blob absente.")?;
-    let cache_root = workspace.join(".mtg-auditor-cache").join("github").join(owner).join(repository).join(commit_sha);
-    std::fs::create_dir_all(&cache_root)?;
-    let canonical_cache = cache_root.canonicalize()?;
-    if !canonical_cache.starts_with(workspace) { anyhow::bail!("Le cache GitHub sort du workspace."); }
-    let cache_file = canonical_cache.join(format!("{}.blob", blob_sha));
-    if let Ok(metadata) = std::fs::symlink_metadata(&cache_file) {
+    let cache_directory = PathBuf::from(".mtg-auditor-cache").join("github")
+        .join(owner).join(repository).join(commit_sha);
+    workspace.create_dir_all(&cache_directory)?;
+    let cache_file = cache_directory.join(format!("{}.blob", blob_sha));
+    if let Ok(metadata) = workspace.symlink_metadata(&cache_file) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             anyhow::bail!("Entrée de cache non régulière ou lien symbolique refusé.");
         }
-        if github::verify_git_blob_file(blob_sha, &cache_file, size).is_ok() { return Ok(cache_file); }
-        std::fs::remove_file(&cache_file).context("Impossible d'écarter une entrée de cache invalide")?;
+        let valid = workspace.open_read(&cache_file)
+            .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).map_err(std::io::Error::other))
+            .is_ok();
+        if valid { return Ok(cache_file); }
+        workspace.remove_file(&cache_file).context("Impossible d'écarter une entrée de cache invalide")?;
     }
-    let temporary = canonical_cache.join(format!(".{}.{}.tmp", blob_sha, std::process::id()));
-    if let Ok(metadata) = std::fs::symlink_metadata(&temporary) {
+
+    let temporary = cache_directory.join(format!(".{}.{}.tmp", blob_sha, std::process::id()));
+    if let Ok(metadata) = workspace.symlink_metadata(&temporary) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             anyhow::bail!("Fichier temporaire de cache non régulier ou lien symbolique refusé.");
         }
-        std::fs::remove_file(&temporary).context("Impossible de nettoyer un fichier temporaire abandonné")?;
+        workspace.remove_file(&temporary).context("Impossible de nettoyer un fichier temporaire abandonné")?;
     }
-    github::download_blob_to_file(owner, repository, blob_sha, token, expected_size, &temporary)
+
+    github::download_blob_to_file(owner, repository, blob_sha, token, expected_size, &workspace.inner, &temporary)
         .context("Téléchargement streaming du blob impossible")?;
-    match std::fs::rename(&temporary, &cache_file) {
-        Ok(()) => Ok(cache_file),
-        Err(_error) if cache_file.exists() => {
-            let _ = std::fs::remove_file(&temporary);
-            github::verify_git_blob_file(blob_sha, &cache_file, size)?;
+    let verified = workspace.open_read(&temporary)
+        .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).map_err(std::io::Error::other));
+    if let Err(error) = verified {
+        let _ = workspace.remove_file(&temporary);
+        return Err(error).context("Vérification du fichier temporaire de cache impossible");
+    }
+
+    match workspace.inner.hard_link(&temporary, &workspace.inner, &cache_file) {
+        Ok(()) => {
+            workspace.remove_file(&temporary)?;
+            Ok(cache_file)
+        }
+        Err(error) if workspace.symlink_metadata(&cache_file).is_ok() => {
+            let _ = workspace.remove_file(&temporary);
+            let mut existing = workspace.open_read(&cache_file)?;
+            github::verify_git_blob_reader(blob_sha, &mut existing, size)
+                .context("Une entrée de cache concurrente existe mais son empreinte est invalide")?;
             Ok(cache_file)
         }
         Err(error) => {
-            let _ = std::fs::remove_file(&temporary);
-            Err(error.into())
+            let _ = workspace.remove_file(&temporary);
+            Err(error).context("Publication atomique du cache sans écrasement impossible")
         }
     }
 }

@@ -316,19 +316,39 @@ pub fn verify_git_blob_file(expected_sha: &str, path: &Path, expected_size: u64)
     verify_git_blob_reader(expected_sha, &mut file, expected_size)
 }
 
-pub fn download_blob_to_file(owner: &str, repository: &str, sha: &str, token: &str,
-    expected_size: Option<u64>, destination: &Path) -> Result<()> {
+pub fn download_blob_to_file(
+    owner: &str,
+    repository: &str,
+    sha: &str,
+    token: &str,
+    expected_size: Option<u64>,
+    workspace: &cap_std::fs::Dir,
+    destination: &Path,
+) -> Result<()> {
     let expected_size = validate_blob_size(expected_size)?;
+    if destination.is_absolute()
+        || destination.components().any(|component| !matches!(component, std::path::Component::Normal(_))) {
+        anyhow::bail!("Chemin temporaire de cache non relatif ou invalide.");
+    }
+    let name = destination.file_name().context("Nom du fichier temporaire absent")?;
+    let parent = destination.parent().unwrap_or_else(|| Path::new(""));
+    let parent_dir = if parent.as_os_str().is_empty() {
+        workspace.try_clone()?
+    } else {
+        workspace.open_dir(parent)?
+    };
     let url = format!("{}/git/blobs/{}", repository_base(owner, repository), urlencoding::encode(sha.trim()));
     let mut response = api_get_with_accept(&url, token, "application/vnd.github.raw+json")?;
     if response.content_length().is_some_and(|length| length > expected_size) {
         anyhow::bail!("Réponse blob GitHub supérieure à la taille déclarée.");
     }
-    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(destination)
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    let mut file = parent_dir.open_with(name, &options)
         .with_context(|| format!("Fichier temporaire déjà présent ou inaccessible : {}", destination.display()))?;
     let result = (|| -> Result<()> {
         let mut hasher = Sha1::new();
-        hasher.update(format!("blob {}\0", expected_size).as_bytes());
+        hasher.update(format!("blob {}\\0", expected_size).as_bytes());
         let mut buffer = [0u8; 64 * 1024];
         let mut total = 0u64;
         loop {
@@ -349,7 +369,7 @@ pub fn download_blob_to_file(owner: &str, repository: &str, sha: &str, token: &s
     })();
     if result.is_err() {
         drop(file);
-        let _ = std::fs::remove_file(destination);
+        let _ = parent_dir.remove_file(name);
     }
     result
 }
