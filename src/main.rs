@@ -2,6 +2,7 @@ mod github;
 mod inventory;
 mod models;
 
+use anyhow::Context;
 use eframe::egui;
 use std::{collections::HashSet, path::{Path, PathBuf}, sync::mpsc::{self, Receiver, TryRecvError}, time::Duration};
 
