@@ -293,11 +293,10 @@ impl AuditorApp {
                     let journal_key = (entry.path.clone(), entry.sha.clone(), expected_size);
                     if completed_records.contains(&journal_key) {
                         let existing_path = safe_destination(&canonical_root, &entry.path)?;
-                        if existing_path.is_file() {
-                            let existing = std::fs::read(&existing_path)
-                                .with_context(|| format!("Lecture du fichier à reprendre impossible : {}", entry.path))?;
-                            if existing.len() as u64 == expected_size
-                                && github::verify_git_blob_sha(&entry.sha, &existing).is_ok() {
+                        if let Ok(metadata) = std::fs::symlink_metadata(&existing_path) {
+                            if metadata.is_file() && !metadata.file_type().is_symlink()
+                                && metadata.len() == expected_size
+                                && github::verify_git_blob_file(&entry.sha, &existing_path, expected_size).is_ok() {
                                 downloaded += 1;
                                 manifest_files.push(models::DownloadedFile {
                                     path: entry.path.clone(),
