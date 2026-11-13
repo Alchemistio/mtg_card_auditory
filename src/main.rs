@@ -286,16 +286,19 @@ impl AuditorApp {
                 let mut errors = Vec::new();
                 let mut manifest_files = Vec::new();
                 let total = chosen.len();
-                let journal_name = format!(".mtg-auditor-cache/download-session-{}.jsonl", &commit_sha[..7.min(commit_sha.len())]);
-                let journal_path = canonical_root.join(&journal_name);
-                if let Some(parent) = journal_path.parent() {
-                    std::fs::create_dir_all(parent)?;
+                if !safe_github_namespace_segment(&owner)
+                    || !safe_github_namespace_segment(&repository)
+                    || !safe_github_namespace_segment(&commit_sha) {
+                    anyhow::bail!("Identifiant GitHub invalide pour le journal de reprise.");
                 }
-                let canonical_journal_parent = journal_path.parent()
-                    .context("Dossier parent du journal absent")?.canonicalize()?;
+                let journal_directory = canonical_root.join(".mtg-auditor-cache")
+                    .join("download-sessions").join(&owner).join(&repository);
+                std::fs::create_dir_all(&journal_directory)?;
+                let canonical_journal_parent = journal_directory.canonicalize()?;
                 if !canonical_journal_parent.starts_with(&canonical_root) {
                     anyhow::bail!("Le journal de reprise sort du workspace.");
                 }
+                let journal_path = canonical_journal_parent.join(format!("download-session-{}.jsonl", commit_sha));
                 if let Ok(metadata) = std::fs::symlink_metadata(&journal_path) {
                     if metadata.file_type().is_symlink() || !metadata.is_file() {
                         anyhow::bail!("Le journal de reprise doit être un fichier régulier, sans lien symbolique.");
@@ -319,8 +322,19 @@ impl AuditorApp {
                         completed_records.insert((record.path, record.blob_sha, record.size_bytes));
                     }
                 }
-                let manifest_name = format!("download-manifest-{}.json", &commit_sha[..7.min(commit_sha.len())]);
-                let manifest_conflict = chosen.iter().any(|entry| entry.path == manifest_name);
+                let manifest_directory = canonical_root.join(".mtg-auditor-cache")
+                    .join("download-manifests").join(&owner).join(&repository);
+                std::fs::create_dir_all(&manifest_directory)?;
+                let canonical_manifest_parent = manifest_directory.canonicalize()?;
+                if !canonical_manifest_parent.starts_with(&canonical_root) {
+                    anyhow::bail!("Le manifeste de provenance sortirait du workspace.");
+                }
+                let manifest_name = format!("download-manifest-{}.json", commit_sha);
+                let manifest_path = canonical_manifest_parent.join(&manifest_name);
+                let manifest_conflict = chosen.iter().any(|entry| {
+                    Path::new(&entry.path) == Path::new(".mtg-auditor-cache")
+                        .join("download-manifests").join(&owner).join(&repository).join(&manifest_name)
+                });
                 let progress_sender = sender.clone();
                 let mut processed = 0usize;
                 let mut was_cancelled = false;
@@ -402,7 +416,6 @@ impl AuditorApp {
                     }
                     let _ = progress_sender.send(DownloadMessage::Progress(index + 1, total, entry.path));
                 }
-                let manifest_path = canonical_root.join(&manifest_name);
                 let manifest_status = if manifest_conflict {
                     "Manifeste ignoré : un chemin distant sélectionné porte le même nom.".to_string()
                 } else if !manifest_files.is_empty() && !commit_sha.is_empty() {
@@ -508,6 +521,13 @@ fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
         return Err(error.into());
     }
     Ok(())
+}
+
+fn safe_github_namespace_segment(value: &str) -> bool {
+    !value.is_empty()
+        && value != "."
+        && value != ".."
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
