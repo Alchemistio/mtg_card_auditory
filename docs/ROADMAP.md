@@ -7,7 +7,7 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `6310f92` : Clippy, tests, build Release et upload d'artefact.
-- [ ] Revalidation du dernier commit après ajout des métadonnées alpha raster.
+- [ ] Revalidation du dernier commit après ajout des métadonnées alpha et planches de contact.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Parser URL de dépôt GitHub.
@@ -33,6 +33,7 @@
 - [x] Métadonnées de polices : famille et sous-famille lorsque lisibles par ttf-parser.
 - [x] Inspection ZIP sans extraction : nombre d'entrées, taille déclarée, chemins suspects et ratios anormaux.
 - [x] Export JSON versionné, CSV UTF-8 et rapport HTML autonome hors ligne.
+- [x] Génération de planches raster PNG paginées (16 éléments/page) avec index texte ; SHA vérifié avant aperçu.
 - [x] Refus des exports dans l'arborescence source.
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
 - [ ] Comparaison entre analyses.
@@ -47,9 +48,9 @@
 - [ ] Collecte des notices et provenance.
 
 ## Phase 4 — Revue visuelle
-- [ ] Planches de contact paginées.
-- [ ] Galerie HTML hors ligne.
-- [ ] Filtres, comparaison et étiquettes.
+- [~] Première planche de contact raster paginée avec index.
+- [ ] Galerie visuelle HTML avec navigation, filtres et comparaison.
+- [ ] Planche contact avancée avec libellés, annotations et sélection.
 - [ ] Candidats visuels similaires (les doublons binaires exacts sont déjà identifiés).
 - [ ] Revue humaine persistante.
 
