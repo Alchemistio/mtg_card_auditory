@@ -23,7 +23,8 @@
 - [x] Écriture exclusive des blobs et manifestes (aucun écrasement), nettoyage d'un fichier partiel en cas d'erreur ; test de non-écrasement.
 - [x] Nouvelles tentatives bornées (3 retries maximum, soit 4 requêtes totales) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` numérique ou date HTTP ; tests de politique de retry.
 - [x] Cache GitHub local sous le workspace, indexé par owner/repository/commit/blob SHA et vérifié avec le SHA-1 Git avant réutilisation.
-- [x] Journal JSONL persistant des téléchargements par commit ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
+- [x] Journal JSONL persistant des téléchargements par dépôt et commit complet ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
+- [x] Isolation des journaux de reprise et manifestes par owner/repository pour éviter les collisions entre dépôts.
 - [ ] Affichage du quota restant et de sa fenêtre de reset.
 - [x] Stockage explicite du jeton dans Windows Credential Manager : charger, enregistrer et supprimer ; aucun enregistrement automatique. CI Windows complète validée.
 - [x] Taille maximale par blob (90 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
