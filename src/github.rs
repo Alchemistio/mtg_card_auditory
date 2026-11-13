@@ -391,6 +391,13 @@ mod tests {
             retry_delay(0, Some("Wed, 21 Oct 2015 07:28:00 GMT")),
             Duration::ZERO
         );
+        let future_date = httpdate::fmt_http_date(
+            SystemTime::now() + Duration::from_secs(3600)
+        );
+        assert_eq!(
+            retry_delay(0, Some(&future_date)),
+            Duration::from_secs(MAX_RETRY_AFTER_SECS)
+        );
     }
 
     #[test]
