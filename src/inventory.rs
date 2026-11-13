@@ -80,6 +80,10 @@ pub struct InventoryComparison {
     pub schema_version: u32,
     pub baseline_source_root: String,
     pub current_source_root: String,
+    #[serde(default)]
+    pub baseline_source_roots: Vec<String>,
+    #[serde(default)]
+    pub current_source_roots: Vec<String>,
     pub added_paths: Vec<String>,
     pub removed_paths: Vec<String>,
     pub changed_assets: Vec<ChangedAsset>,
@@ -607,6 +611,8 @@ pub fn compare_inventories(current: &InventoryDocument, baseline: &InventoryDocu
         schema_version: 1,
         baseline_source_root: baseline.source_root.clone(),
         current_source_root: current.source_root.clone(),
+        baseline_source_roots: if baseline.source_roots.is_empty() { vec![baseline.source_root.clone()] } else { baseline.source_roots.clone() },
+        current_source_roots: if current.source_roots.is_empty() { vec![current.source_root.clone()] } else { current.source_roots.clone() },
         added_paths,
         removed_paths,
         changed_assets,
@@ -626,10 +632,8 @@ pub fn export_comparison_json(comparison: &InventoryComparison, destination: &Pa
     }
     if destination.exists() {
         let canonical_destination = destination.canonicalize()?;
-        for source in [&comparison.baseline_source_root, &comparison.current_source_root] {
-            if canonical_destination.starts_with(Path::new(source).canonicalize()?) {
-                anyhow::bail!("Export refusé : la destination résout vers une des sources comparées.");
-            }
+        if canonical_sources.iter().any(|source| canonical_destination.starts_with(source)) {
+            anyhow::bail!("Export refusé : la destination résout vers une des sources comparées.");
         }
     }
     let file = File::create(destination)
