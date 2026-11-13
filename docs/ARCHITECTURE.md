@@ -4,7 +4,7 @@
 Le prototype est organisé en modules Rust :
 - `main.rs` : interface egui, workers d'arrière-plan, progression du scan et des téléchargements, choix des sources et actions d'export/comparaison.
 - `github.rs` : API REST, parsing URL, timeout HTTP, erreurs de quota, résolution de branche/tag/commit vers le SHA du commit puis SHA de l'arbre, exploration récursive et repli sur sous-arbres si l'arbre est tronqué, blobs.
-- `models.rs` : entrées d'arbre GitHub.
+- `models.rs` : entrées d'arbre GitHub, objet de listing avec SHA immuables et manifeste de provenance des téléchargements.
 - `inventory.rs` : parcours local parallèle avec progression, SHA-256, classification, métadonnées raster/SVG/fonts/ZIP, repérage de notices, doublons exacts, comparaison d'inventaires, planches raster PNG paginées et exports JSON/CSV/HTML.
 - `Cargo.toml` : dépendances UI, HTTP, analyseurs et export.
 
@@ -14,12 +14,13 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 1. Saisir une URL github.com ou propriétaire/dépôt.
 2. Résoudre la branche par défaut si la référence est vide.
 3. Résoudre la référence en commit, puis utiliser le SHA de l'arbre associé.
-4. Demander l'arbre récursif ; si GitHub le tronque, descendre par sous-arbres avec garde-fous de profondeur et de cycles.
+4. Demander l'arbre récursif ; si GitHub le tronque, descendre par sous-arbres avec garde-fous de profondeur et de cycles actifs.
 5. Filtrer par sous-dossier.
 6. Sélectionner les blobs distants et télécharger vers le workspace choisi.
 7. Vérifier les chemins de destination et refuser les liens symboliques / écrasements.
-8. Les blobs sont actuellement récupérés via l'API Git Blobs Base64 ; streaming/cache/reprise restent à faire.
-9. Les erreurs 429 et 403 avec quota épuisé sont identifiées ; le backoff automatique reste à faire.
+8. Écrire un manifeste JSON liant chaque fichier téléchargé au dépôt, à la référence, au commit SHA, au tree SHA et au blob SHA.
+9. Les blobs sont actuellement récupérés via l'API Git Blobs Base64 ; streaming/cache/reprise restent à faire.
+10. Les erreurs 429 et 403 avec quota épuisé sont identifiées ; le backoff automatique reste à faire.
 
 ## Flux local actuel
 1. Choisir un dossier source.
@@ -55,4 +56,4 @@ Le cache et la persistance des revues restent à développer ; les sources dista
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `df73f1a` a passé Clippy, tests, build Release et upload d'artefact ; la progression détaillée et le repérage de notices doivent être revalidés avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `f83a9e3` a passé Clippy, tests, build Release et upload d'artefact ; le manifeste de provenance GitHub doit être revalidé avant livraison. La signature de code pourra être ajoutée avec un certificat externe.
