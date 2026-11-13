@@ -16,7 +16,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Timeout HTTP de 60 secondes, trois tentatives au maximum pour erreurs réseau transitoires et réponses 429/502/503/504, prise en compte bornée de Retry-After ; les quotas primaires épuisés sont signalés sans attente bloquante longue.
 - Téléchargement de blobs GitHub plafonné à 90 Mio par fichier, réponse JSON plafonnée à 128 Mio et taille reçue vérifiée contre la taille déclarée par l'arbre Git.
 - Jeton GitHub saisi dans un champ masqué, conservé en mémoire seulement.
-- Filtrage de la liste distante par chemin et extension, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
+- Filtrage de la liste distante par chemin, extension et plage de taille, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
 - Scan local parallèle via Rayon, sans suivre les liens symboliques.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
 - Anciens inventaires JSON v1 lisibles malgré l'ajout de nouveaux champs optionnels.
