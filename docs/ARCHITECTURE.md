@@ -23,7 +23,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 10. Le cache local est isolé sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace. Chaque entrée est revalidée contre le SHA-1 Git attendu ; une entrée invalide est supprimée puis retéléchargée. Le cache ne modifie aucune source locale ni distante.
 11. La reprise après fermeture, le téléchargement streaming et la concurrence bornée restent à faire.
 12. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
-11. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
+13. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all`; la création exclusive évite l'écrasement du fichier final, sans résoudre complètement les courses TOCTOU sur les répertoires parents.
 
 ## Flux local actuel
 1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
@@ -41,7 +41,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 Source, inventaire, analyse calculée, revue humaine et exports sont séparés. Une revue visuelle ou juridique ne peut jamais être validée par heuristique. Les classifications automatiques restent des suggestions.
 
 ## Workspace
-- `cache/github/owner/repo/commit/blob-sha` (à implémenter)
+- `.mtg-auditor-cache/github/owner/repo/commit/blob-sha` : cache local de blobs vérifiés par SHA-1 Git.
 - `runs/run-id/inventory.json`
 - `runs/run-id/assets.csv`
 - `runs/run-id/report.html`
@@ -49,10 +49,10 @@ Source, inventaire, analyse calculée, revue humaine et exports sont séparés. 
 - `runs/run-id/gallery/index.html` (à implémenter)
 - `runs/run-id/logs/` (à implémenter)
 
-Le cache et la persistance des revues restent à développer ; les sources distantes et locales ne sont jamais altérées.
+La reprise après fermeture et la persistance des revues restent à développer ; les sources distantes et locales ne sont jamais altérées.
 
 ## Limites techniques
-- Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture et le cache doivent encore être ajoutés.
+- Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture reste à ajouter.
 - Le jeton privé est seulement conservé en mémoire ; Credential Manager reste à implémenter.
 - La protection contre les courses TOCTOU sur le workspace doit être renforcée.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
