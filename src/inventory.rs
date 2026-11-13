@@ -269,7 +269,7 @@ fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
     let detected_family = classify_extension(&extension);
-    let (raster_format, raster_width, raster_height, raster_warning) =
+    let (raster_format, raster_width, raster_height, raster_color_type, raster_has_alpha, raster_warning) =
         raster_metadata(path, detected_family);
     let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
         svg_metadata(path, detected_family);
