@@ -339,7 +339,7 @@ impl AuditorApp {
                         let relative_path = safe_workspace_relative(&entry.path)?;
                         if let Ok(metadata) = workspace_fs.symlink_metadata(&relative_path) {
                             let valid = if metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() == expected_size {
-                                workspace_fs.open_read(&relative_path).map_or(false, |mut file| github::verify_git_blob_reader(&entry.sha, &mut file, expected_size).is_ok())
+                                workspace_fs.open_read(&relative_path).is_ok_and(|mut file| github::verify_git_blob_reader(&entry.sha, &mut file, expected_size).is_ok())
                             } else { false };
                             if valid {
                                 downloaded += 1;
@@ -369,7 +369,6 @@ impl AuditorApp {
                             }
                             drop(target);
                             let verify_result = workspace_fs.open_read(&destination)
-                                .map_err(anyhow::Error::from)
                                 .and_then(|mut file| github::verify_git_blob_reader(&entry.sha, &mut file, entry.size.unwrap_or(0)));
                             if let Err(error) = verify_result {
                                 let _ = workspace_fs.remove_file(&destination);
@@ -561,7 +560,7 @@ fn cached_github_blob(
             anyhow::bail!("Entrée de cache non régulière ou lien symbolique refusé.");
         }
         let valid = workspace.open_read(&cache_file)
-            .map_or(false, |mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).is_ok());
+            .is_ok_and(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).is_ok());
         if valid { return Ok(cache_file); }
         workspace.remove_file(&cache_file).context("Impossible d'écarter une entrée de cache invalide")?;
     }
@@ -603,6 +602,7 @@ fn cached_github_blob(
     }
 }
 
+#[cfg(test)]
 fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
