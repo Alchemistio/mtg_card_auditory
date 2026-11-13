@@ -49,6 +49,46 @@ struct AuditorApp {
 }
 
 impl AuditorApp {
+    fn load_github_token(&mut self) {
+        let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
+            .context("Initialisation du Windows Credential Manager impossible")
+            .and_then(|entry| entry.get_password().context("Lecture du jeton enregistré impossible"));
+        match result {
+            Ok(token) => {
+                self.token = token;
+                self.status = "Jeton GitHub chargé depuis le Gestionnaire d’identifiants Windows.".into();
+            }
+            Err(error) => self.status = format!("Aucun jeton disponible ou lecture impossible : {:#}", error),
+        }
+    }
+
+    fn save_github_token(&mut self) {
+        if self.token.trim().is_empty() {
+            self.status = "Saisis un jeton avant de l’enregistrer.".into();
+            return;
+        }
+        let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
+            .context("Initialisation du Windows Credential Manager impossible")
+            .and_then(|entry| entry.set_password(&self.token).context("Enregistrement du jeton impossible"));
+        self.status = match result {
+            Ok(()) => "Jeton enregistré dans le Gestionnaire d’identifiants Windows.".into(),
+            Err(error) => format!("Enregistrement sécurisé impossible : {:#}", error),
+        };
+    }
+
+    fn delete_github_token(&mut self) {
+        let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
+            .context("Initialisation du Windows Credential Manager impossible")
+            .and_then(|entry| entry.delete_credential().context("Suppression du jeton enregistré impossible"));
+        match result {
+            Ok(()) => {
+                self.token.clear();
+                self.status = "Jeton supprimé du Gestionnaire d’identifiants Windows et du champ courant.".into();
+            }
+            Err(error) => self.status = format!("Suppression impossible (jeton absent ou magasin indisponible) : {:#}", error),
+        }
+    }
+
     fn connect(&mut self) {
         let owner = self.owner.clone();
         let repository = self.repository.clone();
@@ -721,6 +761,11 @@ impl eframe::App for AuditorApp {
             ui.horizontal(|ui| {
                 ui.label("Jeton GitHub (dépôt privé)");
                 ui.add(egui::TextEdit::singleline(&mut self.token).password(true).desired_width(300.0));
+            });
+            ui.horizontal(|ui| {
+                if ui.button("Charger le jeton enregistré").clicked() { self.load_github_token(); }
+                if ui.button("Enregistrer dans Windows").clicked() { self.save_github_token(); }
+                if ui.button("Supprimer le jeton enregistré").clicked() { self.delete_github_token(); }
             });
             if ui.add_enabled(!self.busy, egui::Button::new("Explorer le dépôt")).clicked() {
                 self.connect();
