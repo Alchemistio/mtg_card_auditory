@@ -917,7 +917,7 @@ mod tests {
         assert_eq!(std::fs::read(&output).unwrap(), b"first");
         let partial = root.join("partial.json");
         assert!(with_new_output_file(&partial, |_file| {
-            anyhow::bail!("simulated export failure");
+            Err(anyhow::anyhow!("simulated export failure"))
         }).is_err());
         assert!(!partial.exists());
         std::fs::remove_dir_all(root).unwrap();
