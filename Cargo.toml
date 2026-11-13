@@ -20,6 +20,7 @@ zeroize = "1"
 urlencoding = "2"
 url = "2"
 anyhow = "1"
+cap-std = "4"
 walkdir = "2"
 csv = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }

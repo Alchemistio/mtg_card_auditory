@@ -4,6 +4,7 @@ mod models;
 
 use anyhow::Context;
 use eframe::egui;
+use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
 use zeroize::Zeroizing;
 
 enum ScanMessage {
@@ -282,6 +283,7 @@ impl AuditorApp {
             let result = (|| -> anyhow::Result<String> {
                 std::fs::create_dir_all(&root)?;
                 let canonical_root = root.canonicalize()?;
+                let workspace_fs = WorkspaceDir::open(&canonical_root)?;
                 let mut downloaded = 0usize;
                 let mut errors = Vec::new();
                 let mut manifest_files = Vec::new();
@@ -291,24 +293,19 @@ impl AuditorApp {
                     || !safe_github_namespace_segment(&commit_sha) {
                     anyhow::bail!("Identifiant GitHub invalide pour le journal de reprise.");
                 }
-                let journal_directory = canonical_root.join(".mtg-auditor-cache")
-                    .join("download-sessions").join(&owner).join(&repository);
-                std::fs::create_dir_all(&journal_directory)?;
-                let canonical_journal_parent = journal_directory.canonicalize()?;
-                if !canonical_journal_parent.starts_with(&canonical_root) {
-                    anyhow::bail!("Le journal de reprise sort du workspace.");
-                }
-                let journal_path = canonical_journal_parent.join(format!("download-session-{}.jsonl", commit_sha));
-                if let Ok(metadata) = std::fs::symlink_metadata(&journal_path) {
+                let journal_relative = PathBuf::from(".mtg-auditor-cache")
+                    .join("download-sessions").join(&owner).join(&repository)
+                    .join(format!("download-session-{}.jsonl", commit_sha));
+                workspace_fs.create_dir_all(journal_relative.parent().context("Parent du journal absent")?)?;
+                if let Ok(metadata) = workspace_fs.symlink_metadata(&journal_relative) {
                     if metadata.file_type().is_symlink() || !metadata.is_file() {
                         anyhow::bail!("Le journal de reprise doit être un fichier régulier, sans lien symbolique.");
                     }
                 }
-                let mut journal = std::fs::OpenOptions::new().create(true).append(true).open(&journal_path)
-                    .context("Impossible d'ouvrir le journal de reprise")?;
+                let mut journal = workspace_fs.open_append(&journal_relative)?;
                 let mut completed_records = HashSet::new();
-                if journal_path.metadata()?.len() > 0 {
-                    let journal_text = std::fs::read_to_string(&journal_path)
+                if workspace_fs.symlink_metadata(&journal_relative)?.len() > 0 {
+                    let journal_text = workspace_fs.read_to_string(&journal_relative)
                         .context("Journal de reprise illisible ; aucune reprise automatique")?;
                     let journal_lines: Vec<&str> = journal_text.split_terminator('\n').collect();
                     for (line_index, line) in journal_lines.iter().enumerate() {
@@ -322,19 +319,11 @@ impl AuditorApp {
                         completed_records.insert((record.path, record.blob_sha, record.size_bytes));
                     }
                 }
-                let manifest_directory = canonical_root.join(".mtg-auditor-cache")
-                    .join("download-manifests").join(&owner).join(&repository);
-                std::fs::create_dir_all(&manifest_directory)?;
-                let canonical_manifest_parent = manifest_directory.canonicalize()?;
-                if !canonical_manifest_parent.starts_with(&canonical_root) {
-                    anyhow::bail!("Le manifeste de provenance sortirait du workspace.");
-                }
                 let manifest_name = format!("download-manifest-{}.json", commit_sha);
-                let manifest_path = canonical_manifest_parent.join(&manifest_name);
-                let manifest_conflict = chosen.iter().any(|entry| {
-                    Path::new(&entry.path) == Path::new(".mtg-auditor-cache")
-                        .join("download-manifests").join(&owner).join(&repository).join(&manifest_name)
-                });
+                let manifest_relative = PathBuf::from(".mtg-auditor-cache")
+                    .join("download-manifests").join(&owner).join(&repository).join(&manifest_name);
+                workspace_fs.create_dir_all(manifest_relative.parent().context("Parent du manifeste absent")?)?;
+                let manifest_conflict = chosen.iter().any(|entry| Path::new(&entry.path) == manifest_relative);
                 let progress_sender = sender.clone();
                 let mut processed = 0usize;
                 let mut was_cancelled = false;
@@ -347,11 +336,12 @@ impl AuditorApp {
                     let expected_size = entry.size.unwrap_or(0);
                     let journal_key = (entry.path.clone(), entry.sha.clone(), expected_size);
                     if completed_records.contains(&journal_key) {
-                        let existing_path = safe_destination(&canonical_root, &entry.path)?;
-                        if let Ok(metadata) = std::fs::symlink_metadata(&existing_path) {
-                            if metadata.is_file() && !metadata.file_type().is_symlink()
-                                && metadata.len() == expected_size
-                                && github::verify_git_blob_file(&entry.sha, &existing_path, expected_size).is_ok() {
+                        let relative_path = safe_workspace_relative(&entry.path)?;
+                        if let Ok(metadata) = workspace_fs.symlink_metadata(&relative_path) {
+                            let valid = if metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() == expected_size {
+                                workspace_fs.open_read(&relative_path).and_then(|mut file| github::verify_git_blob_reader(&entry.sha, &mut file, expected_size).map_err(std::io::Error::other)).is_ok()
+                            } else { false };
+                            if valid {
                                 downloaded += 1;
                                 manifest_files.push(models::DownloadedFile {
                                     path: entry.path.clone(),
@@ -368,26 +358,21 @@ impl AuditorApp {
                     }
                     let result = cached_github_blob(&canonical_root, &owner, &repository, &commit_sha, &entry.sha, entry.size, &token)
                         .and_then(|cache_file| {
-                            let destination = safe_destination(&canonical_root, &entry.path)?;
-                            if destination.exists() {
-                                anyhow::bail!("Le fichier existe déjà : {}", destination.display());
-                            }
-                            if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent)?; }
-                            let canonical_parent = destination.parent().context("Parent de destination absent")?.canonicalize()?;
-                            if !canonical_parent.starts_with(&canonical_root) {
-                                anyhow::bail!("Le chemin de destination sort du workspace : {}", entry.path);
-                            }
+                            let destination = safe_workspace_relative(&entry.path)?;
                             let mut source = std::fs::File::open(&cache_file)?;
-                            let mut target = std::fs::OpenOptions::new().write(true).create_new(true).open(&destination)
-                                .with_context(|| format!("Écriture sans écrasement impossible : {}", destination.display()))?;
+                            let mut target = workspace_fs.create_new(&destination)
+                                .with_context(|| format!("Écriture capability sans écrasement impossible : {}", entry.path))?;
                             if let Err(error) = std::io::copy(&mut source, &mut target).and_then(|_| target.sync_all()) {
                                 drop(target);
-                                let _ = std::fs::remove_file(&destination);
+                                let _ = workspace_fs.remove_file(&destination);
                                 return Err(error.into());
                             }
                             drop(target);
-                            if let Err(error) = github::verify_git_blob_file(&entry.sha, &destination, entry.size.unwrap_or(0)) {
-                                let _ = std::fs::remove_file(&destination);
+                            let verify_result = workspace_fs.open_read(&destination)
+                                .map_err(anyhow::Error::from)
+                                .and_then(|mut file| github::verify_git_blob_reader(&entry.sha, &mut file, entry.size.unwrap_or(0)));
+                            if let Err(error) = verify_result {
+                                let _ = workspace_fs.remove_file(&destination);
                                 return Err(error).context("Vérification finale du fichier copié impossible");
                             }
                             let record = models::DownloadProgressRecord {
@@ -419,7 +404,7 @@ impl AuditorApp {
                 let manifest_status = if manifest_conflict {
                     "Manifeste ignoré : un chemin distant sélectionné porte le même nom.".to_string()
                 } else if !manifest_files.is_empty() && !commit_sha.is_empty() {
-                    if manifest_path.exists() {
+                    if workspace_fs.symlink_metadata(&manifest_relative).is_ok() {
                         "Manifeste existant non écrasé.".to_string()
                     } else {
                         let manifest = models::DownloadManifest {
@@ -434,9 +419,9 @@ impl AuditorApp {
                             downloaded_files: manifest_files,
                         };
                         let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
-                        write_new_file(&manifest_path, &manifest_bytes)
+                        workspace_fs.write_new(&manifest_relative, &manifest_bytes)
                             .context("Impossible d'écrire le manifeste sans écraser un fichier existant")?;
-                        format!(" Manifeste de provenance : {}", manifest_path.display())
+                        format!(" Manifeste de provenance : {}", manifest_relative.display())
                     }
                 } else {
                     String::new()
@@ -455,6 +440,89 @@ impl AuditorApp {
             let _ = sender.send(DownloadMessage::Finished(result));
         });
     }
+}
+
+struct WorkspaceDir {
+    inner: CapabilityDir,
+}
+
+impl WorkspaceDir {
+    fn open(path: &Path) -> anyhow::Result<Self> {
+        Ok(Self { inner: CapabilityDir::open_ambient_dir(path, cap_std::ambient_authority())? })
+    }
+
+    fn parent_and_name<'a>(&self, relative: &'a Path, create: bool) -> anyhow::Result<(CapabilityDir, &'a std::ffi::OsStr)> {
+        validate_relative_path(relative)?;
+        let name = relative.file_name().context("Nom de fichier relatif absent")?;
+        let parent = relative.parent().unwrap_or_else(|| Path::new(""));
+        let directory = if parent.as_os_str().is_empty() {
+            self.inner.try_clone()?
+        } else {
+            if create { self.inner.create_dir_all(parent)?; }
+            self.inner.open_dir(parent)?
+        };
+        Ok((directory, name))
+    }
+
+    fn create_dir_all(&self, relative: &Path) -> anyhow::Result<()> {
+        validate_relative_path(relative)?;
+        self.inner.create_dir_all(relative)?;
+        Ok(())
+    }
+
+    fn create_new(&self, relative: &Path) -> anyhow::Result<cap_std::fs::File> {
+        let (parent, name) = self.parent_and_name(relative, true)?;
+        let mut options = CapabilityOpenOptions::new();
+        options.write(true).create_new(true);
+        Ok(parent.open_with(name, &options)?)
+    }
+
+    fn open_append(&self, relative: &Path) -> anyhow::Result<cap_std::fs::File> {
+        let (parent, name) = self.parent_and_name(relative, true)?;
+        let mut options = CapabilityOpenOptions::new();
+        options.append(true).create(true);
+        Ok(parent.open_with(name, &options)?)
+    }
+
+    fn open_read(&self, relative: &Path) -> anyhow::Result<cap_std::fs::File> {
+        let (parent, name) = self.parent_and_name(relative, false)?;
+        Ok(parent.open(name)?)
+    }
+
+    fn read_to_string(&self, relative: &Path) -> anyhow::Result<String> {
+        Ok(self.inner.read_to_string(relative)?)
+    }
+
+    fn symlink_metadata(&self, relative: &Path) -> anyhow::Result<std::fs::Metadata> {
+        Ok(self.inner.symlink_metadata(relative)?)
+    }
+
+    fn remove_file(&self, relative: &Path) -> anyhow::Result<()> {
+        Ok(self.inner.remove_file(relative)?)
+    }
+
+    fn write_new(&self, relative: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+        let mut file = self.create_new(relative)?;
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = self.remove_file(relative);
+            return Err(error.into());
+        }
+        Ok(())
+    }
+}
+
+fn validate_relative_path(relative: &Path) -> anyhow::Result<()> {
+    if relative.as_os_str().is_empty() || relative.components().any(|component| !matches!(component, std::path::Component::Normal(_))) {
+        anyhow::bail!("Chemin relatif workspace invalide : {}", relative.display());
+    }
+    Ok(())
+}
+
+fn safe_workspace_relative(relative: &str) -> anyhow::Result<PathBuf> {
+    let path = PathBuf::from(relative);
+    validate_relative_path(&path)?;
+    Ok(path)
 }
 
 fn cached_github_blob(
@@ -529,31 +597,6 @@ fn safe_github_namespace_segment(value: &str) -> bool {
         && value != ".."
         && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
-
-fn safe_destination(root: &Path, relative: &str) -> anyhow::Result<PathBuf> {
-    let canonical_root = root.canonicalize()?;
-    let mut destination = canonical_root.clone();
-    for component in Path::new(relative).components() {
-        match component {
-            std::path::Component::Normal(part) => {
-                destination.push(part);
-                if let Ok(metadata) = std::fs::symlink_metadata(&destination) {
-                    if metadata.file_type().is_symlink() {
-                        anyhow::bail!("Lien symbolique refusé dans le workspace : {}", destination.display());
-                    }
-                }
-            }
-            _ => anyhow::bail!("Chemin distant non sûr : {}", relative),
-        }
-    }
-    if let Some(parent) = destination.parent() {
-        if parent.exists() && !parent.canonicalize()?.starts_with(&canonical_root) {
-            anyhow::bail!("Le chemin de destination sort du workspace : {}", relative);
-        }
-    }
-    Ok(destination)
-}
-
 
 impl eframe::App for AuditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -897,6 +940,21 @@ mod write_tests {
         assert!(!safe_github_namespace_segment("../outside"));
         assert!(!safe_github_namespace_segment("owner/repository"));
         assert!(!safe_github_namespace_segment("owner\\\\repository"));
+    }
+
+    #[test]
+    fn workspace_capability_rejects_escape_and_preserves_existing_files() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let directory = std::env::temp_dir().join(format!("mtg-auditor-cap-test-{}-{}", std::process::id(), nonce));
+        fs::create_dir_all(&directory).unwrap();
+        let workspace = super::WorkspaceDir::open(&directory).unwrap();
+        let nested = PathBuf::from("nested/folder/asset.bin");
+        workspace.write_new(&nested, b"original").unwrap();
+        assert!(workspace.write_new(&nested, b"replacement").is_err());
+        assert_eq!(workspace.inner.read(&nested).unwrap(), b"original");
+        assert!(super::safe_workspace_relative("../outside").is_err());
+        assert!(super::safe_workspace_relative("C:\\outside").is_err());
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
