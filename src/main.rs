@@ -505,7 +505,7 @@ impl WorkspaceDir {
         if bytes.len() as u64 > maximum_bytes {
             anyhow::bail!("Fichier supérieur à la limite de lecture de {} octets.", maximum_bytes);
         }
-        Ok(String::from_utf8(bytes).context("Le fichier lu n'est pas un texte UTF-8 valide")?)
+        String::from_utf8(bytes).context("Le fichier lu n'est pas un texte UTF-8 valide")
     }
 
     fn symlink_metadata(&self, relative: &Path) -> anyhow::Result<cap_std::fs::Metadata> {
@@ -969,7 +969,7 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod write_tests {
     use super::{safe_github_namespace_segment, write_new_file};
-    use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+    use std::{fs, path::{Path, PathBuf}, time::{SystemTime, UNIX_EPOCH}};
 
     #[test]
     fn github_namespace_segments_reject_path_traversal_and_separators() {
