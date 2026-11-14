@@ -61,7 +61,17 @@ pub struct AssetRecord {
     #[serde(default)]
     pub mse_game: Option<String>,
     #[serde(default)]
+    pub mse_name: Option<String>,
+    #[serde(default)]
+    pub mse_game_resolution_status: Option<String>,
+    #[serde(default)]
+    pub mse_game_resolved_path: Option<String>,
+    #[serde(default)]
     pub mse_stylesheet: Option<String>,
+    #[serde(default)]
+    pub mse_stylesheet_resolution_status: Option<String>,
+    #[serde(default)]
+    pub mse_stylesheet_resolved_path: Option<String>,
     #[serde(default)]
     pub mse_has_include_directives: Option<bool>,
     #[serde(default)]
@@ -390,6 +400,7 @@ fn finish_mse_dependency(
 #[derive(Default)]
 struct MseHeader {
     mse_version: Option<String>,
+    name: Option<String>,
     short_name: Option<String>,
     full_name: Option<String>,
     package_version: Option<String>,
@@ -484,6 +495,7 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
         }
         match key.as_str() {
             "mse version" => header.mse_version = Some(value.to_string()),
+            "name" => header.name = Some(value.to_string()),
             "short name" => header.short_name = Some(value.to_string()),
             "full name" => header.full_name = Some(value.to_string()),
             "version" => header.package_version = Some(value.to_string()),
@@ -706,12 +718,56 @@ fn mse_package_identifier(asset: &AssetRecord) -> Option<String> {
 
 fn resolve_mse_dependencies(assets: &mut [AssetRecord]) {
     let mut packages = HashMap::<String, Vec<String>>::new();
+    let mut games = HashMap::<String, Vec<String>>::new();
+    let mut stylesheets = HashMap::<(String, String), Vec<String>>::new();
     for asset in assets.iter() {
-        if let Some(identifier) = mse_package_identifier(asset) {
-            packages.entry(identifier).or_default().push(asset.relative_path.clone());
+        if asset.mse_main_file_present == Some(true) {
+            if let Some(identifier) = mse_package_identifier(asset) {
+                packages.entry(identifier).or_default().push(asset.relative_path.clone());
+            }
+            if asset.mse_package_type.as_deref() == Some("game") {
+                if let Some(name) = asset.mse_name.as_ref() {
+                    games.entry(name.trim().to_lowercase()).or_default()
+                        .push(asset.relative_path.clone());
+                }
+            }
+            if asset.mse_package_type.as_deref() == Some("style") {
+                if let (Some(game), Some(name)) = (asset.mse_game.as_ref(), asset.mse_short_name.as_ref()) {
+                    stylesheets.entry((game.trim().to_lowercase(), name.trim().to_lowercase()))
+                        .or_default().push(asset.relative_path.clone());
+                }
+            }
         }
     }
     for asset in assets.iter_mut() {
+        asset.mse_game_resolution_status = None;
+        asset.mse_game_resolved_path = None;
+        asset.mse_stylesheet_resolution_status = None;
+        asset.mse_stylesheet_resolved_path = None;
+        if let Some(game) = asset.mse_game.as_ref() {
+            asset.mse_game_resolution_status = Some(match games.get(&game.trim().to_lowercase()) {
+                Some(paths) if paths.len() == 1 => {
+                    asset.mse_game_resolved_path = paths.first().cloned();
+                    "resolved".to_string()
+                }
+                Some(_) => "ambiguous".to_string(),
+                None => "missing".to_string(),
+            });
+        }
+        if asset.mse_package_type.as_deref() == Some("set") {
+            if let (Some(game), Some(stylesheet)) = (asset.mse_game.as_ref(), asset.mse_stylesheet.as_ref()) {
+                asset.mse_stylesheet_resolution_status = Some(match stylesheets.get(&(
+                    game.trim().to_lowercase(), stylesheet.trim().to_lowercase()
+                )) {
+                    Some(paths) if paths.len() == 1 => {
+                        asset.mse_stylesheet_resolved_path = paths.first().cloned();
+                        "resolved".to_string()
+                    }
+                    Some(_) => "ambiguous".to_string(),
+                    None => "missing".to_string(),
+                });
+            }
+        }
         for dependency in &mut asset.mse_dependencies {
             dependency.resolved_path = None;
             dependency.resolution_status = Some(match packages.get(&dependency.package.trim().to_ascii_lowercase()) {
@@ -845,6 +901,7 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
     let mse_full_name = mse_header.as_ref().and_then(|header| header.full_name.clone());
     let mse_package_version = mse_header.as_ref().and_then(|header| header.package_version.clone());
     let mse_game = mse_header.as_ref().and_then(|header| header.game.clone());
+    let mse_name = mse_header.as_ref().and_then(|header| header.name.clone());
     let mse_stylesheet = mse_header.as_ref().and_then(|header| header.stylesheet.clone());
     let mse_has_include_directives = mse_header.as_ref().and_then(|header| header.has_include_directives);
     let mse_dependencies = mse_header.as_ref().map_or_else(Vec::new, |header| header.dependencies.clone());
@@ -877,7 +934,12 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_full_name,
         mse_package_version,
         mse_game,
+        mse_name,
+        mse_game_resolution_status: None,
+        mse_game_resolved_path: None,
         mse_stylesheet,
+        mse_stylesheet_resolution_status: None,
+        mse_stylesheet_resolved_path: None,
         mse_has_include_directives,
         mse_dependencies,
         analysis_warning,
@@ -1600,6 +1662,71 @@ mod tests {
     }
 
     #[test]
+    fn resolves_mse_game_and_stylesheet_references_by_declared_names() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-reference-test-{}", std::process::id()));
+        let game = root.join("my-game.mse-game");
+        let style = root.join("my-game-new.mse-style");
+        let set = root.join("sample.mse-set");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::create_dir_all(&style).unwrap();
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(game.join("game"), b"mse version: 0.3.4\nname: My Game\n").unwrap();
+        std::fs::write(style.join("style"),
+            b"mse version: 0.3.4\nshort name: New\ngame: My Game\n").unwrap();
+        std::fs::write(set.join("set"),
+            b"mse version: 0.3.4\ngame: My Game\nstylesheet: New\n").unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_game_resolution_status.as_deref(), Some("resolved"));
+        assert_eq!(main.mse_game_resolved_path.as_deref(), Some("my-game.mse-game/game"));
+        assert_eq!(main.mse_stylesheet_resolution_status.as_deref(), Some("resolved"));
+        assert_eq!(main.mse_stylesheet_resolved_path.as_deref(), Some("my-game-new.mse-style/style"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reports_missing_mse_game_and_stylesheet_references() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-missing-reference-{}", std::process::id()));
+        let set = root.join("sample.mse-set");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(set.join("set"),
+            b"mse version: 0.3.4\ngame: Unknown Game\nstylesheet: Missing Style\n").unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_game_resolution_status.as_deref(), Some("missing"));
+        assert_eq!(main.mse_stylesheet_resolution_status.as_deref(), Some("missing"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn marks_ambiguous_mse_game_and_stylesheet_references() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-ambiguous-reference-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for name in ["game-a.mse-game", "game-b.mse-game"] {
+            let package = root.join(name);
+            std::fs::create_dir_all(&package).unwrap();
+            std::fs::write(package.join("game"), b"mse version: 0.3.4\nname: My Game\n").unwrap();
+        }
+        for name in ["style-a.mse-style", "style-b.mse-style"] {
+            let package = root.join(name);
+            std::fs::create_dir_all(&package).unwrap();
+            std::fs::write(package.join("style"),
+                b"mse version: 0.3.4\nshort name: New\ngame: My Game\n").unwrap();
+        }
+        let set = root.join("sample.mse-set");
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(set.join("set"),
+            b"mse version: 0.3.4\ngame: My Game\nstylesheet: New\n").unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_game_resolution_status.as_deref(), Some("ambiguous"));
+        assert_eq!(main.mse_stylesheet_resolution_status.as_deref(), Some("ambiguous"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn resolves_mse_dependencies_locally_and_reports_missing_packages() {
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-resolve-test-{}", std::process::id()));
         let game = root.join("magic.mse-game");
@@ -1789,13 +1916,17 @@ mod tests {
                 "modified_unix_seconds": null,
                 "sha256": "abc",
                 "detected_family": "text",
-                "review_status": "needs-review"
+                "review_status": "needs-review",
+                "mse_dependencies": [{"package": "legacy.mse-game", "min_version": "1.0"}]
             }]
         }"#;
         let inventory: InventoryDocument = serde_json::from_str(legacy).unwrap();
         assert_eq!(inventory.duplicate_files, 0);
         assert_eq!(inventory.assets[0].raster_width, None);
         assert_eq!(inventory.assets[0].duplicate_of, None);
+        assert_eq!(inventory.assets[0].mse_dependencies[0].resolution_status, None);
+        assert_eq!(inventory.assets[0].mse_dependencies[0].resolved_path, None);
+        assert_eq!(inventory.assets[0].mse_name, None);
     }
 
     #[test]

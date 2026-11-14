@@ -835,11 +835,44 @@ impl eframe::App for AuditorApp {
                                     if let Some(name) = &asset.mse_short_name {
                                         ui.label(format!("Nom : {}", name));
                                     }
+                                    if asset.mse_package_type.as_deref() == Some("game") {
+                                        if let Some(name) = &asset.mse_name {
+                                            ui.label(format!("Nom déclaré du jeu : {}", name));
+                                        }
+                                    }
                                     if let Some(game) = &asset.mse_game {
                                         ui.label(format!("Jeu : {}", game));
+                                        match asset.mse_game_resolution_status.as_deref() {
+                                            Some("resolved") => {
+                                                if let Some(path) = &asset.mse_game_resolved_path {
+                                                    ui.label(format!("  Jeu local : {}", path));
+                                                }
+                                            }
+                                            Some("ambiguous") => {
+                                                ui.colored_label(egui::Color32::YELLOW, "  Référence de jeu ambiguë");
+                                            }
+                                            Some("missing") => {
+                                                ui.colored_label(egui::Color32::YELLOW, "  Jeu absent des sources analysées");
+                                            }
+                                            _ => {}
+                                        }
                                     }
                                     if let Some(stylesheet) = &asset.mse_stylesheet {
                                         ui.label(format!("Feuille de style : {}", stylesheet));
+                                        match asset.mse_stylesheet_resolution_status.as_deref() {
+                                            Some("resolved") => {
+                                                if let Some(path) = &asset.mse_stylesheet_resolved_path {
+                                                    ui.label(format!("  Feuille locale : {}", path));
+                                                }
+                                            }
+                                            Some("ambiguous") => {
+                                                ui.colored_label(egui::Color32::YELLOW, "  Référence de feuille ambiguë");
+                                            }
+                                            Some("missing") => {
+                                                ui.colored_label(egui::Color32::YELLOW, "  Feuille absente des sources analysées");
+                                            }
+                                            _ => {}
+                                        }
                                     }
                                     if asset.mse_has_include_directives == Some(true) {
                                         ui.colored_label(egui::Color32::YELLOW, "Directive include file détectée (non suivie)");
