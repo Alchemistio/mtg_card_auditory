@@ -1347,7 +1347,7 @@ mod tests {
         let file = File::create(&archive_path).unwrap();
         let mut writer = zip::ZipWriter::new(file);
         writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
-        writer.write_all(b"set info: fixture").unwrap();
+        writer.write_all(b"mse version: 0.3.4\nset info: fixture").unwrap();
         writer.start_file("cards/example.txt", zip::write::SimpleFileOptions::default()).unwrap();
         writer.write_all(b"resource").unwrap();
         writer.finish().unwrap();
