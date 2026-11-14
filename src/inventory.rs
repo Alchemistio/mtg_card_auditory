@@ -1544,7 +1544,7 @@ where
         source_roots.push(root.display().to_string());
         let document = scan_directory_with_progress_and_cancel_with_budget(root, |done, _| {
             progress(completed_bytes.saturating_add(done), total_bytes);
-        }, cancelled, &mut mse_hash_budget)?;
+        }, cancelled, &mut *mse_hash_budget)?;
         completed_bytes = completed_bytes.saturating_add(document.total_bytes);
         let prefix = format!("source-{:04}", index + 1);
         for mut asset in document.assets {
