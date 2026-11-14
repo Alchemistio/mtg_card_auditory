@@ -219,7 +219,7 @@ fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (Op
     };
     let bytes = match read_limited(file, MAX_SVG_BYTES) {
         Ok(bytes) => bytes,
-        Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible ou supérieure à 32 Mio : {}", error))),
+        Err(error) => return (None, None, None, Some(format!("Lecture SVG impossible ou supérieure à 32 Mio : {}", error))),
     };
     let source = match String::from_utf8(bytes) {
         Ok(source) => source,

@@ -12,7 +12,7 @@
 - Les rapports de comparaison JSON sont exportés hors des deux sources comparées.
 - Le repérage de noms LICENSE/NOTICE/README est une simple aide à l'inventaire ; il ne certifie aucune licence ni droit de redistribution.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
-- Les SVG sont analysés comme XML sans rendu.
+- Les SVG sont analysés comme XML sans rendu ; la lecture est plafonnée à 32 Mio au niveau du flux, même si le fichier grossit après la vérification de ses métadonnées.
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
 
 ## Chemins et liens
@@ -30,10 +30,10 @@
 - Les chemins relatifs du workspace rejettent les composants absolus, parents, préfixes et noms contenant `:` (flux de données alternatifs Windows).
 - Les fichiers téléchargés et temporaires sont créés exclusivement via le handle de répertoire ; la publication du cache utilise un lien dur sans écrasement après vérification SHA-1 Git.
 - Les exports JSON/CSV/HTML, planches PNG et index texte utilisent un handle `cap-std` ouvert sur le dossier parent canonique, avec création exclusive, synchronisation et suppression du fichier partiel en cas d'erreur.
-- Les lectures des sources lors de l'analyse, la réanalyse des images pour planches de contact et la lecture d'un inventaire JSON de comparaison utilisent des handles `cap-std` et des chemins relatifs au répertoire ouvert. Les planches vérifient le hash avant décodage et réouvrent le fichier via le handle pour lire les dimensions puis les pixels.
+- Les lectures des sources lors de l'analyse, la réanalyse des images pour planches de contact et la lecture d'un inventaire JSON de comparaison utilisent des handles `cap-std` et des chemins relatifs au répertoire ouvert. Les planches vérifient le hash avant décodage et réouvrent le fichier via le handle pour lire les dimensions puis les pixels. Les contenus SVG et polices sont plafonnés en lecture à 32 Mio et 64 Mio respectivement, sans dépendre uniquement de métadonnées susceptibles de devenir obsolètes.
 - Ce confinement ne constitue pas une garantie TOCTOU complète : la sélection initiale des dossiers repose encore sur des chemins ambiants ; les points de réanalyse Windows et les courses concurrentes doivent encore être éprouvées.
 - Le scan local énumère récursivement via `cap-std`, ne suit pas les liens symboliques et limite la profondeur à 128 niveaux. Un test Unix couvre les liens de fichiers et de répertoires ; un test Windows couvre les liens de fichiers et affiche explicitement un message `SKIP` si les permissions du runner empêchent leur création.
-- Un test Unix crée un lien symbolique de répertoire vers un dossier externe, puis vérifie que `WorkspaceDir::create_new` refuse de créer un fichier via ce lien et que la cible externe reste intacte. Le test Windows correspondant affiche explicitement `SKIP` si le runner refuse la création du lien. Sur le HEAD `5bf2629`, les deux suites CI Unix et Windows ont exécuté chacune 25 tests avec succès (runs `43625687036` et `43625687052`) ; aucun message `SKIP` n'apparaît dans les sorties de tests.
+- Un test Unix crée un lien symbolique de répertoire vers un dossier externe, puis vérifie que `WorkspaceDir::create_new` refuse de créer un fichier via ce lien et que la cible externe reste intacte. Le test Windows correspondant affiche explicitement `SKIP` si le runner refuse la création du lien. Sur le HEAD `60131dc`, les deux suites CI Unix et Windows ont exécuté chacune 28 tests avec succès (runs `43626473652` et `43626473611`) ; les trois tests de lecture bornée sont passés et aucun message `SKIP` n'apparaît dans les sorties de tests.
 - Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence de l'une des sources analysées.
 
 ## Archives

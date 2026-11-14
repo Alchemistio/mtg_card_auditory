@@ -7,8 +7,8 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [x] CI Windows : formatage, Clippy, 25 tests, build Release et upload d'artefact ; validation du HEAD `5bf2629` (run `43625687052`).
-- [x] CI Unix : formatage, Clippy et 25 tests de sécurité (dont liens symboliques) ; validation du HEAD `5bf2629` (run `43625687036`).
+- [x] CI Windows : formatage, Clippy, 28 tests, build Release et upload d'artefact ; validation du HEAD `60131dc` (run `43626473611`).
+- [x] CI Unix : formatage, Clippy et 28 tests de sécurité (dont liens symboliques et lectures bornées) ; validation du HEAD `60131dc` (run `43626473652`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
@@ -39,7 +39,7 @@
 - [x] Ajouter des tests de non-suivi des liens symboliques de fichiers et de répertoires sous Unix, et de fichiers sous Windows ; le test Windows affiche `SKIP` si les permissions du runner interdisent la création du lien.
 - [x] Ajouter un test de confinement `WorkspaceDir` contre un lien symbolique de répertoire vers une cible externe sous Unix et Windows ; le test Windows affiche explicitement `SKIP` si le runner interdit la création du lien.
 - [x] Documenter le workflow de développement autonome dans `docs/WORKFLOW.md` : poursuivre les tâches indépendantes pendant les CI, contrôler les logs et les `SKIP`, et ne s'arrêter qu'en l'absence de travail réalisable.
-- [~] Énumération récursive, lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; restent la sélection initiale des dossiers et les tests des points de réanalyse/courses TOCTOU.
+- [~] Énumération récursive, lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; SVG et polices bénéficient de limites de lecture en flux (32/64 Mio). Restent la sélection initiale des dossiers et les tests des points de réanalyse/courses TOCTOU.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
@@ -92,7 +92,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, 25 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 25 tests) validées sur le HEAD `5bf2629` : runs `43625687052` et `43625687036`.
+- [x] CI Windows (formatage, Clippy, 28 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 28 tests) validées sur le HEAD `60131dc` : runs `43626473611` et `43626473652`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
