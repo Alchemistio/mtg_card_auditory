@@ -1850,6 +1850,147 @@ fn escape_html(value: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+
+fn append_mse_reference_html(
+    html: &mut String,
+    label: &str,
+    value: &str,
+    status: Option<&str>,
+    resolved_path: Option<&str>,
+) {
+    html.push_str("<div><b>");
+    html.push_str(label);
+    html.push_str(" :</b> ");
+    html.push_str(&escape_html(value));
+    match status {
+        Some("resolved") => {
+            if let Some(path) = resolved_path {
+                html.push_str(" — présent : <code>");
+                html.push_str(&escape_html(path));
+                html.push_str("</code>");
+            }
+        }
+        Some("missing") => html.push_str(" — <span class=\"warning\">absent des sources analysées</span>"),
+        Some("ambiguous") => html.push_str(" — <span class=\"warning\">référence ambiguë</span>"),
+        _ => {}
+    }
+    html.push_str("</div>");
+}
+
+fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
+    let Some(package_type) = asset.mse_package_type.as_deref() else {
+        return;
+    };
+    html.push_str("<section><b>Package MSE : ");
+    html.push_str(&escape_html(package_type));
+    html.push_str("</b>");
+    if let Some(present) = asset.mse_main_file_present {
+        html.push_str(if present {
+            " — fichier principal présent"
+        } else {
+            " — <span class=\"warning\">fichier principal absent</span>"
+        });
+    }
+    if let Some(version) = &asset.mse_version {
+        html.push_str("<div>Version MSE : ");
+        html.push_str(&escape_html(version));
+        html.push_str("</div>");
+    }
+    if let Some(name) = &asset.mse_short_name {
+        html.push_str("<div>Nom : ");
+        html.push_str(&escape_html(name));
+        html.push_str("</div>");
+    }
+    if let Some(game) = &asset.mse_game {
+        append_mse_reference_html(
+            html,
+            "Jeu",
+            game,
+            asset.mse_game_resolution_status.as_deref(),
+            asset.mse_game_resolved_path.as_deref(),
+        );
+    }
+    if let Some(stylesheet) = &asset.mse_stylesheet {
+        append_mse_reference_html(
+            html,
+            "Feuille de style",
+            stylesheet,
+            asset.mse_stylesheet_resolution_status.as_deref(),
+            asset.mse_stylesheet_resolved_path.as_deref(),
+        );
+    }
+    if asset.mse_has_include_directives == Some(true) {
+        html.push_str("<div class=\"warning\">Directive include file détectée ; non suivie.</div>");
+    }
+    if !asset.mse_dependencies.is_empty() {
+        html.push_str("<div><b>Dépendances :</b><ul>");
+        for dependency in &asset.mse_dependencies {
+            html.push_str("<li><code>");
+            html.push_str(&escape_html(&dependency.package));
+            html.push_str("</code>");
+            if let Some(minimum) = &dependency.min_version {
+                html.push_str(" — version minimale ");
+                html.push_str(&escape_html(minimum));
+            }
+            match dependency.resolution_status.as_deref() {
+                Some("resolved") => {
+                    if let Some(path) = &dependency.resolved_path {
+                        html.push_str(" — présent : <code>");
+                        html.push_str(&escape_html(path));
+                        html.push_str("</code>");
+                    }
+                }
+                Some("missing") => html.push_str(" — <span class=\"warning\">absent</span>"),
+                Some("ambiguous") => html.push_str(" — <span class=\"warning\">ambigu</span>"),
+                _ => {}
+            }
+            match dependency.version_status.as_deref() {
+                Some("satisfied") => html.push_str(" — version satisfaite"),
+                Some("insufficient") => html.push_str(" — <span class=\"warning\">version insuffisante</span>"),
+                Some("unknown") => html.push_str(" — <span class=\"warning\">version non vérifiable</span>"),
+                _ => {}
+            }
+            if dependency.cycle_detected == Some(true) {
+                html.push_str(" — <span class=\"warning\">cycle détecté</span>");
+            }
+            html.push_str("</li>");
+        }
+        html.push_str("</ul></div>");
+    }
+    if !asset.mse_resources.is_empty() || asset.mse_resources_truncated {
+        html.push_str("<details><summary>Ressources internes indexées : ");
+        html.push_str(&asset.mse_resources.len().to_string());
+        html.push_str("</summary><ul>");
+        for resource in asset.mse_resources.iter().take(100) {
+            html.push_str("<li><code>");
+            html.push_str(&escape_html(&resource.relative_path));
+            html.push_str("</code> — ");
+            html.push_str(&resource.size_bytes.to_string());
+            html.push_str(" octets");
+            if let Some(hash) = &resource.sha256 {
+                html.push_str(" — SHA-256 <code>");
+                html.push_str(&escape_html(hash));
+                html.push_str("</code>");
+            } else {
+                html.push_str(" — <span class=\"warning\">empreinte non calculée : ");
+                html.push_str(&escape_html(&resource.hash_status));
+                html.push_str("</span>");
+            }
+            html.push_str("</li>");
+        }
+        if asset.mse_resources.len() > 100 {
+            html.push_str("<li>Affichage limité aux 100 premières ressources ; le JSON conserve la liste indexée.</li>");
+        }
+        html.push_str("</ul>");
+        if asset.mse_resources_truncated {
+            html.push_str("<p class=\"warning\">Indexation partielle : une limite de sécurité ou une erreur a empêché l'indexation complète.</p>");
+        }
+        html.push_str("</details>");
+    }
+    html.push_str("</section>");
+}
+
+
 pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<()> {
     ensure_export_outside_source(document, destination)?;
     let mut html = String::from(
@@ -1897,6 +2038,7 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         if let Some(count) = asset.archive_entry_count {
             html.push_str(&format!("ZIP : {} entrées ", count));
         }
+        append_mse_metadata_html(&mut html, asset);
         if let Some(first_path) = &asset.duplicate_of {
             html.push_str("<span class=\"duplicate\">Doublon de ");
             html.push_str(&escape_html(first_path));
@@ -1917,6 +2059,38 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
             .with_context(|| format!("Écriture du rapport HTML impossible : {}", destination.display()))?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod html_report_tests {
+    use super::*;
+
+    #[test]
+    fn html_report_includes_escaped_mse_dependencies_and_resource_hashes() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-html-{}", std::process::id()));
+        let source = root.join("source");
+        let package = source.join("sample.mse-set");
+        let game = source.join("magic.mse-game");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(package.join("cards")).unwrap();
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::write(package.join("set"),
+            b"mse version: 0.3.4\nshort name: <script>alert(1)</script>\ngame: Magic\ndepends on: magic.mse-game 1.0.0\n").unwrap();
+        std::fs::write(package.join("cards/example.png"), b"resource bytes").unwrap();
+        std::fs::write(game.join("game"), b"mse version: 0.3.4\nversion: 1.0.0\nname: Magic\n").unwrap();
+
+        let inventory = scan_directory(&source).unwrap();
+        let destination = root.join("report.html");
+        export_html(&inventory, &destination).unwrap();
+        let html = std::fs::read_to_string(&destination).unwrap();
+        assert!(html.contains("Package MSE : set"));
+        assert!(html.contains("Dépendances :"));
+        assert!(html.contains("Ressources internes indexées : 1"));
+        assert!(html.contains("SHA-256"));
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[cfg(test)]

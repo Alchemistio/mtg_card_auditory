@@ -92,7 +92,7 @@
 > L'intégration au MTG Card Remodeler est volontairement suspendue jusqu'à finalisation de son cahier des charges. Aucun code ni asset n'est intégré au Remodeler à ce stade.
 - [x] Rapport HTML autonome initial.
 - [x] Rapport JSON de comparaison initial.
-- [ ] Statistiques et alertes enrichies.
+- [~] Rapport HTML : métadonnées MSE, dépendances, références et ressources indexées avec échappement HTML ; enrichissement des filtres et synthèses à faire.
 - [ ] Export vers staging, jamais directement vers LIBRARY.
 - [ ] Réconciliation du manifeste MTG Card Remodeler.
 - [ ] Tests de cohérence et non-régression.
