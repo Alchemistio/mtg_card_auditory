@@ -136,7 +136,7 @@ struct RasterMetadata {
     warning: Option<String>,
 }
 
-fn raster_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family: &str) -> RasterMetadata {
+fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> RasterMetadata {
     if family != "raster" {
         return RasterMetadata::default();
     }
@@ -168,7 +168,7 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, fami
     }
 }
 
-fn svg_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
+fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
     if family != "svg" {
         return (None, None, None, None);
     }
@@ -227,7 +227,7 @@ fn svg_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family:
     (viewbox, Some(external_refs), Some(true), None)
 }
 
-fn font_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family: &str) -> (Option<String>, Option<String>, Option<String>) {
+fn font_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (Option<String>, Option<String>, Option<String>) {
     if family != "font" {
         return (None, None, None);
     }
@@ -268,7 +268,7 @@ fn contains_external_css_reference(value: &str) -> bool {
     value.contains("url(http://") || value.contains("url(https://") || value.contains("url(//")
 }
 
-fn zip_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Option<usize>, Option<String>) {
+fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> (Option<usize>, Option<u64>, Option<usize>, Option<String>) {
     if extension != "zip" {
         if extension == "7z" || extension == "rar" {
             return (None, None, None, Some("Inspection de cette archive non prise en charge pour le moment.".to_string()));
@@ -371,17 +371,17 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
     let detected_family = classify_extension(&extension);
-    let raster = raster_metadata(workspace, relative, path, detected_family);
+    let raster = raster_metadata(workspace, relative, detected_family);
     let raster_format = raster.format;
     let raster_width = raster.width;
     let raster_height = raster.height;
     let raster_color_type = raster.color_type;
     let raster_has_alpha = raster.has_alpha;
     let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
-        svg_metadata(workspace, relative, path, detected_family);
-    let (font_family, font_subfamily, font_warning) = font_metadata(workspace, relative, path, detected_family);
+        svg_metadata(workspace, relative, detected_family);
+    let (font_family, font_subfamily, font_warning) = font_metadata(workspace, relative, detected_family);
     let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
-        zip_metadata(workspace, relative, path, &extension);
+        zip_metadata(workspace, relative, &extension);
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
     Ok(AssetRecord {
