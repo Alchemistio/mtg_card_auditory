@@ -976,6 +976,7 @@ mod tests {
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
         assert!(warning.is_none());
+        drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1014,6 +1015,7 @@ mod tests {
         assert_eq!(count, Some(1));
         assert_eq!(suspicious, Some(1));
         assert!(warning.is_some());
+        drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
 
