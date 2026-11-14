@@ -680,6 +680,64 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
     metadata
 }
 
+
+fn mse_folder_package_extension(relative: &Path) -> Option<String> {
+    let directory_name = relative.parent()?.file_name()?.to_str()?;
+    let extension = Path::new(directory_name).extension()?.to_str()?.to_ascii_lowercase();
+    mse_package_type(&extension).map(|_| extension)
+}
+
+fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMetadata {
+    const MAX_MSE_HEADER_BYTES: u64 = 1024 * 1024;
+    let size = match workspace.metadata(relative) {
+        Ok(metadata) => metadata.len(),
+        Err(error) => return ZipMetadata::new(None, None, None,
+            Some(format!("Métadonnées du fichier principal MSE indisponibles : {}", error)), Some(true)),
+    };
+    let file = match workspace.open(relative) {
+        Ok(file) => file,
+        Err(error) => return ZipMetadata::new(None, None, None,
+            Some(format!("Ouverture du fichier principal MSE impossible : {}", error)), Some(true)),
+    };
+    let mut warning = None;
+    let mut header = None;
+    match read_prefix(file, MAX_MSE_HEADER_BYTES) {
+        Ok(mut bytes) => {
+            let truncated = size > MAX_MSE_HEADER_BYTES;
+            if truncated {
+                if let Some(last_newline) = bytes.iter().rposition(|byte| *byte == b'\n') {
+                    bytes.truncate(last_newline + 1);
+                } else {
+                    bytes.clear();
+                    warning = Some("Aucune ligne complète dans le préfixe MSE autorisé.".to_string());
+                }
+            }
+            if !bytes.is_empty() {
+                match parse_mse_header(&bytes) {
+                    Ok(parsed) => {
+                        if parsed.mse_version.is_none() {
+                            warning = Some("Version MSE absente de l'en-tête du package.".to_string());
+                        }
+                        header = Some(parsed);
+                    }
+                    Err(error) => warning = Some(format!("Lecture de l'en-tête MSE impossible : {}", error)),
+                }
+            }
+            if truncated {
+                let note = "En-tête MSE limité au préfixe de 1 Mio ; les données suivantes ne sont pas analysées.".to_string();
+                warning = Some(match warning.take() {
+                    Some(existing) => format!("{} {}", existing, note),
+                    None => note,
+                });
+            }
+        }
+        Err(error) => warning = Some(format!("Lecture de l'en-tête MSE impossible : {}", error)),
+    }
+    let mut metadata = ZipMetadata::new(None, None, None, warning, Some(true));
+    metadata.mse_header = header;
+    metadata
+}
+
 fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
     let file = workspace.open(relative)
         .with_context(|| format!("Ouverture capability-based impossible : {}", relative.display()))?;
@@ -716,6 +774,13 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
     let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
         svg_metadata(workspace, relative, detected_family);
     let (font_family, font_subfamily, font_warning) = font_metadata(workspace, relative, detected_family);
+    let mut package_metadata = zip_metadata(workspace, relative, &extension);
+    let folder_package_extension = mse_folder_package_extension(relative);
+    let folder_main_type = folder_package_extension.as_deref().and_then(mse_package_type);
+    let is_folder_package_main = folder_main_type.is_some_and(|main_name| file_name == main_name);
+    if is_folder_package_main {
+        package_metadata = mse_folder_main_metadata(workspace, relative);
+    }
     let ZipMetadata {
         entry_count: archive_entry_count,
         uncompressed_bytes: archive_uncompressed_bytes,
@@ -723,10 +788,12 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         warning: archive_warning,
         mse_main_file_present,
         mse_header,
-    } = zip_metadata(workspace, relative, &extension);
+    } = package_metadata;
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
-    let mse_package_type = mse_package_type(&extension).map(str::to_string);
+    let mse_package_type = mse_package_type(&extension)
+        .or_else(|| if is_folder_package_main { folder_package_extension.as_deref().and_then(mse_package_type) } else { None })
+        .map(str::to_string);
     let mse_version = mse_header.as_ref().and_then(|header| header.mse_version.clone());
     let mse_short_name = mse_header.as_ref().and_then(|header| header.short_name.clone());
     let mse_full_name = mse_header.as_ref().and_then(|header| header.full_name.clone());
@@ -1481,6 +1548,27 @@ mod tests {
         assert!(metadata.warning.is_none());
         assert!(!root.join("set").exists(), "ZIP contents must never be extracted");
         drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detects_mse_folder_package_main_file_without_following_includes() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-folder-test-{}", std::process::id()));
+        let package = root.join("sample.mse-set");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(package.join("cards")).unwrap();
+        std::fs::write(package.join("set"),
+            b"mse version: 0.3.4\nshort name: Folder Set\ninclude file: ../outside.txt\n").unwrap();
+        std::fs::write(package.join("cards/example.txt"), b"resource").unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_package_type.as_deref(), Some("set"));
+        assert_eq!(main.mse_main_file_present, Some(true));
+        assert_eq!(main.mse_version.as_deref(), Some("0.3.4"));
+        assert_eq!(main.mse_short_name.as_deref(), Some("Folder Set"));
+        assert_eq!(main.mse_has_include_directives, Some(true));
+        assert!(!inventory.assets.iter().any(|asset| asset.mse_package_type.is_some()
+            && asset.relative_path == "sample.mse-set/cards/example.txt"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
