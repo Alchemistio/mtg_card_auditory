@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
-use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}};
+use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}, time::UNIX_EPOCH};
 use image::{ImageDecoder, ImageReader};
 use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs::File, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -970,7 +970,8 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let svg = root.join("test.svg");
         std::fs::write(&svg, r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 20"><image href="https://example.invalid/image.png"/></svg>"#).unwrap();
-        let (viewbox, external, valid, warning) = svg_metadata(&svg, "svg");
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (viewbox, external, valid, warning) = svg_metadata(&workspace, Path::new("test.svg"), "svg");
         assert_eq!(viewbox.as_deref(), Some("0 0 10 20"));
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
@@ -1008,7 +1009,8 @@ mod tests {
         writer.start_file("../escape.txt", zip::write::SimpleFileOptions::default()).unwrap();
         writer.write_all(b"not extracted").unwrap();
         writer.finish().unwrap();
-        let (count, _, suspicious, warning) = zip_metadata(&archive_path, "zip");
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (count, _, suspicious, warning) = zip_metadata(&workspace, Path::new("unsafe.zip"), "zip");
         assert_eq!(count, Some(1));
         assert_eq!(suspicious, Some(1));
         assert!(warning.is_some());
