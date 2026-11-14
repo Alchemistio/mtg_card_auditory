@@ -9,6 +9,7 @@ use std::{collections::{HashMap, HashSet}, io::{BufReader, Read, Write}, path::{
 
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
+const MAX_MSE_ZIP_HASH_BYTES_PER_SCAN: u64 = 512 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MseResourceRecord {
@@ -576,6 +577,7 @@ fn mse_zip_resources(
     workspace: &CapabilityDir,
     relative: &Path,
     main_name: &str,
+    scan_budget: &mut u64,
 ) -> (Vec<MseResourceRecord>, bool) {
     mse_zip_resources_with_limits(
         workspace,
@@ -584,6 +586,7 @@ fn mse_zip_resources(
         10_000,
         64 * 1024 * 1024,
         256 * 1024 * 1024,
+        scan_budget,
     )
 }
 
@@ -594,6 +597,7 @@ fn mse_zip_resources_with_limits(
     max_resources: usize,
     max_resource_bytes: u64,
     max_total_hash_bytes: u64,
+    scan_budget: &mut u64,
 ) -> (Vec<MseResourceRecord>, bool) {
     let file = match workspace.open(relative) {
         Ok(file) => file,
@@ -643,21 +647,30 @@ fn mse_zip_resources_with_limits(
             "size-limit"
         } else if hashed_bytes.saturating_add(size) > max_total_hash_bytes {
             "total-budget"
+        } else if size > *scan_budget {
+            "scan-budget"
         } else {
+            let scan_budget_before = *scan_budget;
             let mut hasher = Sha256::new();
             let mut buffer = [0_u8; 64 * 1024];
             let mut bytes_read = 0_u64;
             let mut read_error = false;
-            let mut budget_exceeded = false;
+            let mut budget_status = None;
             loop {
                 match entry.read(&mut buffer) {
                     Ok(0) => break,
                     Ok(count) => {
                         bytes_read = bytes_read.saturating_add(count as u64);
-                        if bytes_read > max_resource_bytes
-                            || hashed_bytes.saturating_add(bytes_read) > max_total_hash_bytes
-                        {
-                            budget_exceeded = true;
+                        if bytes_read > max_resource_bytes {
+                            budget_status = Some("size-limit");
+                            break;
+                        }
+                        if hashed_bytes.saturating_add(bytes_read) > max_total_hash_bytes {
+                            budget_status = Some("total-budget");
+                            break;
+                        }
+                        if bytes_read > scan_budget_before {
+                            budget_status = Some("scan-budget");
                             break;
                         }
                         hasher.update(&buffer[..count]);
@@ -668,10 +681,11 @@ fn mse_zip_resources_with_limits(
                     }
                 }
             }
-            if read_error {
+            *scan_budget = (*scan_budget).saturating_sub(bytes_read);
+            if let Some(status) = budget_status {
+                status
+            } else if read_error {
                 "read-error"
-            } else if budget_exceeded {
-                "total-budget"
             } else if bytes_read != size {
                 "size-mismatch"
             } else {
@@ -915,6 +929,29 @@ fn mse_version_satisfies(actual: &str, minimum: &str) -> Option<bool> {
 }
 
 
+
+fn attach_mse_zip_resources(
+    assets: &mut [AssetRecord],
+    workspace: &CapabilityDir,
+    scan_budget: &mut u64,
+) {
+    for asset in assets.iter_mut() {
+        if asset.mse_main_file_present != Some(true) || asset.archive_entry_count.is_none() {
+            continue;
+        }
+        let Some(main_name) = mse_package_type(&asset.extension) else {
+            continue;
+        };
+        let (resources, truncated) = mse_zip_resources(
+            workspace,
+            Path::new(&asset.relative_path),
+            main_name,
+            scan_budget,
+        );
+        asset.mse_resources = resources;
+        asset.mse_resources_truncated = truncated;
+    }
+}
 
 fn attach_mse_folder_resources(assets: &mut [AssetRecord]) {
     const MAX_RESOURCES_PER_PACKAGE: usize = 10_000;
@@ -1275,15 +1312,6 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_main_file_present,
         mse_header,
     } = package_metadata;
-    let (mut mse_resources, mse_resources_truncated) =
-        if !is_folder_package_main && mse_main_file_present == Some(true) && archive_entry_count.is_some() {
-            match mse_package_type(&extension) {
-                Some(main_name) => mse_zip_resources(workspace, relative, main_name),
-                None => (Vec::new(), false),
-            }
-        } else {
-            (Vec::new(), false)
-        };
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
     let mse_package_type = mse_package_type(&extension)
@@ -1335,8 +1363,8 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_stylesheet_resolved_path: None,
         mse_has_include_directives,
         mse_dependencies,
-        mse_resources: std::mem::take(&mut mse_resources),
-        mse_resources_truncated,
+        mse_resources: Vec::new(),
+        mse_resources_truncated: false,
         analysis_warning,
         notice_kind,
         duplicate_of: None,
@@ -1361,6 +1389,19 @@ pub fn scan_directory_with_progress_and_cancel<F>(
     root: &Path,
     progress: F,
     cancelled: &AtomicBool,
+) -> Result<InventoryDocument>
+where
+    F: Fn(u64, u64) + Sync,
+{
+    let mut mse_hash_budget = MAX_MSE_ZIP_HASH_BYTES_PER_SCAN;
+    scan_directory_with_progress_and_cancel_with_budget(root, progress, cancelled, &mut mse_hash_budget)
+}
+
+fn scan_directory_with_progress_and_cancel_with_budget<F>(
+    root: &Path,
+    progress: F,
+    cancelled: &AtomicBool,
+    mse_hash_budget: &mut u64,
 ) -> Result<InventoryDocument>
 where
     F: Fn(u64, u64) + Sync,
@@ -1407,6 +1448,7 @@ where
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
     resolve_mse_dependencies(&mut assets);
     attach_mse_folder_resources(&mut assets);
+    attach_mse_zip_resources(&mut assets, &workspace, mse_hash_budget);
     let mut first_path_by_hash = HashMap::<String, String>::new();
     let mut duplicate_files = 0usize;
     for asset in &mut assets {
@@ -1478,13 +1520,14 @@ where
     })?;
     let mut assets = Vec::new();
     let mut completed_bytes = 0_u64;
+    let mut mse_hash_budget = MAX_MSE_ZIP_HASH_BYTES_PER_SCAN;
     let mut source_roots = Vec::with_capacity(canonical_roots.len());
     for (index, root) in canonical_roots.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) { anyhow::bail!("Scan annulé par l'utilisateur."); }
         source_roots.push(root.display().to_string());
-        let document = scan_directory_with_progress_and_cancel(root, |done, _| {
+        let document = scan_directory_with_progress_and_cancel_with_budget(root, |done, _| {
             progress(completed_bytes.saturating_add(done), total_bytes);
-        }, cancelled)?;
+        }, cancelled, &mut mse_hash_budget)?;
         completed_bytes = completed_bytes.saturating_add(document.total_bytes);
         let prefix = format!("source-{:04}", index + 1);
         for mut asset in document.assets {
@@ -2053,6 +2096,7 @@ mod tests {
         writer.finish().unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut scan_budget = 10_u64;
         let (resources, truncated) = mse_zip_resources_with_limits(
             &workspace,
             Path::new("sample.mse-set"),
@@ -2060,6 +2104,7 @@ mod tests {
             10,
             5,
             5,
+            &mut scan_budget,
         );
         assert!(!truncated);
         assert_eq!(resources.len(), 3);
@@ -2069,7 +2114,57 @@ mod tests {
         assert!(resources[1].sha256.is_some());
         assert_eq!(resources[2].hash_status, "total-budget");
         assert_eq!(resources[2].sha256, None);
+        assert_eq!(scan_budget, 5);
+
+        let mut scan_budget = 5_u64;
+        let (scan_limited, truncated) = mse_zip_resources_with_limits(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            10,
+            5,
+            10,
+            &mut scan_budget,
+        );
+        assert!(!truncated);
+        assert_eq!(scan_limited[1].hash_status, "hashed");
+        assert_eq!(scan_limited[2].hash_status, "scan-budget");
+        assert_eq!(scan_limited[2].sha256, None);
+        assert_eq!(scan_budget, 0);
         drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn applies_one_deterministic_mse_zip_hash_budget_across_a_scan() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-scan-budget-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        for package_name in ["a.mse-set", "b.mse-set"] {
+            let file = File::create(root.join(package_name)).unwrap();
+            let mut writer = zip::ZipWriter::new(file);
+            writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+            writer.write_all(b"mse version: 0.3.4\n").unwrap();
+            writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
+            writer.write_all(b"1234").unwrap();
+            writer.finish().unwrap();
+        }
+
+        let mut scan_budget = 4_u64;
+        let inventory = scan_directory_with_progress_and_cancel_with_budget(
+            &root,
+            |_, _| {},
+            &AtomicBool::new(false),
+            &mut scan_budget,
+        ).unwrap();
+        let first = inventory.assets.iter().find(|asset| asset.relative_path == "a.mse-set").unwrap();
+        let second = inventory.assets.iter().find(|asset| asset.relative_path == "b.mse-set").unwrap();
+        assert_eq!(first.mse_resources[0].hash_status, "hashed");
+        assert!(first.mse_resources[0].sha256.is_some());
+        assert_eq!(second.mse_resources[0].hash_status, "scan-budget");
+        assert!(second.mse_resources[0].sha256.is_none());
+        assert_eq!(scan_budget, 0);
         std::fs::remove_dir_all(root).unwrap();
     }
 
