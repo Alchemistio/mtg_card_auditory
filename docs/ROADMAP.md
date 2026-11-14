@@ -35,6 +35,8 @@
 - [x] Première migration capability-based des opérations GitHub (cache, destinations, journaux et manifestes) vers `WorkspaceDir`/`cap-std`, avec chemins relatifs validés ; CI Windows complète validée sur `24d85e6`.
 - [x] Migrer les exports JSON/CSV/HTML, planches PNG et index texte vers des handles `cap-std`, création exclusive, synchronisation et nettoyage des fichiers partiels ; CI Windows complète validée sur `77a115e`.
 - [x] Ajouter des tests de non-suivi des liens symboliques de fichiers et de répertoires sous Unix, et de fichiers sous Windows ; le test Windows affiche `SKIP` si les permissions du runner interdisent la création du lien.
+- [x] Ajouter un test de confinement `WorkspaceDir` contre un lien symbolique de répertoire vers une cible externe sous Unix et Windows ; le test Windows affiche explicitement `SKIP` si le runner interdit la création du lien.
+- [x] Documenter le workflow de développement autonome dans `docs/WORKFLOW.md` : poursuivre les tâches indépendantes pendant les CI, contrôler les logs et les `SKIP`, et ne s'arrêter qu'en l'absence de travail réalisable.
 - [~] Énumération récursive, lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; restent la sélection initiale des dossiers et les tests des points de réanalyse/courses TOCTOU.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
