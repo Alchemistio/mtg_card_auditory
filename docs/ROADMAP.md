@@ -76,7 +76,7 @@
 - [x] MSE : reconnaissance des packages sous forme de dossiers par leur fichier principal (`set`, `game`, `style`), lecture bornée et détection des directives include sans les suivre.
 - [x] MSE : résolution des dépendances par identifiant de package parmi les sources locales sélectionnées ; statuts résolu/absent/ambigu, sans téléchargement ni installation.
 - [x] MSE : références jeu/feuille de style résolues localement par nom déclaré, avec états résolu/absent/ambigu ; versions minimales `a.b.c` et `YYYY-MM-DD` comparées, formats inconnus non vérifiables.
-- [ ] MSE : inventaire des ressources et graphe de dépendances avec cycles.
+- [~] MSE : cycles du graphe local détectés ; inventaire des ressources et vues de graphe restent à faire.
 - [~] MSE : tests de non-extraction et de présence/absence du fichier principal pour les conteneurs ZIP ; tests de traversal, limites de taille et entrées malformées supplémentaires à faire.
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 

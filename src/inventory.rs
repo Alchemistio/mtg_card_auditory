@@ -5,7 +5,7 @@ use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
+use std::{collections::{HashMap, HashSet}, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
 
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
@@ -373,6 +373,8 @@ pub struct MseDependency {
     pub resolved_path: Option<String>,
     #[serde(default)]
     pub version_status: Option<String>,
+    #[serde(default)]
+    pub cycle_detected: Option<bool>,
 }
 
 fn finish_mse_dependency(
@@ -393,6 +395,7 @@ fn finish_mse_dependency(
             resolution_status: None,
             resolved_path: None,
             version_status: None,
+            cycle_detected: None,
         });
     } else {
         version.take();
@@ -489,6 +492,7 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
                         resolution_status: None,
                         resolved_path: None,
                         version_status: None,
+                        cycle_detected: None,
                     });
                 }
             }
@@ -837,10 +841,113 @@ fn resolve_mse_dependencies(assets: &mut [AssetRecord]) {
             });
         }
     }
+    mark_mse_dependency_cycles(assets);
 }
 
 
-fn mse_folder_package_extension(relative: &Path) -> Option<String> {
+
+fn mark_mse_dependency_cycles(assets: &mut [AssetRecord]) {
+    let mut adjacency = HashMap::<String, Vec<String>>::new();
+    let mut reverse = HashMap::<String, Vec<String>>::new();
+    let mut nodes = HashSet::<String>::new();
+    for asset in assets.iter() {
+        if asset.mse_main_file_present != Some(true) {
+            continue;
+        }
+        let source = asset.relative_path.clone();
+        nodes.insert(source.clone());
+        for dependency in &asset.mse_dependencies {
+            if dependency.resolution_status.as_deref() != Some("resolved") {
+                continue;
+            }
+            let Some(target) = dependency.resolved_path.as_ref() else {
+                continue;
+            };
+            adjacency.entry(source.clone()).or_default().push(target.clone());
+            reverse.entry(target.clone()).or_default().push(source.clone());
+            nodes.insert(target.clone());
+        }
+    }
+
+    // Iterative Kosaraju traversal avoids recursion on untrusted package graphs.
+    let mut visited = HashSet::<String>::new();
+    let mut finish_order = Vec::<String>::new();
+    for root in &nodes {
+        if !visited.insert(root.clone()) {
+            continue;
+        }
+        let mut stack = vec![(root.clone(), 0usize)];
+        while !stack.is_empty() {
+            let next = {
+                let (node, next_index) = stack.last_mut().expect("non-empty DFS stack");
+                let neighbors = adjacency.get(node).map(Vec::as_slice).unwrap_or(&[]);
+                if *next_index < neighbors.len() {
+                    let neighbor = neighbors[*next_index].clone();
+                    *next_index += 1;
+                    Some(neighbor)
+                } else {
+                    None
+                }
+            };
+            if let Some(neighbor) = next {
+                if visited.insert(neighbor.clone()) {
+                    stack.push((neighbor, 0));
+                }
+            } else if let Some((finished, _)) = stack.pop() {
+                finish_order.push(finished);
+            }
+        }
+    }
+
+    let mut component_by_node = HashMap::<String, usize>::new();
+    let mut component_sizes = Vec::<usize>::new();
+    for root in finish_order.into_iter().rev() {
+        if component_by_node.contains_key(&root) {
+            continue;
+        }
+        let component = component_sizes.len();
+        let mut size = 0usize;
+        let mut stack = vec![root.clone()];
+        component_by_node.insert(root, component);
+        while let Some(node) = stack.pop() {
+            size += 1;
+            if let Some(neighbors) = reverse.get(&node) {
+                for neighbor in neighbors {
+                    if !component_by_node.contains_key(neighbor) {
+                        component_by_node.insert(neighbor.clone(), component);
+                        stack.push(neighbor.clone());
+                    }
+                }
+            }
+        }
+        component_sizes.push(size);
+    }
+
+    let mut cyclic_components = HashSet::<usize>::new();
+    for (component, size) in component_sizes.iter().enumerate() {
+        if *size > 1 {
+            cyclic_components.insert(component);
+        }
+    }
+    for (source, targets) in &adjacency {
+        if !targets.iter().any(|target| target == source) {
+            continue;
+        }
+        if let Some(component) = component_by_node.get(source) {
+            cyclic_components.insert(*component);
+        }
+    }
+
+    for asset in assets.iter_mut() {
+        for dependency in &mut asset.mse_dependencies {
+            dependency.cycle_detected = dependency.resolved_path.as_ref().and_then(|target| {
+                let source_component = component_by_node.get(&asset.relative_path)?;
+                let target_component = component_by_node.get(target)?;
+                Some(source_component == target_component && cyclic_components.contains(source_component))
+            });
+        }
+    }
+}fn mse_folder_package_extension(relative: &Path) -> Option<String> {
     let directory_name = relative.parent()?.file_name()?.to_str()?;
     let extension = Path::new(directory_name).extension()?.to_str()?.to_ascii_lowercase();
     mse_package_type(&extension).map(|_| extension)
@@ -1784,6 +1891,29 @@ mod tests {
     }
 
     #[test]
+    fn detects_mse_dependency_cycles_without_recursive_graph_walks() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-cycle-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for (directory, contents) in [
+            ("a.mse-game", "mse version: 0.3.4\nversion: 1.0.0\nname: A\ndepends on: b.mse-game\n"),
+            ("b.mse-game", "mse version: 0.3.4\nversion: 1.0.0\nname: B\ndepends on: a.mse-game\n"),
+            ("c.mse-game", "mse version: 0.3.4\nversion: 1.0.0\nname: C\ndepends on: b.mse-game\n"),
+        ] {
+            let package = root.join(directory);
+            std::fs::create_dir_all(&package).unwrap();
+            std::fs::write(package.join("game"), contents.as_bytes()).unwrap();
+        }
+        let inventory = scan_directory(&root).unwrap();
+        let a = inventory.assets.iter().find(|asset| asset.relative_path == "a.mse-game/game").unwrap();
+        let b = inventory.assets.iter().find(|asset| asset.relative_path == "b.mse-game/game").unwrap();
+        let c = inventory.assets.iter().find(|asset| asset.relative_path == "c.mse-game/game").unwrap();
+        assert_eq!(a.mse_dependencies[0].cycle_detected, Some(true));
+        assert_eq!(b.mse_dependencies[0].cycle_detected, Some(true));
+        assert_eq!(c.mse_dependencies[0].cycle_detected, Some(false));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn validates_mse_dependency_minimum_versions_for_numeric_and_date_formats() {
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-version-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -2016,6 +2146,7 @@ mod tests {
         assert_eq!(inventory.assets[0].mse_dependencies[0].resolution_status, None);
         assert_eq!(inventory.assets[0].mse_dependencies[0].resolved_path, None);
         assert_eq!(inventory.assets[0].mse_dependencies[0].version_status, None);
+        assert_eq!(inventory.assets[0].mse_dependencies[0].cycle_detected, None);
         assert_eq!(inventory.assets[0].mse_name, None);
     }
 

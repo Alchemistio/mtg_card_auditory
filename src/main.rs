@@ -882,6 +882,9 @@ impl eframe::App for AuditorApp {
                                             .map(|value| format!(" (version minimale {})", value))
                                             .unwrap_or_default();
                                         ui.label(format!("Dépendance : {}{}", dependency.package, version));
+                                        if dependency.cycle_detected == Some(true) {
+                                            ui.colored_label(egui::Color32::YELLOW, "  Cycle de dépendances détecté");
+                                        }
                                         match dependency.version_status.as_deref() {
                                             Some("satisfied") => {
                                                 ui.label("  Version minimale satisfaite");
