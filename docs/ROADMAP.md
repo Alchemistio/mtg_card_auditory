@@ -71,7 +71,7 @@
 - [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
-- [ ] MSE : packages, dépendances et couches.
+- [ ] MSE : reconnaissance des packages ZIP/dossiers et de leurs fichiers principaux.\n- [ ] MSE : lecture bornée des métadonnées et dépendances, sans exécution des scripts ni résolution des includes.\n- [ ] MSE : graphe de dépendances local, ressources et références manquantes.\n- [ ] MSE : tests de non-extraction, traversal, limites de taille et entrées malformées.
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle
