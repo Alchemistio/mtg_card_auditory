@@ -368,7 +368,7 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
     let size_bytes = metadata.len();
     let sha256 = sha256_file_capability(workspace, relative)?;
     let modified_unix_seconds = metadata.modified().ok()
-        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|time| time.into_std().duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
     let detected_family = classify_extension(&extension);
     let raster = raster_metadata(workspace, relative, detected_family);
