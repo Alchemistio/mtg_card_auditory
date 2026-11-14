@@ -198,18 +198,28 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
     }
 }
 
+fn read_limited<R: Read>(reader: R, maximum_bytes: u64) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(maximum_bytes.saturating_add(1)).read_to_end(&mut bytes)
+        .context("Lecture du fichier limitée impossible")?;
+    if bytes.len() as u64 > maximum_bytes {
+        anyhow::bail!("Fichier supérieur à la limite de lecture de {} octets.", maximum_bytes);
+    }
+    Ok(bytes)
+}
+
 fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
     if family != "svg" {
         return (None, None, None, None);
     }
-    if let Ok(metadata) = workspace.metadata(relative) {
-        if metadata.len() > 32 * 1024 * 1024 {
-            return (None, None, None, Some("SVG ignoré : taille supérieure à 32 Mio.".to_string()));
-        }
-    }
-    let source = match workspace.read_to_string(relative) {
+    const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
+    let bytes = match workspace.open(relative).and_then(|file| read_limited(file, MAX_SVG_BYTES)) {
+        Ok(bytes) => bytes,
+        Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible ou supérieure à 32 Mio : {}", error))),
+    };
+    let source = match String::from_utf8(bytes) {
         Ok(source) => source,
-        Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible : {}", error))),
+        Err(error) => return (None, None, Some(false), Some(format!("SVG non UTF-8 : {}", error))),
     };
     let mut reader = Reader::from_str(&source);
     reader.config_mut().trim_text(true);
@@ -268,9 +278,10 @@ fn font_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (O
     if size > 64 * 1024 * 1024 {
         return (None, None, Some("Police ignorée : taille supérieure à 64 Mio.".to_string()));
     }
-    let data = match workspace.open(relative).and_then(|mut file| { let mut data = Vec::new(); file.read_to_end(&mut data).map(|_| data) }) {
+    const MAX_FONT_BYTES: u64 = 64 * 1024 * 1024;
+    let data = match workspace.open(relative).and_then(|file| read_limited(file, MAX_FONT_BYTES)) {
         Ok(data) => data,
-        Err(error) => return (None, None, Some(format!("Lecture de police impossible : {}", error))),
+        Err(error) => return (None, None, Some(format!("Lecture de police impossible ou supérieure à 64 Mio : {}", error))),
     };
     let face = match ttf_parser::Face::parse(&data, 0) {
         Ok(face) => face,
@@ -940,6 +951,28 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
             .with_context(|| format!("Écriture du rapport HTML impossible : {}", destination.display()))?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod bounded_read_tests {
+    use super::*;
+
+    #[test]
+    fn bounded_reader_accepts_exact_limit() {
+        let bytes = read_limited(&b"12345"[..], 5).unwrap();
+        assert_eq!(bytes, b"12345");
+    }
+
+    #[test]
+    fn bounded_reader_rejects_data_over_limit() {
+        let error = read_limited(&b"123456"[..], 5).unwrap_err();
+        assert!(error.to_string().contains("supérieur à la limite"));
+    }
+
+    #[test]
+    fn bounded_reader_accepts_empty_input_with_zero_limit() {
+        assert!(read_limited(&b""[..], 0).unwrap().is_empty());
+    }
 }
 
 #[cfg(test)]
