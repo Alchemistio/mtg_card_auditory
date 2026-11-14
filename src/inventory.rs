@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
-use walkdir::{DirEntry, WalkDir};
+
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
 
@@ -91,8 +91,31 @@ pub struct InventoryComparison {
     pub unchanged_files: usize,
 }
 
-fn is_hidden_or_metadata(entry: &DirEntry) -> bool {
-    entry.file_name().to_string_lossy().starts_with('.')
+fn collect_files_capability(
+    workspace: &CapabilityDir,
+    directory: &Path,
+    depth: usize,
+    paths: &mut Vec<PathBuf>,
+) -> Result<()> {
+    if depth >= 128 {
+        return Ok(());
+    }
+    for entry in workspace.read_dir(directory)
+        .with_context(|| format!("Énumération capability-based impossible : {}", directory.display()))? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let relative = directory.join(&name);
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_files_capability(workspace, &relative, depth + 1, paths)?;
+        } else if file_type.is_file() {
+            paths.push(relative);
+        }
+    }
+    Ok(())
 }
 
 fn classify_notice(file_name: &str) -> Option<String> {
@@ -430,27 +453,16 @@ where
     let workspace = CapabilityDir::open_ambient_dir(&canonical_root, ambient_authority())
         .context("Ouverture capability-based de la source impossible")?;
 
-    let mut paths = Vec::<PathBuf>::new();
-    for item in WalkDir::new(&canonical_root)
-        .follow_links(false)
-        .max_depth(128)
-        .into_iter()
-        .filter_entry(|entry| entry.depth() == 0 || !is_hidden_or_metadata(entry))
-    {
-        if cancelled.load(Ordering::Relaxed) {
-            anyhow::bail!("Scan annulé par l'utilisateur.");
-        }
-        let entry = item.context("Erreur pendant le parcours du dossier")?;
-        if entry.file_type().is_file() {
-            paths.push(entry.path().to_path_buf());
-        }
+    let mut relative_paths = Vec::<PathBuf>::new();
+    collect_files_capability(&workspace, Path::new("."), 0, &mut relative_paths)?;
+    if cancelled.load(Ordering::Relaxed) {
+        anyhow::bail!("Scan annulé par l'utilisateur.");
     }
-
-    let total_paths = paths.len();
-    let total_bytes = paths.iter()
-        .filter_map(|path| path.strip_prefix(&canonical_root).ok())
+    let total_paths = relative_paths.len();
+    let total_bytes = relative_paths.iter()
         .filter_map(|relative| workspace.metadata(relative).ok())
         .fold(0_u64, |total, metadata| total.saturating_add(metadata.len()));
+    let paths: Vec<PathBuf> = relative_paths.iter().map(|relative| canonical_root.join(relative)).collect();
     let completed = AtomicUsize::new(0);
     let completed_bytes = AtomicU64::new(0);
     let mut assets: Vec<AssetRecord> = paths.par_iter()
@@ -529,15 +541,16 @@ where
         }
     }
     let total_bytes = canonical_roots.iter().try_fold(0_u64, |total, root| -> Result<u64> {
-        let mut size = 0_u64;
-        for item in WalkDir::new(root).follow_links(false).max_depth(128)
-            .into_iter().filter_entry(|entry| entry.depth() == 0 || !is_hidden_or_metadata(entry)) {
-            if cancelled.load(Ordering::Relaxed) { anyhow::bail!("Scan annulé par l'utilisateur."); }
-            let entry = item?;
-            if entry.file_type().is_file() {
-                size = size.saturating_add(entry.metadata()?.len());
-            }
+        if cancelled.load(Ordering::Relaxed) {
+            anyhow::bail!("Scan annulé par l'utilisateur.");
         }
+        let workspace = CapabilityDir::open_ambient_dir(root, ambient_authority())
+            .context("Ouverture capability-based de la source impossible")?;
+        let mut relative_paths = Vec::new();
+        collect_files_capability(&workspace, Path::new("."), 0, &mut relative_paths)?;
+        let size = relative_paths.iter()
+            .filter_map(|relative| workspace.metadata(relative).ok())
+            .fold(0_u64, |sum, metadata| sum.saturating_add(metadata.len()));
         Ok(total.saturating_add(size))
     })?;
     let mut assets = Vec::new();
