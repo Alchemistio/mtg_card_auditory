@@ -2831,6 +2831,23 @@ mod tests {
     }
 
     #[test]
+    fn reports_corrupt_mse_zip_without_panicking_or_indexing_resources() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-corrupt-zip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("sample.mse-set"), b"this is not a ZIP archive").unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let package = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set").unwrap();
+        assert_eq!(package.mse_package_type.as_deref(), Some("set"));
+        assert!(package.analysis_warning.is_some());
+        assert!(package.archive_entry_count.is_none());
+        assert!(package.mse_resources.is_empty());
+        assert!(!package.mse_resources_truncated);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn reports_mse_zip_package_missing_its_main_file() {
         use std::io::Write;
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-game-test-{}", std::process::id()));
