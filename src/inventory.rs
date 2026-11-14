@@ -226,6 +226,13 @@ fn read_limited<R: Read>(reader: R, maximum_bytes: u64) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn read_prefix<R: Read>(reader: R, maximum_bytes: u64) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(maximum_bytes).read_to_end(&mut bytes)
+        .context("Lecture du préfixe limitée impossible")?;
+    Ok(bytes)
+}
+
 fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
     if family != "svg" {
         return (None, None, None, None);
@@ -510,24 +517,46 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
         if let Some(main_name) = expected_main {
             const MAX_MSE_HEADER_BYTES: u64 = 1024 * 1024;
             match archive.by_name(main_name) {
-                Ok(entry) if entry.size() > MAX_MSE_HEADER_BYTES => {
-                    mse_header_warning = Some(format!(
-                        "En-tête MSE ignoré : fichier principal supérieur à {} Mio.",
-                        MAX_MSE_HEADER_BYTES / (1024 * 1024)
-                    ));
-                }
-                Ok(entry) => match read_limited(entry, MAX_MSE_HEADER_BYTES)
-                    .and_then(|bytes| parse_mse_header(&bytes)) {
-                    Ok(header) => {
-                        if header.mse_version.is_none() {
-                            mse_header_warning = Some("Version MSE absente de l'en-tête du package.".to_string());
+                Ok(entry) => {
+                    let truncated = entry.size() > MAX_MSE_HEADER_BYTES;
+                    match read_prefix(entry, MAX_MSE_HEADER_BYTES) {
+                        Ok(mut bytes) => {
+                            if truncated {
+                                if let Some(last_newline) = bytes.iter().rposition(|byte| *byte == b'\n') {
+                                    bytes.truncate(last_newline + 1);
+                                } else {
+                                    bytes.clear();
+                                    mse_header_warning = Some(
+                                        "Aucune ligne complète dans le préfixe MSE autorisé.".to_string()
+                                    );
+                                }
+                            }
+                            if !bytes.is_empty() {
+                                match parse_mse_header(&bytes) {
+                                    Ok(header) => {
+                                        if header.mse_version.is_none() {
+                                            mse_header_warning = Some("Version MSE absente de l'en-tête du package.".to_string());
+                                        }
+                                        mse_header = Some(header);
+                                    }
+                                    Err(error) => {
+                                        mse_header_warning = Some(format!("Lecture de l'en-tête MSE impossible : {}", error));
+                                    }
+                                }
+                            }
+                            if truncated {
+                                let note = "En-tête MSE limité au préfixe de 1 Mio ; les données suivantes ne sont pas analysées.".to_string();
+                                mse_header_warning = Some(match mse_header_warning.take() {
+                                    Some(existing) => format!("{} {}", existing, note),
+                                    None => note,
+                                });
+                            }
                         }
-                        mse_header = Some(header);
+                        Err(error) => {
+                            mse_header_warning = Some(format!("Lecture de l'en-tête MSE impossible : {}", error));
+                        }
                     }
-                    Err(error) => {
-                        mse_header_warning = Some(format!("Lecture de l'en-tête MSE impossible : {}", error));
-                    }
-                },
+                }
                 Err(error) => {
                     mse_header_warning = Some(format!("Fichier principal MSE illisible : {}", error));
                 }
@@ -1389,7 +1418,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_oversized_mse_main_file_without_unbounded_decompression() {
+    fn reads_bounded_prefix_of_large_mse_main_file() {
         use std::io::Write;
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-large-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -1398,12 +1427,15 @@ mod tests {
         let file = File::create(&archive_path).unwrap();
         let mut writer = zip::ZipWriter::new(file);
         writer.start_file("game", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\nshort name: Large Game\n").unwrap();
         writer.write_all(&vec![b'x'; 1024 * 1024 + 1]).unwrap();
         writer.finish().unwrap();
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let metadata = zip_metadata(&workspace, Path::new("sample.mse-game"), "mse-game");
-        assert!(metadata.warning.unwrap().contains("supérieur à 1 Mio"));
-        assert!(metadata.mse_header.is_none());
+        let header = metadata.mse_header.unwrap();
+        assert_eq!(header.mse_version.as_deref(), Some("0.3.4"));
+        assert_eq!(header.short_name.as_deref(), Some("Large Game"));
+        assert!(metadata.warning.unwrap().contains("préfixe de 1 Mio"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
