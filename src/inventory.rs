@@ -371,6 +371,8 @@ pub struct MseDependency {
     pub resolution_status: Option<String>,
     #[serde(default)]
     pub resolved_path: Option<String>,
+    #[serde(default)]
+    pub version_status: Option<String>,
 }
 
 fn finish_mse_dependency(
@@ -390,6 +392,7 @@ fn finish_mse_dependency(
             min_version: version.take(),
             resolution_status: None,
             resolved_path: None,
+            version_status: None,
         });
     } else {
         version.take();
@@ -485,6 +488,7 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
                         min_version: parts.next().map(str::to_string),
                         resolution_status: None,
                         resolved_path: None,
+                        version_status: None,
                     });
                 }
             }
@@ -716,14 +720,55 @@ fn mse_package_identifier(asset: &AssetRecord) -> Option<String> {
     Some(asset.file_name.to_ascii_lowercase())
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MseVersion {
+    Dotted(u64, u64, u64),
+    Date(u64, u64, u64),
+}
+
+fn parse_mse_version(value: &str) -> Option<MseVersion> {
+    let dotted: Vec<&str> = value.split('.').collect();
+    if dotted.len() == 3 && dotted.iter().all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())) {
+        return Some(MseVersion::Dotted(
+            dotted[0].parse().ok()?, dotted[1].parse().ok()?, dotted[2].parse().ok()?
+        ));
+    }
+    let date: Vec<&str> = value.split('-').collect();
+    if date.len() == 3 && date[0].len() == 4 && date[1].len() == 2 && date[2].len() == 2
+        && date.iter().all(|part| part.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        let year = date[0].parse().ok()?;
+        let month = date[1].parse().ok()?;
+        let day = date[2].parse().ok()?;
+        if (1..=12).contains(&month) && (1..=31).contains(&day) {
+            return Some(MseVersion::Date(year, month, day));
+        }
+    }
+    None
+}
+
+fn mse_version_satisfies(actual: &str, minimum: &str) -> Option<bool> {
+    let actual = parse_mse_version(actual)?;
+    let minimum = parse_mse_version(minimum)?;
+    match (actual, minimum) {
+        (MseVersion::Dotted(a, b, c), MseVersion::Dotted(x, y, z)) => Some((a, b, c) >= (x, y, z)),
+        (MseVersion::Date(a, b, c), MseVersion::Date(x, y, z)) => Some((a, b, c) >= (x, y, z)),
+        _ => None,
+    }
+}
+
+
 fn resolve_mse_dependencies(assets: &mut [AssetRecord]) {
-    let mut packages = HashMap::<String, Vec<String>>::new();
+    let mut packages = HashMap::<String, Vec<(String, Option<String>)>>::new();
     let mut games = HashMap::<String, Vec<String>>::new();
     let mut stylesheets = HashMap::<(String, String), Vec<String>>::new();
     for asset in assets.iter() {
         if asset.mse_main_file_present == Some(true) {
             if let Some(identifier) = mse_package_identifier(asset) {
-                packages.entry(identifier).or_default().push(asset.relative_path.clone());
+                packages.entry(identifier).or_default().push((
+                    asset.relative_path.clone(), asset.mse_package_version.clone()
+                ));
             }
             if asset.mse_package_type.as_deref() == Some("game") {
                 if let Some(name) = asset.mse_name.as_ref() {
@@ -770,9 +815,21 @@ fn resolve_mse_dependencies(assets: &mut [AssetRecord]) {
         }
         for dependency in &mut asset.mse_dependencies {
             dependency.resolved_path = None;
+            dependency.version_status = None;
             dependency.resolution_status = Some(match packages.get(&dependency.package.trim().to_ascii_lowercase()) {
-                Some(paths) if paths.len() == 1 => {
-                    dependency.resolved_path = paths.first().cloned();
+                Some(candidates) if candidates.len() == 1 => {
+                    let (path, actual_version) = &candidates[0];
+                    dependency.resolved_path = Some(path.clone());
+                    dependency.version_status = Some(match dependency.min_version.as_deref() {
+                        None => "not-required",
+                        Some(minimum) => match actual_version.as_deref()
+                            .and_then(|actual| mse_version_satisfies(actual, minimum))
+                        {
+                            Some(true) => "satisfied",
+                            Some(false) => "insufficient",
+                            None => "unknown",
+                        },
+                    }.to_string());
                     "resolved".to_string()
                 }
                 Some(_) => "ambiguous".to_string(),
@@ -1727,6 +1784,37 @@ mod tests {
     }
 
     #[test]
+    fn validates_mse_dependency_minimum_versions_for_numeric_and_date_formats() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-version-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let packages = [
+            ("modern.mse-game", "1.10.0"),
+            ("older.mse-game", "1.0.0"),
+            ("dated.mse-game", "2007-06-07"),
+            ("unknown.mse-game", ""),
+        ];
+        for (directory, version) in packages {
+            let package = root.join(directory);
+            std::fs::create_dir_all(&package).unwrap();
+            let version_line = if version.is_empty() { String::new() } else { format!("version: {}\n", version) };
+            std::fs::write(package.join("game"),
+                format!("mse version: 0.3.4\n{}name: {}\n", version_line, directory).as_bytes()).unwrap();
+        }
+        let set = root.join("sample.mse-set");
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(set.join("set"),
+            b"mse version: 0.3.4\ndepends on: modern.mse-game 1.2.0\ndepends on: older.mse-game 1.2.0\ndepends on: dated.mse-game 2007-06-06\ndepends on: unknown.mse-game 1.0.0\ndepends on: modern.mse-game\n").unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_dependencies[0].version_status.as_deref(), Some("satisfied"));
+        assert_eq!(main.mse_dependencies[1].version_status.as_deref(), Some("insufficient"));
+        assert_eq!(main.mse_dependencies[2].version_status.as_deref(), Some("satisfied"));
+        assert_eq!(main.mse_dependencies[3].version_status.as_deref(), Some("unknown"));
+        assert_eq!(main.mse_dependencies[4].version_status.as_deref(), Some("not-required"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn resolves_mse_dependencies_locally_and_reports_missing_packages() {
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-resolve-test-{}", std::process::id()));
         let game = root.join("magic.mse-game");
@@ -1734,7 +1822,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&game).unwrap();
         std::fs::create_dir_all(&set).unwrap();
-        std::fs::write(game.join("game"), b"mse version: 0.3.4\nshort name: Magic\n").unwrap();
+        std::fs::write(game.join("game"), b"mse version: 0.3.4\nversion: 2007-06-06\nshort name: Magic\n").unwrap();
         std::fs::write(set.join("set"),
             b"mse version: 0.3.4\ndepends on: magic.mse-game 2007-06-06\ndepends on: absent.mse-style 1.0\n").unwrap();
         let incomplete_archive = File::create(root.join("absent.mse-style")).unwrap();
@@ -1746,6 +1834,7 @@ mod tests {
         let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
         assert_eq!(main.mse_dependencies[0].resolution_status.as_deref(), Some("resolved"));
         assert_eq!(main.mse_dependencies[0].resolved_path.as_deref(), Some("magic.mse-game/game"));
+        assert_eq!(main.mse_dependencies[0].version_status.as_deref(), Some("satisfied"));
         assert_eq!(main.mse_dependencies[1].resolution_status.as_deref(), Some("missing"));
         assert!(main.mse_dependencies[1].resolved_path.is_none());
         let incomplete = inventory.assets.iter().find(|asset| asset.relative_path == "absent.mse-style").unwrap();
@@ -1926,6 +2015,7 @@ mod tests {
         assert_eq!(inventory.assets[0].duplicate_of, None);
         assert_eq!(inventory.assets[0].mse_dependencies[0].resolution_status, None);
         assert_eq!(inventory.assets[0].mse_dependencies[0].resolved_path, None);
+        assert_eq!(inventory.assets[0].mse_dependencies[0].version_status, None);
         assert_eq!(inventory.assets[0].mse_name, None);
     }
 

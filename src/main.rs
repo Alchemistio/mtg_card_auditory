@@ -882,6 +882,18 @@ impl eframe::App for AuditorApp {
                                             .map(|value| format!(" (version minimale {})", value))
                                             .unwrap_or_default();
                                         ui.label(format!("Dépendance : {}{}", dependency.package, version));
+                                        match dependency.version_status.as_deref() {
+                                            Some("satisfied") => {
+                                                ui.label("  Version minimale satisfaite");
+                                            }
+                                            Some("insufficient") => {
+                                                ui.colored_label(egui::Color32::YELLOW, "  Version locale insuffisante");
+                                            }
+                                            Some("unknown") => {
+                                                ui.colored_label(egui::Color32::YELLOW, "  Compatibilité de version non vérifiable");
+                                            }
+                                            _ => {}
+                                        }
                                         match dependency.resolution_status.as_deref() {
                                             Some("resolved") => {
                                                 if let Some(path) = &dependency.resolved_path {
