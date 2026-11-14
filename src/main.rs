@@ -829,6 +829,21 @@ impl eframe::App for AuditorApp {
                                     if let Some(present) = asset.mse_main_file_present {
                                         ui.label(if present { "Fichier principal présent" } else { "Fichier principal absent" });
                                     }
+                                    if let Some(version) = &asset.mse_version {
+                                        ui.label(format!("Version MSE : {}", version));
+                                    }
+                                    if let Some(name) = &asset.mse_short_name {
+                                        ui.label(format!("Nom : {}", name));
+                                    }
+                                    if let Some(game) = &asset.mse_game {
+                                        ui.label(format!("Jeu : {}", game));
+                                    }
+                                    if let Some(stylesheet) = &asset.mse_stylesheet {
+                                        ui.label(format!("Feuille de style : {}", stylesheet));
+                                    }
+                                    if asset.mse_has_include_directives == Some(true) {
+                                        ui.colored_label(egui::Color32::YELLOW, "Directive include file détectée (non suivie)");
+                                    }
                                 }
                                 if let Some(notice) = &asset.notice_kind {
                                     ui.colored_label(egui::Color32::LIGHT_GREEN, format!("Notice : {}", notice));

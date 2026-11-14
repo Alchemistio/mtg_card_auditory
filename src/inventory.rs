@@ -51,6 +51,20 @@ pub struct AssetRecord {
     #[serde(default)]
     pub mse_main_file_present: Option<bool>,
     #[serde(default)]
+    pub mse_version: Option<String>,
+    #[serde(default)]
+    pub mse_short_name: Option<String>,
+    #[serde(default)]
+    pub mse_full_name: Option<String>,
+    #[serde(default)]
+    pub mse_package_version: Option<String>,
+    #[serde(default)]
+    pub mse_game: Option<String>,
+    #[serde(default)]
+    pub mse_stylesheet: Option<String>,
+    #[serde(default)]
+    pub mse_has_include_directives: Option<bool>,
+    #[serde(default)]
     pub analysis_warning: Option<String>,
     #[serde(default)]
     pub notice_kind: Option<String>,
@@ -331,12 +345,65 @@ fn mse_package_type(extension: &str) -> Option<&'static str> {
 }
 
 #[derive(Default)]
+struct MseHeader {
+    mse_version: Option<String>,
+    short_name: Option<String>,
+    full_name: Option<String>,
+    package_version: Option<String>,
+    game: Option<String>,
+    stylesheet: Option<String>,
+    has_include_directives: Option<bool>,
+}
+
+fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
+    const MAX_MSE_HEADER_LINES: usize = 4096;
+    const MAX_MSE_LINE_BYTES: usize = 16 * 1024;
+    let source = std::str::from_utf8(bytes).context("En-tête MSE non UTF-8")?;
+    let mut header = MseHeader::default();
+    let mut has_include_directives = false;
+    for (line_index, line) in source.lines().enumerate() {
+        if line_index >= MAX_MSE_HEADER_LINES {
+            anyhow::bail!("En-tête MSE supérieur à {} lignes.", MAX_MSE_HEADER_LINES);
+        }
+        if line.len() > MAX_MSE_LINE_BYTES {
+            anyhow::bail!("Ligne d'en-tête MSE supérieure à {} octets.", MAX_MSE_LINE_BYTES);
+        }
+        let unindented = line.trim_start_matches(['\t', ' ']);
+        if unindented.starts_with("include file:") {
+            has_include_directives = true;
+        }
+        if line.starts_with('\t') || line.starts_with(' ') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        match key.trim().to_ascii_lowercase().as_str() {
+            "mse version" => header.mse_version = Some(value.to_string()),
+            "short name" => header.short_name = Some(value.to_string()),
+            "full name" => header.full_name = Some(value.to_string()),
+            "version" => header.package_version = Some(value.to_string()),
+            "game" => header.game = Some(value.to_string()),
+            "stylesheet" | "style" => header.stylesheet = Some(value.to_string()),
+            _ => {}
+        }
+    }
+    header.has_include_directives = Some(has_include_directives);
+    Ok(header)
+}
+
+#[derive(Default)]
 struct ZipMetadata {
     entry_count: Option<usize>,
     uncompressed_bytes: Option<u64>,
     suspicious_paths: Option<usize>,
     warning: Option<String>,
     mse_main_file_present: Option<bool>,
+    mse_header: Option<MseHeader>,
 }
 
 impl ZipMetadata {
@@ -347,7 +414,14 @@ impl ZipMetadata {
         warning: Option<String>,
         mse_main_file_present: Option<bool>,
     ) -> Self {
-        Self { entry_count, uncompressed_bytes, suspicious_paths, warning, mse_main_file_present }
+        Self {
+            entry_count,
+            uncompressed_bytes,
+            suspicious_paths,
+            warning,
+            mse_main_file_present,
+            mse_header: None,
+        }
     }
 }
 
@@ -430,6 +504,36 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
             );
         }
     }
+    let mut mse_header = None;
+    let mut mse_header_warning = None;
+    if mse_main_file_present == Some(true) {
+        if let Some(main_name) = expected_main {
+            const MAX_MSE_HEADER_BYTES: u64 = 1024 * 1024;
+            match archive.by_name(main_name) {
+                Ok(entry) if entry.size() > MAX_MSE_HEADER_BYTES => {
+                    mse_header_warning = Some(format!(
+                        "En-tête MSE ignoré : fichier principal supérieur à {} Mio.",
+                        MAX_MSE_HEADER_BYTES / (1024 * 1024)
+                    ));
+                }
+                Ok(entry) => match read_limited(entry, MAX_MSE_HEADER_BYTES)
+                    .and_then(|bytes| parse_mse_header(&bytes)) {
+                    Ok(header) => {
+                        if header.mse_version.is_none() {
+                            mse_header_warning = Some("Version MSE absente de l'en-tête du package.".to_string());
+                        }
+                        mse_header = Some(header);
+                    }
+                    Err(error) => {
+                        mse_header_warning = Some(format!("Lecture de l'en-tête MSE impossible : {}", error));
+                    }
+                },
+                Err(error) => {
+                    mse_header_warning = Some(format!("Fichier principal MSE illisible : {}", error));
+                }
+            }
+        }
+    }
     let warning = if suspicious_paths > 0 {
         Some("Archive ZIP contenant des chemins suspects ; aucune extraction n'a été effectuée.".to_string())
     } else if suspicious_ratio {
@@ -442,9 +546,17 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
     } else {
         None
     };
-    ZipMetadata::new(
+    let warning = match (warning, mse_header_warning) {
+        (Some(existing), Some(mse)) => Some(format!("{} {}", existing, mse)),
+        (Some(existing), None) => Some(existing),
+        (None, Some(mse)) => Some(mse),
+        (None, None) => None,
+    };
+    let mut metadata = ZipMetadata::new(
         Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths), warning, mse_main_file_present
-    )
+    );
+    metadata.mse_header = mse_header;
+    metadata
 }
 
 fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
@@ -489,10 +601,18 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         suspicious_paths: archive_suspicious_paths,
         warning: archive_warning,
         mse_main_file_present,
+        mse_header,
     } = zip_metadata(workspace, relative, &extension);
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
     let mse_package_type = mse_package_type(&extension).map(str::to_string);
+    let mse_version = mse_header.as_ref().and_then(|header| header.mse_version.clone());
+    let mse_short_name = mse_header.as_ref().and_then(|header| header.short_name.clone());
+    let mse_full_name = mse_header.as_ref().and_then(|header| header.full_name.clone());
+    let mse_package_version = mse_header.as_ref().and_then(|header| header.package_version.clone());
+    let mse_game = mse_header.as_ref().and_then(|header| header.game.clone());
+    let mse_stylesheet = mse_header.as_ref().and_then(|header| header.stylesheet.clone());
+    let mse_has_include_directives = mse_header.as_ref().and_then(|header| header.has_include_directives);
     Ok(AssetRecord {
         id: format!("sha256:{}:{}", sha256, relative_path),
         relative_path,
@@ -517,6 +637,13 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         archive_suspicious_paths,
         mse_package_type,
         mse_main_file_present,
+        mse_version,
+        mse_short_name,
+        mse_full_name,
+        mse_package_version,
+        mse_game,
+        mse_stylesheet,
+        mse_has_include_directives,
         analysis_warning,
         notice_kind,
         duplicate_of: None,
@@ -1230,6 +1357,53 @@ mod tests {
         assert_eq!(metadata.mse_main_file_present, Some(true));
         assert!(metadata.warning.is_none());
         assert!(!root.join("set").exists(), "ZIP contents must never be extracted");
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reads_bounded_mse_header_fields_without_following_includes() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-header-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(
+            b"mse version: 0.3.4\nshort name: My Set\ngame: magic\nstylesheet: new\ninclude file: nested.txt\ncard:\n\tname: ignored\n"
+        ).unwrap();
+        writer.finish().unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = zip_metadata(&workspace, Path::new("sample.mse-set"), "mse-set");
+        let header = metadata.mse_header.unwrap();
+        assert_eq!(header.mse_version.as_deref(), Some("0.3.4"));
+        assert_eq!(header.short_name.as_deref(), Some("My Set"));
+        assert_eq!(header.game.as_deref(), Some("magic"));
+        assert_eq!(header.stylesheet.as_deref(), Some("new"));
+        assert_eq!(header.has_include_directives, Some(true));
+        assert!(!root.join("set").exists(), "ZIP contents must never be extracted");
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_oversized_mse_main_file_without_unbounded_decompression() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-large-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-game");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("game", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(&vec![b'x'; 1024 * 1024 + 1]).unwrap();
+        writer.finish().unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = zip_metadata(&workspace, Path::new("sample.mse-game"), "mse-game");
+        assert!(metadata.warning.unwrap().contains("supérieur à 1 Mio"));
+        assert!(metadata.mse_header.is_none());
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
