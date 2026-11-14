@@ -4,6 +4,13 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 
 **État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `eda3f45` est validée : formatage, Clippy, tests, build Release et upload de l'exécutable.
 
+## Documentation
+- [Cahier des charges](docs/REQUIREMENTS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Feuille de route](docs/ROADMAP.md)
+- [Sécurité](docs/SECURITY.md)
+- [Workflow de développement autonome](docs/WORKFLOW.md)
+
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
 - Source GitHub configurable par URL HTTPS canonique ou propriétaire/dépôt ; validation stricte de l'hôte, du chemin et des caractères du nom.
@@ -62,9 +69,3 @@ Pour un dépôt privé, utiliser un jeton à permissions minimales (Contents: re
 Le dépôt cible est configurable : aucun dépôt MTG n'est codé en dur.
 
 **Périmètre actuel :** cet outil reste autonome. Aucune intégration ni modification du MTG Card Remodeler ne sera entreprise tant que son propre cahier des charges n'est pas finalisé.
-
-## Documentation
-- [Cahier des charges](docs/REQUIREMENTS.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Feuille de route](docs/ROADMAP.md)
-- [Sécurité](docs/SECURITY.md)
