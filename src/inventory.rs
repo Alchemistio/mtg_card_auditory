@@ -970,6 +970,52 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn local_scan_does_not_follow_file_or_directory_symlinks() {
+        use std::os::unix::fs::symlink;
+        let base = std::env::temp_dir().join(format!("mtg-auditor-symlink-test-{}", std::process::id()));
+        let root = base.join("root");
+        let outside = base.join("outside");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"outside").unwrap();
+        symlink(outside.join("secret.txt"), root.join("file-link.txt")).unwrap();
+        symlink(&outside, root.join("directory-link")).unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        assert_eq!(inventory.files_scanned, 0);
+        assert!(inventory.assets.is_empty());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn local_scan_does_not_follow_file_symlinks_when_supported() {
+        use std::os::windows::fs::symlink_file;
+        let base = std::env::temp_dir().join(format!("mtg-auditor-symlink-test-{}", std::process::id()));
+        let root = base.join("root");
+        let outside = base.join("outside");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let target = outside.join("secret.txt");
+        std::fs::write(&target, b"outside").unwrap();
+        let link = root.join("file-link.txt");
+        if let Err(error) = symlink_file(&target, &link) {
+            eprintln!("SKIP: création de lien symbolique Windows refusée par l'environnement: {error}");
+            std::fs::remove_dir_all(base).unwrap();
+            return;
+        }
+
+        let inventory = scan_directory(&root).unwrap();
+        assert_eq!(inventory.files_scanned, 0);
+        assert!(inventory.assets.is_empty());
+        assert_eq!(std::fs::read(&target).unwrap(), b"outside");
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn cancelled_scan_stops_before_analyzing_source_files() {
         let root = std::env::temp_dir().join(format!("mtg-auditor-cancel-test-{}", std::process::id()));

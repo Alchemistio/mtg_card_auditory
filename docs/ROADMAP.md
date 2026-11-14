@@ -34,14 +34,14 @@
 - [ ] Reprise d'un blob interrompu au niveau des octets : non engagée tant que l'API source ne documente pas `Range`/ETag de façon exploitable ; aucun fragment partiel n'est réutilisé.
 - [x] Première migration capability-based des opérations GitHub (cache, destinations, journaux et manifestes) vers `WorkspaceDir`/`cap-std`, avec chemins relatifs validés ; CI Windows complète validée sur `24d85e6`.
 - [x] Migrer les exports JSON/CSV/HTML, planches PNG et index texte vers des handles `cap-std`, création exclusive, synchronisation et nettoyage des fichiers partiels ; CI Windows complète validée sur `77a115e`.
-- [x] Ajouter un test Windows conditionnel de refus de traversée d'un lien symbolique de répertoire vers un dossier externe ; CI `43550560243` verte. La création du lien peut être refusée par le runner et la branche n'est pas encore instrumentée.
-- [~] Lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; restent la sélection initiale des dossiers, l'énumération `WalkDir`, l'instrumentation du test de lien symbolique et les tests des points de réanalyse/courses TOCTOU.
+- [x] Ajouter des tests de non-suivi des liens symboliques de fichiers et de répertoires sous Unix, et de fichiers sous Windows ; le test Windows affiche `SKIP` si les permissions du runner interdisent la création du lien.
+- [~] Énumération récursive, lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; restent la sélection initiale des dossiers et les tests des points de réanalyse/courses TOCTOU.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
 ## Phase 2 — Sources locales et inventaire
 - [x] Sélection de plusieurs dossiers locaux, chemins préfixés par source et détection des sélections imbriquées/dupliquées.
-- [x] Parcours local parallèle via Rayon, sans suivre les liens symboliques.
+- [x] Parcours local récursif capability-based et parallèle via Rayon, sans suivre les liens symboliques, profondeur maximale 128 ; tests dédiés Unix/Windows.
 - [x] Scan local exécuté dans un worker d'arrière-plan.
 - [x] Progression en octets traités (mise à jour par lots de 100 fichiers et à la fin).
 - [x] Modèle d'inventaire versionné (v1), tri stable et SHA-256 en flux ; anciens inventaires v1 acceptés avec champs optionnels par défaut.
@@ -58,7 +58,7 @@
 - [x] Génération de planches raster PNG paginées (16 éléments/page) avec index texte ; SHA vérifié avant aperçu.
 - [x] Refus des exports dans l'arborescence source.
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
-- [x] Annulation coopérative du scan local depuis l'interface, vérifiée entre les étapes de parcours et d'analyse.
+- [x] Annulation coopérative du scan local depuis l'interface, vérifiée à chaque entrée de répertoire et entrée énumérée, puis pendant l'analyse.
 - [x] Progression locale en octets, agrégée à partir des tailles des fichiers et mise à jour par lots de 100 fichiers.
 - [ ] Estimation du temps restant.
 
@@ -88,7 +88,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI test, clippy et build Release validés sur `ca14afa` (run `43588307764`) ; relancer et vérifier la CI du HEAD après les migrations locales suivantes.
+- [x] CI test, clippy et build Release validés sur `4e9e19f` (run `43606766852`) ; relancer et vérifier la CI du HEAD après les migrations locales suivantes.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
