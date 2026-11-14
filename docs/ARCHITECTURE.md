@@ -25,7 +25,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 12. Le journal ne contient aucun jeton. Les lectures/écritures du journal et du manifeste passent par `WorkspaceDir` et des chemins relatifs confinés au workspace. Une destination absente ou dont l'empreinte ne correspond pas n'est jamais écrasée ; elle produit une erreur explicite.
 13. La reprise d'un blob interrompu au niveau des octets reste à faire : la documentation de l'API Git Blobs ne garantit pas `Range`/ETag ; aucun fragment partiel n'est réutilisé. La concurrence bornée reste à évaluer.
 14. Les erreurs réseau de connexion/délai dépassé et les réponses 429/502/503/504 déclenchent jusqu'à trois nouvelles tentatives (quatre requêtes au total) avec délai exponentiel borné ; `Retry-After` numérique ou date HTTP est respecté avec un plafond de 10 secondes. Les 403 de quota primaire épuisé sont diagnostiqués avec quota restant et reset, sans attente longue automatique.
-15. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all` via des handles de fichiers issus de `WorkspaceDir`; la création exclusive évite l'écrasement du fichier final. Cette première migration capability-based est validée par la CI Windows, mais elle ne couvre pas les exports locaux et ne résout pas toutes les courses TOCTOU.
+15. Les fichiers téléchargés sont écrits avec `write_all`/`sync_all` via des handles de fichiers issus de `WorkspaceDir`; la création exclusive évite l'écrasement du fichier final. Le sous-système GitHub et les exports locaux utilisent désormais des handles `cap-std`. Cette migration ne résout pas toutes les courses TOCTOU.
 
 ## Flux local actuel
 1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
@@ -57,9 +57,9 @@ La reprise après fermeture des fichiers terminés est implémentée ; la persis
 ## Limites techniques
 - Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture des fichiers terminés est disponible via le journal JSONL ; les blobs partiellement téléchargés ne sont pas repris.
 - Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring`. Le tampon temporaire de saisie egui, le champ applicatif et les copies explicites envoyées aux workers utilisent `zeroize::Zeroizing<String>` ; les copies internes éventuelles des bibliothèques HTTP/TLS et les dumps mémoire avant libération restent hors de garantie.
-- Les exports JSON/CSV/HTML/PNG et index sont capability-based. La sélection/ouverture initiale des dossiers, la lecture des sources et certaines vérifications locales utilisent encore `std::fs` ambiant ; tests Windows des points de réanalyse/courses TOCTOU à poursuivre.
+- Les exports JSON/CSV/HTML/PNG et index sont capability-based. La sélection/ouverture initiale du workspace, la lecture des sources, la comparaison d'inventaire depuis un chemin choisi et certaines vérifications locales utilisent encore `std::fs` ambiant. Un test Windows conditionnel tente une traversée de lien symbolique vers une cible externe ; la CI passe, mais la branche peut être ignorée si le runner interdit de créer le lien. Tests des points de réanalyse et courses TOCTOU à poursuivre.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `77a115e` a passé la CI Windows complète (formatage, Clippy, tests, build Release et upload d'exécutable). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `9196836` a passé la CI Windows complète (formatage, Clippy, 24 tests, build Release et upload d'exécutable). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.

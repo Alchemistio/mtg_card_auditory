@@ -34,7 +34,8 @@
 - [ ] Reprise d'un blob interrompu au niveau des octets : non engagée tant que l'API source ne documente pas `Range`/ETag de façon exploitable ; aucun fragment partiel n'est réutilisé.
 - [x] Première migration capability-based des opérations GitHub (cache, destinations, journaux et manifestes) vers `WorkspaceDir`/`cap-std`, avec chemins relatifs validés ; CI Windows complète validée sur `24d85e6`.
 - [x] Migrer les exports JSON/CSV/HTML, planches PNG et index texte vers des handles `cap-std`, création exclusive, synchronisation et nettoyage des fichiers partiels ; CI Windows complète validée sur `77a115e`.
-- [ ] Migrer la sélection/ouverture initiale des dossiers et les lectures locales vers des handles capability-based ; tester les points de réanalyse Windows et renforcer les garanties TOCTOU.
+- [x] Ajouter un test Windows conditionnel de refus de traversée d'un lien symbolique de répertoire vers un dossier externe ; CI `43550560243` verte. La création du lien peut être refusée par le runner et la branche n'est pas encore instrumentée.
+- [ ] Migrer la sélection/ouverture initiale des dossiers et les lectures locales vers des handles capability-based ; instrumenter le test de lien symbolique, tester les points de réanalyse Windows et renforcer les garanties TOCTOU.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 

@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `77a115e` est validée : formatage, Clippy, tests, build Release et upload de l'exécutable.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `9196836` est validée : formatage, Clippy, 24 tests, build Release et upload de l'exécutable.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -41,7 +41,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
-- La protection TOCTOU reste partielle : les exports et le sous-système GitHub utilisent des opérations capability-based, mais la sélection/ouverture initiale des dossiers et certaines opérations de lecture locale utilisent encore des chemins ambiants. Les points de réanalyse Windows, les courses concurrentes et les liens symboliques doivent encore être testés.
+- La protection TOCTOU reste partielle : les exports et le sous-système GitHub utilisent des opérations capability-based, mais la sélection/ouverture initiale des dossiers et certaines opérations de lecture locale utilisent encore des chemins ambiants. Un test Windows tente une traversée de lien symbolique de répertoire vers une cible externe et vérifie le refus ; la CI du commit `9196836` passe. La création du lien est conditionnelle et son exécution effective n'est pas encore journalisée. Les points de réanalyse et les courses concurrentes restent à tester.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
 - La CI Windows complète est exécutée à chaque commit. Le statut du commit courant doit être vérifié dans l'onglet Actions ; ne pas extrapoler la validation d'un commit précédent.
 
