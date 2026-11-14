@@ -47,6 +47,10 @@ pub struct AssetRecord {
     #[serde(default)]
     pub archive_suspicious_paths: Option<usize>,
     #[serde(default)]
+    pub mse_package_type: Option<String>,
+    #[serde(default)]
+    pub mse_main_file_present: Option<bool>,
+    #[serde(default)]
     pub analysis_warning: Option<String>,
     #[serde(default)]
     pub notice_kind: Option<String>,
@@ -317,39 +321,89 @@ fn contains_external_css_reference(value: &str) -> bool {
     value.contains("url(http://") || value.contains("url(https://") || value.contains("url(//")
 }
 
-fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> (Option<usize>, Option<u64>, Option<usize>, Option<String>) {
-    if extension != "zip" {
+fn mse_package_type(extension: &str) -> Option<&'static str> {
+    match extension {
+        "mse-set" => Some("set"),
+        "mse-game" => Some("game"),
+        "mse-style" => Some("style"),
+        _ => None,
+    }
+}
+
+#[derive(Default)]
+struct ZipMetadata {
+    entry_count: Option<usize>,
+    uncompressed_bytes: Option<u64>,
+    suspicious_paths: Option<usize>,
+    warning: Option<String>,
+    mse_main_file_present: Option<bool>,
+}
+
+impl ZipMetadata {
+    fn new(
+        entry_count: Option<usize>,
+        uncompressed_bytes: Option<u64>,
+        suspicious_paths: Option<usize>,
+        warning: Option<String>,
+        mse_main_file_present: Option<bool>,
+    ) -> Self {
+        Self { entry_count, uncompressed_bytes, suspicious_paths, warning, mse_main_file_present }
+    }
+}
+
+fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> ZipMetadata {
+    let expected_main = mse_package_type(extension);
+    if extension != "zip" && expected_main.is_none() {
         if extension == "7z" || extension == "rar" {
-            return (None, None, None, Some("Inspection de cette archive non prise en charge pour le moment.".to_string()));
+            return ZipMetadata::new(
+                None, None, None,
+                Some("Inspection de cette archive non prise en charge pour le moment.".to_string()),
+                None,
+            );
         }
-        return (None, None, None, None);
+        return ZipMetadata::default();
     }
     let archive_size = match workspace.metadata(relative) {
         Ok(metadata) => metadata.len(),
-        Err(error) => return (None, None, None, Some(format!("Métadonnées ZIP indisponibles : {}", error))),
+        Err(error) => return ZipMetadata::new(
+            None, None, None, Some(format!("Métadonnées ZIP indisponibles : {}", error)), None
+        ),
     };
     if archive_size > 512 * 1024 * 1024 {
-        return (None, None, None, Some("Archive ignorée : fichier ZIP supérieur à 512 Mio.".to_string()));
+        return ZipMetadata::new(
+            None, None, None, Some("Archive ignorée : fichier ZIP supérieur à 512 Mio.".to_string()), None
+        );
     }
     let file = match workspace.open(relative) {
         Ok(file) => file,
-        Err(error) => return (None, None, None, Some(format!("Ouverture ZIP impossible : {}", error))),
+        Err(error) => return ZipMetadata::new(
+            None, None, None, Some(format!("Ouverture ZIP impossible : {}", error)), None
+        ),
     };
     let mut archive = match zip::ZipArchive::new(file) {
         Ok(archive) => archive,
-        Err(error) => return (None, None, None, Some(format!("Structure ZIP invalide : {}", error))),
+        Err(error) => return ZipMetadata::new(
+            None, None, None, Some(format!("Structure ZIP invalide : {}", error)), None
+        ),
     };
     let entry_count = archive.len();
     if entry_count > 200_000 {
-        return (Some(entry_count), None, None, Some("Archive ignorée : plus de 200 000 entrées.".to_string()));
+        return ZipMetadata::new(
+            Some(entry_count), None, None,
+            Some("Archive ignorée : plus de 200 000 entrées.".to_string()), None
+        );
     }
     let mut uncompressed_bytes = 0_u64;
     let mut suspicious_paths = 0_usize;
     let mut suspicious_ratio = false;
+    let mut mse_main_file_present = expected_main.map(|_| false);
     for index in 0..archive.len() {
         let entry = match archive.by_index(index) {
             Ok(entry) => entry,
-            Err(error) => return (Some(entry_count), None, None, Some(format!("Entrée ZIP illisible : {}", error))),
+            Err(error) => return ZipMetadata::new(
+                Some(entry_count), None, Some(suspicious_paths),
+                Some(format!("Entrée ZIP illisible : {}", error)), mse_main_file_present
+            ),
         };
         let name = entry.name();
         if entry.enclosed_name().is_none()
@@ -359,6 +413,9 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
         {
             suspicious_paths += 1;
         }
+        if expected_main.is_some_and(|expected| name == expected) {
+            mse_main_file_present = Some(true);
+        }
         let size = entry.size();
         let compressed = entry.compressed_size();
         if size > compressed.saturating_mul(1000) && size > 1024 * 1024 {
@@ -366,18 +423,28 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
         }
         uncompressed_bytes = uncompressed_bytes.saturating_add(size);
         if uncompressed_bytes > 8 * 1024 * 1024 * 1024 {
-            return (Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths),
-                Some("Alerte ZIP : taille décompressée déclarée supérieure à 8 Gio.".to_string()));
+            return ZipMetadata::new(
+                Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths),
+                Some("Alerte ZIP : taille décompressée déclarée supérieure à 8 Gio.".to_string()),
+                mse_main_file_present
+            );
         }
     }
     let warning = if suspicious_paths > 0 {
         Some("Archive ZIP contenant des chemins suspects ; aucune extraction n'a été effectuée.".to_string())
     } else if suspicious_ratio {
         Some("Archive ZIP avec un ratio de compression inhabituel ; aucune extraction n'a été effectuée.".to_string())
+    } else if mse_main_file_present == Some(false) {
+        Some(format!(
+            "Package MSE incomplet : fichier principal '{}' absent.",
+            expected_main.unwrap_or_default()
+        ))
     } else {
         None
     };
-    (Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths), warning)
+    ZipMetadata::new(
+        Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths), warning, mse_main_file_present
+    )
 }
 
 fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
@@ -416,10 +483,16 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
     let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
         svg_metadata(workspace, relative, detected_family);
     let (font_family, font_subfamily, font_warning) = font_metadata(workspace, relative, detected_family);
-    let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
-        zip_metadata(workspace, relative, &extension);
+    let ZipMetadata {
+        entry_count: archive_entry_count,
+        uncompressed_bytes: archive_uncompressed_bytes,
+        suspicious_paths: archive_suspicious_paths,
+        warning: archive_warning,
+        mse_main_file_present,
+    } = zip_metadata(workspace, relative, &extension);
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
+    let mse_package_type = mse_package_type(&extension).map(str::to_string);
     Ok(AssetRecord {
         id: format!("sha256:{}:{}", sha256, relative_path),
         relative_path,
@@ -442,6 +515,8 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         archive_entry_count,
         archive_uncompressed_bytes,
         archive_suspicious_paths,
+        mse_package_type,
+        mse_main_file_present,
         analysis_warning,
         notice_kind,
         duplicate_of: None,
@@ -1127,10 +1202,54 @@ mod tests {
         writer.write_all(b"not extracted").unwrap();
         writer.finish().unwrap();
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (count, _, suspicious, warning) = zip_metadata(&workspace, Path::new("unsafe.zip"), "zip");
-        assert_eq!(count, Some(1));
-        assert_eq!(suspicious, Some(1));
-        assert!(warning.is_some());
+        let metadata = zip_metadata(&workspace, Path::new("unsafe.zip"), "zip");
+        assert_eq!(metadata.entry_count, Some(1));
+        assert_eq!(metadata.suspicious_paths, Some(1));
+        assert!(metadata.warning.is_some());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detects_mse_set_zip_main_file_without_extracting() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-set-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"set info: fixture").unwrap();
+        writer.start_file("cards/example.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"resource").unwrap();
+        writer.finish().unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = zip_metadata(&workspace, Path::new("sample.mse-set"), "mse-set");
+        assert_eq!(metadata.entry_count, Some(2));
+        assert_eq!(metadata.mse_main_file_present, Some(true));
+        assert!(metadata.warning.is_none());
+        assert!(!root.join("set").exists(), "ZIP contents must never be extracted");
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reports_mse_zip_package_missing_its_main_file() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-game-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-game");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("resources/icon.png", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"fixture").unwrap();
+        writer.finish().unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = zip_metadata(&workspace, Path::new("sample.mse-game"), "mse-game");
+        assert_eq!(metadata.mse_main_file_present, Some(false));
+        assert!(metadata.warning.unwrap().contains("game"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }

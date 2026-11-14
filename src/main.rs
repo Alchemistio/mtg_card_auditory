@@ -824,6 +824,12 @@ impl eframe::App for AuditorApp {
                                 if let Some(count) = asset.archive_entry_count {
                                     ui.label(format!("ZIP : {} entrées", count));
                                 }
+                                if let Some(package_type) = &asset.mse_package_type {
+                                    ui.label(format!("Package MSE : {}", package_type));
+                                    if let Some(present) = asset.mse_main_file_present {
+                                        ui.label(if present { "Fichier principal présent" } else { "Fichier principal absent" });
+                                    }
+                                }
                                 if let Some(notice) = &asset.notice_kind {
                                     ui.colored_label(egui::Color32::LIGHT_GREEN, format!("Notice : {}", notice));
                                 }
