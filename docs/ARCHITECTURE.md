@@ -62,4 +62,4 @@ La reprise après fermeture des fichiers terminés est implémentée ; la persis
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le HEAD `039d2fe` a passé la CI Unix (formatage, Clippy et 42 tests ; run `43634958103`) et la CI Windows complète (formatage, Clippy, 42 tests, build Release et upload d'exécutable ; run `43634958169`). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le HEAD `93b7b65` a passé la CI Unix (formatage, Clippy et 43 tests ; run `43635452155`) et la CI Windows complète (formatage, Clippy, 43 tests, build Release et upload d'exécutable ; run `43635452185`). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.
