@@ -7,13 +7,13 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [x] CI Windows : formatage, Clippy, tests, build Release et upload d'artefact ; validation du HEAD `934853b` (run `43625415525`).
-- [x] CI Unix : formatage, Clippy et tests de sécurité (dont liens symboliques) ; validation du HEAD `934853b` (run `43625415555`).
+- [x] CI Windows : formatage, Clippy, 25 tests, build Release et upload d'artefact ; validation du HEAD `5bf2629` (run `43625687052`).
+- [x] CI Unix : formatage, Clippy et 25 tests de sécurité (dont liens symboliques) ; validation du HEAD `5bf2629` (run `43625687036`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
-- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances.
+- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances (artefact `cargo-lockfile` récupéré depuis le run Windows `43625687052`, fichier de 115 720 octets ; transfert exact dans Git encore à réaliser).
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
@@ -92,7 +92,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, tests, build Release, upload exe) et CI Unix (formatage, Clippy, tests) validées sur le HEAD `934853b` : runs `43625415525` et `43625415555`.
+- [x] CI Windows (formatage, Clippy, 25 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 25 tests) validées sur le HEAD `5bf2629` : runs `43625687052` et `43625687036`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
