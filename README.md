@@ -2,13 +2,14 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Les CI Windows et Unix du HEAD `934853b` sont validées (runs `43625415525` et `43625415555`).
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Les CI Windows et Unix du HEAD `12d77bb` sont validées : 28 tests réussis sur chaque plateforme, formatage et Clippy réussis, build Release Windows publié (runs `43626961749` et `43626961736`).
 
 ## Documentation
 - [Cahier des charges](docs/REQUIREMENTS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Feuille de route](docs/ROADMAP.md)
 - [Sécurité](docs/SECURITY.md)
+- [Analyse des packages MSE](docs/MSE_ANALYSIS.md)
 - [Workflow de développement autonome](docs/WORKFLOW.md)
 
 ## Fonctionnalités présentes dans le socle

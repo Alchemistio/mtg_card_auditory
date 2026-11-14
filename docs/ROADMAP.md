@@ -7,8 +7,8 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [x] CI Windows : formatage, Clippy, 28 tests, build Release et upload d'artefact ; validation du HEAD `60131dc` (run `43626473611`).
-- [x] CI Unix : formatage, Clippy et 28 tests de sécurité (dont liens symboliques et lectures bornées) ; validation du HEAD `60131dc` (run `43626473652`).
+- [x] CI Windows : formatage, Clippy, 28 tests, build Release et upload d'artefact ; validation du HEAD `12d77bb` (run `43626961749`).
+- [x] CI Unix : formatage, Clippy et 28 tests de sécurité (dont liens symboliques et lectures bornées) ; validation du HEAD `12d77bb` (run `43626961736`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
@@ -92,7 +92,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, 28 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 28 tests) validées sur le HEAD `60131dc` : runs `43626473611` et `43626473652`.
+- [x] CI Windows (formatage, Clippy, 28 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 28 tests) validées sur le HEAD `12d77bb` : runs `43626961749` et `43626961736`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
