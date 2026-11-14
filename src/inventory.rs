@@ -577,9 +577,24 @@ fn mse_zip_resources(
     relative: &Path,
     main_name: &str,
 ) -> (Vec<MseResourceRecord>, bool) {
-    const MAX_RESOURCES: usize = 10_000;
-    const MAX_RESOURCE_BYTES: u64 = 64 * 1024 * 1024;
-    const MAX_TOTAL_HASH_BYTES: u64 = 256 * 1024 * 1024;
+    mse_zip_resources_with_limits(
+        workspace,
+        relative,
+        main_name,
+        10_000,
+        64 * 1024 * 1024,
+        256 * 1024 * 1024,
+    )
+}
+
+fn mse_zip_resources_with_limits(
+    workspace: &CapabilityDir,
+    relative: &Path,
+    main_name: &str,
+    max_resources: usize,
+    max_resource_bytes: u64,
+    max_total_hash_bytes: u64,
+) -> (Vec<MseResourceRecord>, bool) {
     let file = match workspace.open(relative) {
         Ok(file) => file,
         Err(_) => return (Vec::new(), true),
@@ -611,7 +626,7 @@ fn mse_zip_resources(
             truncated = true;
             continue;
         }
-        if resources.len() >= MAX_RESOURCES {
+        if resources.len() >= max_resources {
             truncated = true;
             break;
         }
@@ -624,9 +639,9 @@ fn mse_zip_resources(
             "suspicious-path"
         } else if size > entry.compressed_size().saturating_mul(1000) && size > 1024 * 1024 {
             "suspicious-ratio"
-        } else if size > MAX_RESOURCE_BYTES {
+        } else if size > max_resource_bytes {
             "size-limit"
-        } else if hashed_bytes.saturating_add(size) > MAX_TOTAL_HASH_BYTES {
+        } else if hashed_bytes.saturating_add(size) > max_total_hash_bytes {
             "total-budget"
         } else {
             let mut hasher = Sha256::new();
@@ -639,8 +654,8 @@ fn mse_zip_resources(
                     Ok(0) => break,
                     Ok(count) => {
                         bytes_read = bytes_read.saturating_add(count as u64);
-                        if bytes_read > MAX_RESOURCE_BYTES
-                            || hashed_bytes.saturating_add(bytes_read) > MAX_TOTAL_HASH_BYTES
+                        if bytes_read > max_resource_bytes
+                            || hashed_bytes.saturating_add(bytes_read) > max_total_hash_bytes
                         {
                             budget_exceeded = true;
                             break;
@@ -2014,6 +2029,46 @@ mod tests {
         assert_eq!(metadata.entry_count, Some(1));
         assert_eq!(metadata.suspicious_paths, Some(1));
         assert!(metadata.warning.is_some());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn enforces_per_entry_and_total_budgets_for_mse_zip_resource_hashes() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-zip-budget-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer.start_file("large.bin", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"123456").unwrap();
+        writer.start_file("first.bin", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"12345").unwrap();
+        writer.start_file("later.bin", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"x").unwrap();
+        writer.finish().unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (resources, truncated) = mse_zip_resources_with_limits(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            10,
+            5,
+            5,
+        );
+        assert!(!truncated);
+        assert_eq!(resources.len(), 3);
+        assert_eq!(resources[0].hash_status, "size-limit");
+        assert_eq!(resources[0].sha256, None);
+        assert_eq!(resources[1].hash_status, "hashed");
+        assert!(resources[1].sha256.is_some());
+        assert_eq!(resources[2].hash_status, "total-budget");
+        assert_eq!(resources[2].sha256, None);
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
