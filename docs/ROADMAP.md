@@ -7,8 +7,8 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [x] CI Windows : formatage, Clippy, 28 tests, build Release et upload d'artefact ; validation du HEAD `12d77bb` (run `43626961749`).
-- [x] CI Unix : formatage, Clippy et 28 tests de sécurité (dont liens symboliques et lectures bornées) ; validation du HEAD `12d77bb` (run `43626961736`).
+- [x] CI Windows : formatage, Clippy, 29 tests, build Release et upload d'artefact ; validation du HEAD `c6149da` (run `43627741170`).
+- [x] CI Unix : formatage, Clippy et 29 tests de sécurité (dont liens symboliques et lectures bornées) ; validation du HEAD `c6149da` (run `43627741180`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
@@ -27,6 +27,7 @@
 - [x] Nouvelles tentatives bornées (3 retries maximum, soit 4 requêtes totales) sur erreurs réseau transitoires et réponses HTTP 429/502/503/504 ; prise en compte bornée de `Retry-After` numérique ou date HTTP ; tests de politique de retry.
 - [x] Cache GitHub local sous le workspace, indexé par owner/repository/commit/blob SHA et vérifié avec le SHA-1 Git avant réutilisation.
 - [x] Journal JSONL persistant des téléchargements par dépôt et commit complet ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
+- [x] Lecture du journal JSONL bornée à 64 Mio en flux, avec test de non-régression à la limite et au-delà.
 - [x] Isolation des journaux de reprise et manifestes par owner/repository pour éviter les collisions entre dépôts.
 - [x] Diagnostic du quota restant et de la fenêtre de reset depuis les en-têtes de réponse GitHub (valeurs `x-ratelimit-remaining` et `x-ratelimit-reset`).
 - [x] Stockage explicite du jeton dans Windows Credential Manager : charger, enregistrer et supprimer ; aucun enregistrement automatique. CI Windows complète validée.
@@ -92,7 +93,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, 28 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 28 tests) validées sur le HEAD `12d77bb` : runs `43626961749` et `43626961736`.
+- [x] CI Windows (formatage, Clippy, 29 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 29 tests) validées sur le HEAD `c6149da` : runs `43627741170` et `43627741180`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
