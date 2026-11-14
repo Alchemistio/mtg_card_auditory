@@ -21,6 +21,10 @@ Le fichier de données est du texte UTF-8 hiérarchique. Les clés et valeurs so
 
 Les fichiers hiérarchiques peuvent également déclarer `include file:`. Cette directive est une inclusion textuelle dans MSE ; l'auditeur ne doit jamais la résoudre automatiquement ni ouvrir un chemin arbitraire issu du contenu.
 
+## État de l'implémentation
+
+La première tranche est en place pour les conteneurs ZIP : les extensions `.mse-set`, `.mse-game` et `.mse-style` sont reconnues, le type attendu est affiché et la présence du fichier principal à la racine (`set`, `game` ou `style`) est vérifiée depuis la table centrale ZIP. Aucun fichier n'est extrait et le contenu du fichier principal n'est pas encore lu. La reconnaissance des packages sous forme de dossiers, la lecture des en-têtes, les dépendances et les ressources restent à faire.
+
 ## Objectif fonctionnel
 
 L'auditeur doit pouvoir :

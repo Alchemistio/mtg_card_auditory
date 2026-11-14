@@ -7,8 +7,8 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [x] CI Windows : formatage, Clippy, 29 tests, build Release et upload d'artefact ; validation du HEAD `c6149da` (run `43627741170`).
-- [x] CI Unix : formatage, Clippy et 29 tests de sécurité (dont liens symboliques et lectures bornées) ; validation du HEAD `c6149da` (run `43627741180`).
+- [x] CI Windows : formatage, Clippy, 31 tests, build Release et upload d'artefact ; validation du HEAD `02d7304` (run `43628271597`).
+- [x] CI Unix : formatage, Clippy et 31 tests de sécurité (dont liens symboliques, lectures bornées et reconnaissance MSE ZIP) ; validation du HEAD `02d7304` (run `43628271614`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
@@ -72,7 +72,8 @@
 - [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
-- [ ] MSE : reconnaissance des packages ZIP/dossiers et de leurs fichiers principaux.\n- [ ] MSE : lecture bornée des métadonnées et dépendances, sans exécution des scripts ni résolution des includes.\n- [ ] MSE : graphe de dépendances local, ressources et références manquantes.\n- [ ] MSE : tests de non-extraction, traversal, limites de taille et entrées malformées.
+- [~] MSE : reconnaissance des packages ZIP `.mse-set`, `.mse-game` et `.mse-style` et vérification de la présence du fichier principal depuis la table centrale, sans extraction.
+- [ ] MSE : reconnaissance des packages sous forme de dossiers.\n- [ ] MSE : lecture bornée des métadonnées et dépendances, sans exécution des scripts ni résolution des includes.\n- [ ] MSE : graphe de dépendances local, ressources et références manquantes.\n- [~] MSE : tests de non-extraction et de présence/absence du fichier principal pour les conteneurs ZIP ; tests de traversal, limites de taille et entrées malformées supplémentaires à faire.
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle
@@ -93,7 +94,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, 29 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 29 tests) validées sur le HEAD `c6149da` : runs `43627741170` et `43627741180`.
+- [x] CI Windows (formatage, Clippy, 31 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 31 tests) validées sur le HEAD `02d7304` : runs `43628271597` et `43628271614`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.

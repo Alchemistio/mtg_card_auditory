@@ -13,7 +13,7 @@
 - Le repérage de noms LICENSE/NOTICE/README est une simple aide à l'inventaire ; il ne certifie aucune licence ni droit de redistribution.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
 - Les SVG sont analysés comme XML sans rendu ; la lecture est plafonnée à 32 Mio au niveau du flux, même si le fichier grossit après la vérification de ses métadonnées.
-- Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée.
+- Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée. Les packages MSE ZIP sont reconnus uniquement par extension et par présence du fichier principal attendu dans cette table ; aucun contenu MSE n'est encore lu.
 
 ## Chemins et liens
 - Les URL de dépôt sont analysées avec un parseur URL dédié : HTTPS uniquement, hôte exactement `github.com`, absence d'identifiants/port/query/fragment, et chemin limité à `owner/repository`.
@@ -33,7 +33,7 @@
 - Les lectures des sources lors de l'analyse, la réanalyse des images pour planches de contact et la lecture d'un inventaire JSON de comparaison utilisent des handles `cap-std` et des chemins relatifs au répertoire ouvert. Les planches vérifient le hash avant décodage et réouvrent le fichier via le handle pour lire les dimensions puis les pixels. Les contenus SVG et polices sont plafonnés en lecture à 32 Mio et 64 Mio respectivement, sans dépendre uniquement de métadonnées susceptibles de devenir obsolètes.
 - Ce confinement ne constitue pas une garantie TOCTOU complète : la sélection initiale des dossiers repose encore sur des chemins ambiants ; les points de réanalyse Windows et les courses concurrentes doivent encore être éprouvées.
 - Le scan local énumère récursivement via `cap-std`, ne suit pas les liens symboliques et limite la profondeur à 128 niveaux. Un test Unix couvre les liens de fichiers et de répertoires ; un test Windows couvre les liens de fichiers et affiche explicitement un message `SKIP` si les permissions du runner empêchent leur création.
-- Un test Unix crée un lien symbolique de répertoire vers un dossier externe, puis vérifie que `WorkspaceDir::create_new` refuse de créer un fichier via ce lien et que la cible externe reste intacte. Le test Windows correspondant affiche explicitement `SKIP` si le runner refuse la création du lien. Sur le HEAD `c6149da`, les deux suites CI Unix et Windows ont exécuté chacune 29 tests avec succès (runs `43627741180` et `43627741170`) ; les tests de lecture bornée sont passés.
+- Un test Unix crée un lien symbolique de répertoire vers un dossier externe, puis vérifie que `WorkspaceDir::create_new` refuse de créer un fichier via ce lien et que la cible externe reste intacte. Le test Windows correspondant affiche explicitement `SKIP` si le runner refuse la création du lien. Sur le HEAD `02d7304`, les deux suites CI Unix et Windows ont exécuté chacune 31 tests avec succès (runs `43628271614` et `43628271597`) ; les tests de lecture bornée et les tests de reconnaissance MSE ZIP sont passés.
 - Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence de l'une des sources analysées.
 
 ## Archives

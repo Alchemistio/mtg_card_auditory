@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Les CI Windows et Unix du HEAD `c6149da` sont validées : 29 tests réussis sur chaque plateforme, formatage et Clippy réussis, build Release Windows publié (runs `43627741170` et `43627741180`).
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, la reconnaissance initiale des packages MSE ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. Les CI Windows et Unix du HEAD `02d7304` sont validées : 31 tests réussis sur chaque plateforme, formatage et Clippy réussis, build Release Windows publié (runs `43628271597` et `43628271614`).
 
 ## Documentation
 - [Cahier des charges](docs/REQUIREMENTS.md)
@@ -36,12 +36,14 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
 - Polices : extraction initiale de la famille et sous-famille lorsque le format est pris en charge.
 - ZIP : lecture de la table centrale, comptage des entrées, taille décompressée déclarée, chemins suspects et ratios anormaux ; aucun décompactage ; archives de plus de 512 Mio ignorées.
+- MSE : reconnaissance des archives ZIP `.mse-set`, `.mse-game` et `.mse-style` et vérification de la présence du fichier principal (`set`, `game` ou `style`) depuis la table centrale, sans extraction ni lecture de son contenu.
 - Exports JSON et CSV UTF-8, rapport HTML autonome sans JavaScript.
 - Planches raster PNG de 16 images par page, avec fichier texte d'index ; le SHA-256 source est revérifié avant génération.
 - Vue locale filtrable ; jusqu'à 500 lignes affichées à la fois, exports complets.
 - Confinement capability-based (`cap-std`) des opérations GitHub, des exports et des lectures locales sensibles : cache, téléchargements, journaux, manifestes, JSON/CSV/HTML, planches PNG, index, réanalyse des images et lecture des inventaires de comparaison utilisent des handles de répertoire et des créations exclusives.
 
 ## Limites connues
+- Les packages MSE sous forme de dossiers, la lecture des en-têtes, les dépendances, les directives `include file:` et le graphe de ressources restent à implémenter.
 - Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
 - Journal de progression persistant par dépôt et commit complet dans `.mtg-auditor-cache/download-sessions/owner/repository/` ; les fichiers terminés sont repris uniquement si leur taille et leur SHA-1 Git correspondent encore. Les manifestes sont également séparés par dépôt dans `.mtg-auditor-cache/download-manifests/`. Les fichiers absents ou modifiés ne sont jamais écrasés. La vérification des fichiers repris est effectuée en flux avec un tampon de 64 Kio ; la lecture du journal de reprise est plafonnée à 64 Mio.
 - La reprise concerne les fichiers terminés d'une sélection relancée. La reprise d'un blob interrompu au niveau des octets n'est pas implémentée ; la documentation GitHub de l'API Git Blobs ne garantit pas la prise en charge de `Range` ou d'ETag, donc aucun fragment partiel n'est réutilisé.
