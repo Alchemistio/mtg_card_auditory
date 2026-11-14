@@ -1810,6 +1810,60 @@ mod tests {
     }
 
     #[test]
+    fn flags_suspicious_mse_zip_resource_paths_without_extracting() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-traversal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\nshort name: Safe Set\n").unwrap();
+        writer.start_file("../escape.png", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"not extracted").unwrap();
+        writer.finish().unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let package = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set").unwrap();
+        assert_eq!(package.mse_main_file_present, Some(true));
+        assert_eq!(package.mse_short_name.as_deref(), Some("Safe Set"));
+        assert_eq!(package.archive_suspicious_paths, Some(1));
+        assert!(package.analysis_warning.as_deref().is_some_and(|warning| warning.contains("chemins suspects")));
+        assert!(!root.join("escape.png").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn flags_mse_zip_extreme_compression_ratio_without_decompression() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-ratio-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        writer.start_file("images/repetitive.bin", options).unwrap();
+        writer.write_all(&vec![0_u8; 4 * 1024 * 1024]).unwrap();
+        writer.finish().unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let package = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set").unwrap();
+        assert_eq!(package.mse_main_file_present, Some(true));
+        assert!(package.analysis_warning.as_deref().is_some_and(|warning| warning.contains("ratio de compression")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_non_utf8_mse_headers() {
+        assert!(parse_mse_header(&[b'm', b's', b'e', b' ', b'v', b'e', b'r', b's', b'i', b'o', b'n', b':', b' ', 0xff]).is_err());
+    }
+
+    #[test]
     fn detects_mse_set_zip_main_file_without_extracting() {
         use std::io::Write;
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-set-test-{}", std::process::id()));
