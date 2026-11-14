@@ -98,7 +98,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, 43 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 43 tests) validées sur le HEAD `93b7b65` : runs `43635452185` et `43635452155`.
+- [x] CI Windows (formatage, Clippy, 49 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 49 tests) validées sur le HEAD `f80ad37` : runs `43636371251` et `43636371245`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
