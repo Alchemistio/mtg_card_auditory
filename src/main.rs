@@ -980,6 +980,18 @@ mod write_tests {
         assert!(super::safe_workspace_relative("../outside").is_err());
         assert!(super::safe_workspace_relative("C:\\outside").is_err());
         assert!(super::safe_workspace_relative("folder/file.txt:alternate").is_err());
+        #[cfg(windows)]
+        {
+            let outside = directory.with_file_name(format!("mtg-auditor-cap-outside-{}-{}", std::process::id(), nonce));
+            fs::create_dir_all(&outside).unwrap();
+            let link = directory.join("outside-link");
+            if std::os::windows::fs::symlink_dir(&outside, &link).is_ok() {
+                let escaped = PathBuf::from("outside-link/escaped.txt");
+                assert!(workspace.create_new(&escaped).is_err());
+                assert!(!outside.join("escaped.txt").exists());
+            }
+            fs::remove_dir_all(&outside).unwrap();
+        }
         drop(workspace);
         fs::remove_dir_all(directory).unwrap();
     }
