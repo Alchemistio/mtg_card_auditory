@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
+use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}};
 use image::{ImageDecoder, ImageReader};
 use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
@@ -136,11 +136,11 @@ struct RasterMetadata {
     warning: Option<String>,
 }
 
-fn raster_metadata(path: &Path, family: &str) -> RasterMetadata {
+fn raster_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family: &str) -> RasterMetadata {
     if family != "raster" {
         return RasterMetadata::default();
     }
-    let reader = match ImageReader::open(path).and_then(|reader| reader.with_guessed_format()) {
+    let reader = match workspace.open(relative).map(BufReader::new).map(ImageReader::new).and_then(|reader| reader.with_guessed_format()) {
         Ok(reader) => reader,
         Err(error) => return RasterMetadata {
             warning: Some(format!("Détection du format image impossible : {}", error)),
@@ -168,16 +168,16 @@ fn raster_metadata(path: &Path, family: &str) -> RasterMetadata {
     }
 }
 
-fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
+fn svg_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family: &str) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
     if family != "svg" {
         return (None, None, None, None);
     }
-    if let Ok(metadata) = std::fs::metadata(path) {
+    if let Ok(metadata) = workspace.metadata(relative) {
         if metadata.len() > 32 * 1024 * 1024 {
             return (None, None, None, Some("SVG ignoré : taille supérieure à 32 Mio.".to_string()));
         }
     }
-    let source = match std::fs::read_to_string(path) {
+    let source = match workspace.read_to_string(relative) {
         Ok(source) => source,
         Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible : {}", error))),
     };
@@ -227,18 +227,18 @@ fn svg_metadata(path: &Path, family: &str) -> (Option<String>, Option<bool>, Opt
     (viewbox, Some(external_refs), Some(true), None)
 }
 
-fn font_metadata(path: &Path, family: &str) -> (Option<String>, Option<String>, Option<String>) {
+fn font_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, family: &str) -> (Option<String>, Option<String>, Option<String>) {
     if family != "font" {
         return (None, None, None);
     }
-    let size = match std::fs::metadata(path) {
+    let size = match workspace.metadata(relative) {
         Ok(metadata) => metadata.len(),
         Err(error) => return (None, None, Some(format!("Métadonnées de police indisponibles : {}", error))),
     };
     if size > 64 * 1024 * 1024 {
         return (None, None, Some("Police ignorée : taille supérieure à 64 Mio.".to_string()));
     }
-    let data = match std::fs::read(path) {
+    let data = match workspace.open(relative).and_then(|mut file| { let mut data = Vec::new(); file.read_to_end(&mut data).map(|_| data) }) {
         Ok(data) => data,
         Err(error) => return (None, None, Some(format!("Lecture de police impossible : {}", error))),
     };
@@ -268,21 +268,21 @@ fn contains_external_css_reference(value: &str) -> bool {
     value.contains("url(http://") || value.contains("url(https://") || value.contains("url(//")
 }
 
-fn zip_metadata(path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Option<usize>, Option<String>) {
+fn zip_metadata(workspace: &CapabilityDir, relative: &Path, path: &Path, extension: &str) -> (Option<usize>, Option<u64>, Option<usize>, Option<String>) {
     if extension != "zip" {
         if extension == "7z" || extension == "rar" {
             return (None, None, None, Some("Inspection de cette archive non prise en charge pour le moment.".to_string()));
         }
         return (None, None, None, None);
     }
-    let archive_size = match std::fs::metadata(path) {
+    let archive_size = match workspace.metadata(relative) {
         Ok(metadata) => metadata.len(),
         Err(error) => return (None, None, None, Some(format!("Métadonnées ZIP indisponibles : {}", error))),
     };
     if archive_size > 512 * 1024 * 1024 {
         return (None, None, None, Some("Archive ignorée : fichier ZIP supérieur à 512 Mio.".to_string()));
     }
-    let file = match File::open(path) {
+    let file = match workspace.open(relative) {
         Ok(file) => file,
         Err(error) => return (None, None, None, Some(format!("Ouverture ZIP impossible : {}", error))),
     };
@@ -344,30 +344,44 @@ fn sha256_file(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn analyze_file(path: &Path, canonical_root: &Path) -> Result<AssetRecord> {
-    let metadata = std::fs::metadata(path)?;
+fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
+    let file = workspace.open(relative)
+        .with_context(|| format!("Ouverture capability-based impossible : {}", relative.display()))?;
+    let mut reader = BufReader::with_capacity(1024 * 1024, file);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 1024 * 1024];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 { break; }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -> Result<AssetRecord> {
     let relative = path.strip_prefix(canonical_root)
         .context("Chemin hors du dossier source")?;
+    let metadata = workspace.metadata(relative)?;
     let relative_path = relative.to_string_lossy().replace('\\', "/");
     let file_name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
     let extension = path.extension().unwrap_or_default().to_string_lossy().to_ascii_lowercase();
     let size_bytes = metadata.len();
-    let sha256 = sha256_file(path)?;
+    let sha256 = sha256_file_capability(workspace, relative)?;
     let modified_unix_seconds = metadata.modified().ok()
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
     let detected_family = classify_extension(&extension);
-    let raster = raster_metadata(path, detected_family);
+    let raster = raster_metadata(workspace, relative, path, detected_family);
     let raster_format = raster.format;
     let raster_width = raster.width;
     let raster_height = raster.height;
     let raster_color_type = raster.color_type;
     let raster_has_alpha = raster.has_alpha;
     let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
-        svg_metadata(path, detected_family);
-    let (font_family, font_subfamily, font_warning) = font_metadata(path, detected_family);
+        svg_metadata(workspace, relative, path, detected_family);
+    let (font_family, font_subfamily, font_warning) = font_metadata(workspace, relative, path, detected_family);
     let (archive_entry_count, archive_uncompressed_bytes, archive_suspicious_paths, archive_warning) =
-        zip_metadata(path, &extension);
+        zip_metadata(workspace, relative, path, &extension);
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
     Ok(AssetRecord {
@@ -426,6 +440,9 @@ where
         anyhow::bail!("La source sélectionnée n'est pas un dossier.");
     }
 
+    let workspace = CapabilityDir::open_ambient_dir(&canonical_root, ambient_authority())
+        .context("Ouverture capability-based de la source impossible")?;
+
     let mut paths = Vec::<PathBuf>::new();
     for item in WalkDir::new(&canonical_root)
         .follow_links(false)
@@ -444,7 +461,8 @@ where
 
     let total_paths = paths.len();
     let total_bytes = paths.iter()
-        .filter_map(|path| std::fs::metadata(path).ok())
+        .filter_map(|path| path.strip_prefix(&canonical_root).ok())
+        .filter_map(|relative| workspace.metadata(relative).ok())
         .fold(0_u64, |total, metadata| total.saturating_add(metadata.len()));
     let completed = AtomicUsize::new(0);
     let completed_bytes = AtomicU64::new(0);
@@ -453,7 +471,7 @@ where
             if cancelled.load(Ordering::Relaxed) {
                 anyhow::bail!("Scan annulé par l'utilisateur.");
             }
-            let asset = analyze_file(path, &canonical_root)?;
+            let asset = analyze_file(path, &canonical_root, &workspace)?;
             if cancelled.load(Ordering::Relaxed) {
                 anyhow::bail!("Scan annulé par l'utilisateur.");
             }
