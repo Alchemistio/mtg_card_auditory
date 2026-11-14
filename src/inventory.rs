@@ -10,6 +10,14 @@ use std::{collections::{HashMap, HashSet}, io::{BufReader, Read, Write}, path::{
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MseResourceRecord {
+    /// Chemin relatif au package MSE dossier.
+    pub relative_path: String,
+    pub size_bytes: u64,
+    pub sha256: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetRecord {
     pub id: String,
@@ -76,6 +84,10 @@ pub struct AssetRecord {
     pub mse_has_include_directives: Option<bool>,
     #[serde(default)]
     pub mse_dependencies: Vec<MseDependency>,
+    #[serde(default)]
+    pub mse_resources: Vec<MseResourceRecord>,
+    #[serde(default)]
+    pub mse_resources_truncated: bool,
     #[serde(default)]
     pub analysis_warning: Option<String>,
     #[serde(default)]
@@ -777,6 +789,71 @@ fn mse_version_satisfies(actual: &str, minimum: &str) -> Option<bool> {
 }
 
 
+
+fn attach_mse_folder_resources(assets: &mut [AssetRecord]) {
+    const MAX_RESOURCES_PER_PACKAGE: usize = 10_000;
+    let mut package_indices = HashMap::<String, usize>::new();
+    let mut package_main_paths = HashSet::<String>::new();
+    for (index, asset) in assets.iter().enumerate() {
+        if asset.mse_main_file_present != Some(true) {
+            continue;
+        }
+        let Some(extension) = mse_folder_package_extension(Path::new(&asset.relative_path)) else {
+            continue;
+        };
+        let Some(main_name) = mse_package_type(&extension) else {
+            continue;
+        };
+        if asset.file_name == main_name {
+            if let Some(directory) = Path::new(&asset.relative_path).parent() {
+                let key = directory.to_string_lossy().replace('\\', "/");
+                package_indices.insert(key, index);
+                package_main_paths.insert(asset.relative_path.clone());
+            }
+        }
+    }
+
+    let mut resources_by_package = vec![Vec::<MseResourceRecord>::new(); assets.len()];
+    let mut truncated_by_package = vec![false; assets.len()];
+    for asset in assets.iter() {
+        if package_main_paths.contains(&asset.relative_path) {
+            continue;
+        }
+        let relative = Path::new(&asset.relative_path);
+        let mut parent = relative.parent();
+        while let Some(directory) = parent {
+            let key = directory.to_string_lossy().replace('\\', "/");
+            if let Some(package_index) = package_indices.get(&key).copied() {
+                let package_directory = Path::new(&assets[package_index].relative_path)
+                    .parent()
+                    .expect("MSE folder main file has a parent directory");
+                let package_relative_path = relative.strip_prefix(package_directory)
+                    .expect("resource belongs to its package directory")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let resources = &mut resources_by_package[package_index];
+                if resources.len() < MAX_RESOURCES_PER_PACKAGE {
+                    resources.push(MseResourceRecord {
+                        relative_path: package_relative_path,
+                        size_bytes: asset.size_bytes,
+                        sha256: asset.sha256.clone(),
+                    });
+                } else {
+                    truncated_by_package[package_index] = true;
+                }
+                break;
+            }
+            parent = directory.parent();
+        }
+    }
+
+    for (index, asset) in assets.iter_mut().enumerate() {
+        asset.mse_resources = std::mem::take(&mut resources_by_package[index]);
+        asset.mse_resources_truncated = truncated_by_package[index];
+    }
+}
+
+
 fn resolve_mse_dependencies(assets: &mut [AssetRecord]) {
     let mut packages = HashMap::<String, Vec<(String, Option<String>)>>::new();
     let mut games = HashMap::<String, Vec<String>>::new();
@@ -1120,6 +1197,8 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_stylesheet_resolved_path: None,
         mse_has_include_directives,
         mse_dependencies,
+        mse_resources: Vec::new(),
+        mse_resources_truncated: false,
         analysis_warning,
         notice_kind,
         duplicate_of: None,
@@ -1189,6 +1268,7 @@ where
         .collect::<Result<Vec<_>>>()?;
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
     resolve_mse_dependencies(&mut assets);
+    attach_mse_folder_resources(&mut assets);
     let mut first_path_by_hash = HashMap::<String, String>::new();
     let mut duplicate_files = 0usize;
     for asset in &mut assets {
@@ -2092,6 +2172,36 @@ mod tests {
         assert_eq!(main.mse_dependencies[0].resolution_status.as_deref(), Some("resolved"));
         assert_eq!(main.mse_dependencies[0].resolved_path.as_deref(),
             Some("source-0001/magic.mse-game/game"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn indexes_folder_mse_resources_with_existing_sha256_without_nested_package_leakage() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-resources-{}", std::process::id()));
+        let package = root.join("sample.mse-set");
+        let nested = package.join("nested.mse-game");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(package.join("cards")).unwrap();
+        std::fs::create_dir_all(nested.join("cards")).unwrap();
+        std::fs::write(package.join("set"), b"mse version: 0.3.4\nshort name: Resource Set\n").unwrap();
+        std::fs::write(package.join("cards/example.png"), b"outer resource").unwrap();
+        std::fs::write(nested.join("game"), b"mse version: 0.3.4\nname: Nested Game\n").unwrap();
+        std::fs::write(nested.join("cards/nested.png"), b"nested resource").unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let set = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(set.mse_resources.len(), 1);
+        assert_eq!(set.mse_resources[0].relative_path, "cards/example.png");
+        assert_eq!(set.mse_resources[0].size_bytes, 14);
+        let outer_asset = inventory.assets.iter()
+            .find(|asset| asset.relative_path == "sample.mse-set/cards/example.png").unwrap();
+        assert_eq!(set.mse_resources[0].sha256, outer_asset.sha256);
+
+        let game = inventory.assets.iter()
+            .find(|asset| asset.relative_path == "sample.mse-set/nested.mse-game/game").unwrap();
+        assert_eq!(game.mse_resources.len(), 1);
+        assert_eq!(game.mse_resources[0].relative_path, "cards/nested.png");
+        assert!(!set.mse_resources.iter().any(|resource| resource.relative_path.starts_with("nested.mse-game/")));
         std::fs::remove_dir_all(root).unwrap();
     }
 
