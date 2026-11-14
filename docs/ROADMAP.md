@@ -72,9 +72,12 @@
 - [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
-- [~] MSE : reconnaissance des packages ZIP, vérification du fichier principal, lecture bornée à 1 Mio des champs scalaires et extraction des dépendances compactes/en bloc, sans extraction.
+- [x] MSE : reconnaissance des packages ZIP, vérification du fichier principal, lecture bornée à 1 Mio des champs scalaires et extraction des dépendances compactes/en bloc, sans extraction.
 - [x] MSE : reconnaissance des packages sous forme de dossiers par leur fichier principal (`set`, `game`, `style`), lecture bornée et détection des directives include sans les suivre.
-- [ ] MSE : résolution locale des dépendances et références jeu/feuille de style, puis inventaire des ressources.\n- [ ] MSE : lecture bornée des métadonnées et dépendances, sans exécution des scripts ni résolution des includes.\n- [ ] MSE : graphe de dépendances local, ressources et références manquantes.\n- [~] MSE : tests de non-extraction et de présence/absence du fichier principal pour les conteneurs ZIP ; tests de traversal, limites de taille et entrées malformées supplémentaires à faire.
+- [x] MSE : résolution des dépendances par identifiant de package parmi les sources locales sélectionnées ; statuts résolu/absent/ambigu, sans téléchargement ni installation.
+- [ ] MSE : validation des versions minimales déclarées et des références jeu/feuille de style.
+- [ ] MSE : inventaire des ressources et graphe de dépendances avec cycles.
+- [~] MSE : tests de non-extraction et de présence/absence du fichier principal pour les conteneurs ZIP ; tests de traversal, limites de taille et entrées malformées supplémentaires à faire.
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle

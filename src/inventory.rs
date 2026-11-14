@@ -357,6 +357,10 @@ fn mse_package_type(extension: &str) -> Option<&'static str> {
 pub struct MseDependency {
     pub package: String,
     pub min_version: Option<String>,
+    #[serde(default)]
+    pub resolution_status: Option<String>,
+    #[serde(default)]
+    pub resolved_path: Option<String>,
 }
 
 fn finish_mse_dependency(
@@ -374,6 +378,8 @@ fn finish_mse_dependency(
         dependencies.push(MseDependency {
             package,
             min_version: version.take(),
+            resolution_status: None,
+            resolved_path: None,
         });
     } else {
         version.take();
@@ -466,6 +472,8 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
                     header.dependencies.push(MseDependency {
                         package: package.to_string(),
                         min_version: parts.next().map(str::to_string),
+                        resolution_status: None,
+                        resolved_path: None,
                     });
                 }
             }
@@ -678,6 +686,44 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
     );
     metadata.mse_header = mse_header;
     metadata
+}
+
+
+
+fn mse_package_identifier(asset: &AssetRecord) -> Option<String> {
+    asset.mse_package_type.as_ref()?;
+    if asset.mse_main_file_present != Some(true) {
+        return None;
+    }
+    let relative = Path::new(&asset.relative_path);
+    if let Some(extension) = mse_folder_package_extension(relative) {
+        if mse_package_type(&extension).is_some_and(|main| asset.file_name == main) {
+            return relative.parent()?.file_name()?.to_str().map(str::to_ascii_lowercase);
+        }
+    }
+    Some(asset.file_name.to_ascii_lowercase())
+}
+
+fn resolve_mse_dependencies(assets: &mut [AssetRecord]) {
+    let mut packages = HashMap::<String, Vec<String>>::new();
+    for asset in assets.iter() {
+        if let Some(identifier) = mse_package_identifier(asset) {
+            packages.entry(identifier).or_default().push(asset.relative_path.clone());
+        }
+    }
+    for asset in assets.iter_mut() {
+        for dependency in &mut asset.mse_dependencies {
+            dependency.resolved_path = None;
+            dependency.resolution_status = Some(match packages.get(&dependency.package.trim().to_ascii_lowercase()) {
+                Some(paths) if paths.len() == 1 => {
+                    dependency.resolved_path = paths.first().cloned();
+                    "resolved".to_string()
+                }
+                Some(_) => "ambiguous".to_string(),
+                None => "missing".to_string(),
+            });
+        }
+    }
 }
 
 
@@ -902,6 +948,7 @@ where
         })
         .collect::<Result<Vec<_>>>()?;
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
+    resolve_mse_dependencies(&mut assets);
     let mut first_path_by_hash = HashMap::<String, String>::new();
     let mut duplicate_files = 0usize;
     for asset in &mut assets {
@@ -991,6 +1038,7 @@ where
         progress(completed_bytes, total_bytes);
     }
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
+    resolve_mse_dependencies(&mut assets);
     let mut first_path_by_hash = HashMap::<String, String>::new();
     let mut duplicate_files = 0usize;
     for asset in &mut assets {
@@ -1548,6 +1596,77 @@ mod tests {
         assert!(metadata.warning.is_none());
         assert!(!root.join("set").exists(), "ZIP contents must never be extracted");
         drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_mse_dependencies_locally_and_reports_missing_packages() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-resolve-test-{}", std::process::id()));
+        let game = root.join("magic.mse-game");
+        let set = root.join("sample.mse-set");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(game.join("game"), b"mse version: 0.3.4\nshort name: Magic\n").unwrap();
+        std::fs::write(set.join("set"),
+            b"mse version: 0.3.4\ndepends on: magic.mse-game 2007-06-06\ndepends on: absent.mse-style 1.0\n").unwrap();
+        let incomplete_archive = File::create(root.join("absent.mse-style")).unwrap();
+        let mut incomplete_writer = zip::ZipWriter::new(incomplete_archive);
+        incomplete_writer.start_file("resources/only.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        incomplete_writer.write_all(b"not a main file").unwrap();
+        incomplete_writer.finish().unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_dependencies[0].resolution_status.as_deref(), Some("resolved"));
+        assert_eq!(main.mse_dependencies[0].resolved_path.as_deref(), Some("magic.mse-game/game"));
+        assert_eq!(main.mse_dependencies[1].resolution_status.as_deref(), Some("missing"));
+        assert!(main.mse_dependencies[1].resolved_path.is_none());
+        let incomplete = inventory.assets.iter().find(|asset| asset.relative_path == "absent.mse-style").unwrap();
+        assert_eq!(incomplete.mse_main_file_present, Some(false));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn marks_mse_dependency_ambiguous_when_multiple_local_packages_match() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-ambiguous-test-{}", std::process::id()));
+        let game_folder = root.join("magic.mse-game");
+        let duplicate = root.join("duplicate");
+        let set = root.join("sample.mse-set");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&game_folder).unwrap();
+        std::fs::create_dir_all(&duplicate).unwrap();
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(game_folder.join("game"), b"mse version: 0.3.4\n").unwrap();
+        let archive = File::create(duplicate.join("magic.mse-game")).unwrap();
+        let mut writer = zip::ZipWriter::new(archive);
+        writer.start_file("game", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer.finish().unwrap();
+        std::fs::write(set.join("set"), b"mse version: 0.3.4\ndepends on: magic.mse-game\n").unwrap();
+        let inventory = scan_directory(&root).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_dependencies[0].resolution_status.as_deref(), Some("ambiguous"));
+        assert!(main.mse_dependencies[0].resolved_path.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_mse_dependencies_across_multiple_selected_sources() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-multi-resolve-{}", std::process::id()));
+        let first = root.join("first");
+        let second = root.join("second");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(first.join("magic.mse-game")).unwrap();
+        std::fs::create_dir_all(second.join("sample.mse-set")).unwrap();
+        std::fs::write(first.join("magic.mse-game/game"), b"mse version: 0.3.4\n").unwrap();
+        std::fs::write(second.join("sample.mse-set/set"), b"mse version: 0.3.4\ndepends on: magic.mse-game\n").unwrap();
+        let inventory = scan_multiple_directories_with_progress_and_cancel(
+            &[first, second], |_, _| {}, &AtomicBool::new(false)
+        ).unwrap();
+        let main = inventory.assets.iter().find(|asset| asset.relative_path == "source-0002/sample.mse-set/set").unwrap();
+        assert_eq!(main.mse_dependencies[0].resolution_status.as_deref(), Some("resolved"));
+        assert_eq!(main.mse_dependencies[0].resolved_path.as_deref(),
+            Some("source-0001/magic.mse-game/game"));
         std::fs::remove_dir_all(root).unwrap();
     }
 

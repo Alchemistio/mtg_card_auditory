@@ -845,10 +845,25 @@ impl eframe::App for AuditorApp {
                                         ui.colored_label(egui::Color32::YELLOW, "Directive include file détectée (non suivie)");
                                     }
                                     for dependency in &asset.mse_dependencies {
-                                        if let Some(version) = &dependency.min_version {
-                                            ui.label(format!("Dépendance : {} (version minimale {})", dependency.package, version));
-                                        } else {
-                                            ui.label(format!("Dépendance : {}", dependency.package));
+                                        let version = dependency.min_version.as_ref()
+                                            .map(|value| format!(" (version minimale {})", value))
+                                            .unwrap_or_default();
+                                        ui.label(format!("Dépendance : {}{}", dependency.package, version));
+                                        match dependency.resolution_status.as_deref() {
+                                            Some("resolved") => {
+                                                if let Some(path) = &dependency.resolved_path {
+                                                    ui.label(format!("  Présente localement : {}", path));
+                                                }
+                                            }
+                                            Some("ambiguous") => ui.colored_label(
+                                                egui::Color32::YELLOW,
+                                                "  Plusieurs packages locaux correspondent ; résolution ambiguë",
+                                            ),
+                                            Some("missing") => ui.colored_label(
+                                                egui::Color32::YELLOW,
+                                                "  Package absent des sources analysées",
+                                            ),
+                                            _ => {}
                                         }
                                     }
                                 }
