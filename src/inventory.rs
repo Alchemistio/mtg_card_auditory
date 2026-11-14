@@ -96,12 +96,19 @@ fn collect_files_capability(
     directory: &Path,
     depth: usize,
     paths: &mut Vec<PathBuf>,
+    cancelled: &AtomicBool,
 ) -> Result<()> {
+    if cancelled.load(Ordering::Relaxed) {
+        anyhow::bail!("Scan annulé par l'utilisateur.");
+    }
     if depth >= 128 {
         return Ok(());
     }
     for entry in workspace.read_dir(directory)
         .with_context(|| format!("Énumération capability-based impossible : {}", directory.display()))? {
+        if cancelled.load(Ordering::Relaxed) {
+            anyhow::bail!("Scan annulé par l'utilisateur.");
+        }
         let entry = entry?;
         let name = entry.file_name();
         if name.to_string_lossy().starts_with('.') {
@@ -110,7 +117,7 @@ fn collect_files_capability(
         let relative = directory.join(&name);
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
-            collect_files_capability(workspace, &relative, depth + 1, paths)?;
+            collect_files_capability(workspace, &relative, depth + 1, paths, cancelled)?;
         } else if file_type.is_file() {
             paths.push(relative);
         }
@@ -454,7 +461,7 @@ where
         .context("Ouverture capability-based de la source impossible")?;
 
     let mut relative_paths = Vec::<PathBuf>::new();
-    collect_files_capability(&workspace, Path::new("."), 0, &mut relative_paths)?;
+    collect_files_capability(&workspace, Path::new("."), 0, &mut relative_paths, cancelled)?;
     if cancelled.load(Ordering::Relaxed) {
         anyhow::bail!("Scan annulé par l'utilisateur.");
     }
@@ -547,7 +554,7 @@ where
         let workspace = CapabilityDir::open_ambient_dir(root, ambient_authority())
             .context("Ouverture capability-based de la source impossible")?;
         let mut relative_paths = Vec::new();
-        collect_files_capability(&workspace, Path::new("."), 0, &mut relative_paths)?;
+        collect_files_capability(&workspace, Path::new("."), 0, &mut relative_paths, cancelled)?;
         let size = relative_paths.iter()
             .filter_map(|relative| workspace.metadata(relative).ok())
             .fold(0_u64, |sum, metadata| sum.saturating_add(metadata.len()));

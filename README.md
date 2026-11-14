@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `ca14afa` est validée : formatage, Clippy, tests, build Release et upload de l'exécutable.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `eda3f45` est validée : formatage, Clippy, tests, build Release et upload de l'exécutable.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -18,7 +18,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Cache local sous `.mtg-auditor-cache/github/owner/repository/commit/blob-sha` dans le workspace ; les entrées sont vérifiées par SHA-1 Git et les entrées invalides sont écartées avant un nouveau téléchargement.
 - Jeton GitHub saisi dans un champ masqué ; chargement, enregistrement explicite et suppression via Windows Credential Manager (aucun enregistrement automatique). Le tampon temporaire d'édition, le champ applicatif et les copies envoyées aux workers sont enveloppés dans `zeroize::Zeroizing<String>` pour écraser leurs allocations à la libération ; les copies internes de bibliothèques ne sont pas garanties.
 - Filtrage de la liste distante par chemin, extension, plage de taille et famille technique, puis téléchargement sélectif des blobs dans un workspace, avec création exclusive des fichiers, refusant l'écrasement d'un fichier existant au moment de l'ouverture.
-- Scan local parallèle via Rayon, sans suivre les liens symboliques ; sélection multi-dossiers avec préfixes de source, détection des racines imbriquées et doublons exacts entre sources.
+- Scan local parallèle via Rayon, avec énumération récursive capability-based (`cap-std`), sans suivre les liens symboliques ; sélection multi-dossiers avec préfixes de source, détection des racines imbriquées et doublons exacts entre sources.
 - SHA-256 calculé en flux, inventaire versionné, tri stable et classification indicative par extension.
 - Anciens inventaires JSON v1 lisibles malgré l'ajout de nouveaux champs optionnels.
 - Doublons binaires exacts repérés par SHA-256 et référencés au premier chemin ; aucun fichier n'est supprimé.
@@ -41,7 +41,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
-La protection TOCTOU reste partielle : les lectures de fichiers d'analyse, les réanalyses pour planches et la lecture des inventaires de comparaison utilisent désormais des handles capability-based. La sélection initiale des dossiers et l'énumération WalkDir reposent encore sur des chemins ; les points de réanalyse Windows et les courses de remplacement concurrent restent à tester.
+La protection TOCTOU reste partielle : l'énumération récursive et les lectures de fichiers d'analyse, les réanalyses pour planches et la lecture des inventaires de comparaison utilisent des handles capability-based. La sélection initiale des dossiers repose encore sur des chemins ; les points de réanalyse Windows et les courses de remplacement concurrent restent à tester.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
 - La CI Windows complète est exécutée à chaque commit. Le statut du commit courant doit être vérifié dans l'onglet Actions ; ne pas extrapoler la validation d'un commit précédent.
 
