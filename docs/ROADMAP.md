@@ -7,7 +7,9 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [ ] CI des retries HTTP, limites de blobs, annulation locale, filtres distants et progression en octets en attente ; ne pas considérer ce jalon validé avant le run du dernier commit.
+- [x] CI Windows : formatage, Clippy, tests, build Release et upload d'artefact ; validation du HEAD `934853b` (run `43625415525`).
+- [x] CI Unix : formatage, Clippy et tests de sécurité (dont liens symboliques) ; validation du HEAD `934853b` (run `43625415555`).
+- [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
@@ -26,7 +28,7 @@
 - [x] Cache GitHub local sous le workspace, indexé par owner/repository/commit/blob SHA et vérifié avec le SHA-1 Git avant réutilisation.
 - [x] Journal JSONL persistant des téléchargements par dépôt et commit complet ; reprise des fichiers terminés avec vérification SHA-1 Git et taille, sans écrasement des destinations invalides.
 - [x] Isolation des journaux de reprise et manifestes par owner/repository pour éviter les collisions entre dépôts.
-- [ ] Affichage du quota restant et de sa fenêtre de reset.
+- [x] Diagnostic du quota restant et de la fenêtre de reset depuis les en-têtes de réponse GitHub (valeurs `x-ratelimit-remaining` et `x-ratelimit-reset`).
 - [x] Stockage explicite du jeton dans Windows Credential Manager : charger, enregistrer et supprimer ; aucun enregistrement automatique. CI Windows complète validée.
 - [x] Taille maximale par blob (90 Mio), contrôle de taille et vérification du SHA-1 Git de l'objet blob.
 - [x] Annulation coopérative des téléchargements GitHub entre deux blobs ; le blob en cours termine avant l'arrêt.
@@ -90,7 +92,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI test, clippy et build Release validés sur `4e9e19f` (run `43606766852`) ; relancer et vérifier la CI du HEAD après les migrations locales suivantes.
+- [x] CI Windows (formatage, Clippy, tests, build Release, upload exe) et CI Unix (formatage, Clippy, tests) validées sur le HEAD `934853b` : runs `43625415525` et `43625415555`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
