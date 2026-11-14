@@ -77,7 +77,7 @@
 - [x] MSE : résolution des dépendances par identifiant de package parmi les sources locales sélectionnées ; statuts résolu/absent/ambigu, sans téléchargement ni installation.
 - [x] MSE : références jeu/feuille de style résolues localement par nom déclaré, avec états résolu/absent/ambigu ; versions minimales `a.b.c` et `YYYY-MM-DD` comparées, formats inconnus non vérifiables.
 - [~] MSE : cycles du graphe local détectés ; inventaire des ressources et vues de graphe restent à faire.
-- [~] MSE : tests de non-extraction, fichier principal absent, traversal et ratio de compression extrême pour les ZIP ; UTF-8 invalide couvert, limites de taille et constructions d'indentation inconnues à compléter.
+- [~] MSE : tests de non-extraction, fichier principal absent, traversal et ratio de compression extrême pour les ZIP ; UTF-8 invalide et espaces/mélanges d'indentation couverts ; limites de taille et constructions d'indentation inconnues à compléter.
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle

@@ -45,7 +45,7 @@ L'auditeur doit pouvoir :
 - Les entrées ZIP sont inspectées depuis la table centrale ; les noms de chemins sont validés et les tailles déclarées plafonnées.
 - Le fichier principal est lu depuis un handle capability-based pour les packages dossiers, ou depuis l'entrée ZIP attendue pour les packages archivés.
 - La taille maximale du fichier principal, la taille maximale d'une ligne, le nombre de lignes et le nombre d'entrées doivent être bornés avant toute allocation importante.
-- Le décodage UTF-8 et l'indentation sont validés ; les constructions inconnues sont conservées comme avertissements, pas interprétées comme des instructions.
+- Le décodage UTF-8 est strict ; les espaces en début de ligne et les indentations mélangeant espaces/tabulations sont rejetés. Les blocs inconnus correctement tabulés restent opaques et ne sont pas interprétés comme des instructions.
 - Les scripts MSE, scripts de rendu, templates d'export, macros et contenus HTML/CSS restent des données opaques : aucune exécution, rendu ou chargement externe.
 - Les directives `include file:` sont détectées et rapportées, mais ne sont jamais suivies.
 - Les dépendances sont comparées uniquement aux packages explicitement présents dans l'inventaire ; aucune résolution réseau ni installation automatique.

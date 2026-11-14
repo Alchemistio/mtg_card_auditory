@@ -436,8 +436,14 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
         if unindented.starts_with("include file:") {
             has_include_directives = true;
         }
+        if line.starts_with(' ') {
+            anyhow::bail!("Indentation MSE invalide : les espaces en début de ligne sont interdits.");
+        }
         let indentation = line.chars().take_while(|character| *character == '\t').count();
-        if line.starts_with('\t') || line.starts_with(' ') {
+        if line.starts_with('\t') {
+            if line.chars().nth(indentation) == Some(' ') {
+                anyhow::bail!("Indentation MSE invalide : mélange de tabulations et d'espaces.");
+            }
             if in_dependency_block && indentation == 1 {
                 if let Some((key, value)) = unindented.split_once(':') {
                     let value = value.trim();
@@ -2108,6 +2114,13 @@ mod tests {
         assert!(!inventory.assets.iter().any(|asset| asset.mse_package_type.is_some()
             && asset.relative_path == "sample.mse-set/cards/example.txt"));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_mse_header_indentation_with_spaces_or_mixed_whitespace() {
+        assert!(parse_mse_header(b"mse version: 0.3.4\n short name: Invalid\n").is_err());
+        assert!(parse_mse_header(b"mse version: 0.3.4\n\t short name: Invalid\n").is_err());
+        assert!(parse_mse_header(b"mse version: 0.3.4\ndepends on:\n package: invalid.mse-game\n").is_err());
     }
 
     #[test]
