@@ -8,7 +8,7 @@
 - Un manifeste de provenance relie les blobs téléchargés au dépôt, à la référence, au commit SHA et au tree SHA.
 - Les rapports sont exportés hors de tous les dossiers locaux analysés, y compris en mode multi-sources.
 - Le rapport HTML est autonome, échappe les données inventoriées et n'embarque aucun JavaScript.
-- Les planches de contact revérifient le SHA-256 des sources avant de les décoder et refusent les liens symboliques.
+- Les planches de contact ouvrent chaque source via un handle `cap-std`, revérifient le SHA-256 avant de la décoder, contrôlent les métadonnées via le même workspace et refusent les liens symboliques détectés.
 - Les rapports de comparaison JSON sont exportés hors des deux sources comparées.
 - Le repérage de noms LICENSE/NOTICE/README est une simple aide à l'inventaire ; il ne certifie aucune licence ni droit de redistribution.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
@@ -29,7 +29,9 @@
 - Le sous-système GitHub (cache, fichiers téléchargés, journaux JSONL et manifestes) utilise `WorkspaceDir`, wrapper autour de `cap_std::fs::Dir` ouvert sur le workspace. Les opérations sont relatives à ce handle plutôt qu'à des chemins absolus ambiants.
 - Les chemins relatifs du workspace rejettent les composants absolus, parents, préfixes et noms contenant `:` (flux de données alternatifs Windows).
 - Les fichiers téléchargés et temporaires sont créés exclusivement via le handle de répertoire ; la publication du cache utilise un lien dur sans écrasement après vérification SHA-1 Git.
-- Les exports JSON/CSV/HTML, planches PNG et index texte utilisent également un handle `cap-std` ouvert sur le dossier parent canonique, avec création exclusive, synchronisation et suppression du fichier partiel en cas d'erreur. Ce confinement ne constitue pas une garantie TOCTOU complète : la sélection/ouverture initiale des dossiers et certaines opérations de lecture locale utilisent encore des chemins ambiants ; les points de réanalyse Windows et les courses concurrentes doivent encore être éprouvés.
+- Les exports JSON/CSV/HTML, planches PNG et index texte utilisent un handle `cap-std` ouvert sur le dossier parent canonique, avec création exclusive, synchronisation et suppression du fichier partiel en cas d'erreur.
+- Les lectures des sources lors de l'analyse, la réanalyse des images pour planches de contact et la lecture d'un inventaire JSON de comparaison utilisent des handles `cap-std` et des chemins relatifs au répertoire ouvert. Les planches vérifient le hash avant décodage et réouvrent le fichier via le handle pour lire les dimensions puis les pixels.
+- Ce confinement ne constitue pas une garantie TOCTOU complète : la sélection initiale des dossiers et l'énumération `WalkDir` utilisent encore des chemins ambiants ; les points de réanalyse Windows et les courses concurrentes doivent encore être éprouvées.
 - Le scan local ne suit pas les liens symboliques et limite la profondeur de parcours.
 - Un test Windows tente de créer un lien symbolique de répertoire vers un dossier externe, puis vérifie que `WorkspaceDir::create_new` refuse de créer un fichier via ce lien et que la cible externe reste intacte. Si le runner refuse la création du lien, cette partie du test est ignorée ; la réussite CI ne prouve donc pas à elle seule que cette branche a été exercée.
 - Les exports JSON/CSV/HTML/PNG et index texte sont refusés si le chemin final se trouve dans l'arborescence de l'une des sources analysées.
@@ -59,7 +61,7 @@
 - Une ligne finale JSONL incomplète est ignorée après arrêt brutal ; les lignes antérieures invalides bloquent la reprise plutôt que de faire confiance à un journal corrompu.
 - Les erreurs transitoires et réponses 429/502/503/504 utilisent des retries bornés ; le quota primaire épuisé est signalé sans attente longue automatique.
 - Première phase capability-based validée par CI : les opérations GitHub sur le workspace (cache, téléchargements, journaux, manifestes) passent par `WorkspaceDir` et `cap-std`, avec chemins relatifs contrôlés et opérations de fichiers via le handle de répertoire.
-- La migration n'est pas globale : la sélection/ouverture initiale des dossiers, la lecture des fichiers sources, la comparaison d'inventaire depuis un chemin choisi et certaines vérifications locales utilisent encore `std::fs` et des chemins ambiants.
-- La défense TOCTOU reste donc incomplète. Le test Windows de lien symbolique externe est ajouté et passe dans la CI `43550560243`, mais sa branche conditionnelle peut être ignorée si le runner interdit la création du lien. Il reste à instrumenter cette condition, migrer les opérations de workspace restantes, étudier les points de réanalyse Windows et tester les scénarios de remplacement concurrent de répertoires/liens.
+- La migration n'est pas globale : la sélection initiale des dossiers et l'énumération `WalkDir` utilisent encore des chemins ambiants. Les lectures de contenu des fichiers analysés, la réanalyse des images des planches et l'ouverture de l'inventaire JSON de comparaison sont désormais capability-based.
+- La défense TOCTOU reste donc incomplète. Le test Windows de lien symbolique externe est conditionnel et peut être ignoré si le runner interdit la création du lien. Il reste à instrumenter cette condition, étudier les points de réanalyse Windows et tester les scénarios de remplacement concurrent de répertoires/liens.
 - Les quotas API, temporisations, limites de taille et reprise doivent être renforcés.
 - Les analyseurs de formats actifs devront rester sans extraction/exécution automatique.

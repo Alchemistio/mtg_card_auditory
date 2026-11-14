@@ -2,7 +2,7 @@
 
 Application desktop Windows native en Rust pour inventorier et auditer des ressources depuis un dossier local ou un dépôt GitHub choisi par l'utilisateur.
 
-**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `9196836` est validée : formatage, Clippy, 24 tests, build Release et upload de l'exécutable.
+**État : prototype fonctionnel en développement.** Le scan local parallèle SHA-256, la progression de scan en octets et de téléchargement, annulation coopérative du scan local et des téléchargements GitHub (entre deux blobs ; le blob en cours termine), les exports JSON/CSV/HTML, les doublons binaires exacts, la comparaison d'inventaires JSON, les métadonnées raster/SVG/polices/ZIP, les planches de contact PNG, l'exploration GitHub configurable et les workers d'arrière-plan sont intégrés. La CI Windows complète du commit `ca14afa` est validée : formatage, Clippy, tests, build Release et upload de l'exécutable.
 
 ## Fonctionnalités présentes dans le socle
 - Interface desktop française (egui).
@@ -31,7 +31,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Exports JSON et CSV UTF-8, rapport HTML autonome sans JavaScript.
 - Planches raster PNG de 16 images par page, avec fichier texte d'index ; le SHA-256 source est revérifié avant génération.
 - Vue locale filtrable ; jusqu'à 500 lignes affichées à la fois, exports complets.
-- Confinement capability-based (`cap-std`) des opérations GitHub et des exports locaux : cache, téléchargements, journaux, manifestes, JSON/CSV/HTML, planches PNG et index utilisent des handles de répertoire et des créations exclusives.
+- Confinement capability-based (`cap-std`) des opérations GitHub, des exports et des lectures locales sensibles : cache, téléchargements, journaux, manifestes, JSON/CSV/HTML, planches PNG, index, réanalyse des images et lecture des inventaires de comparaison utilisent des handles de répertoire et des créations exclusives.
 
 ## Limites connues
 - Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
@@ -41,7 +41,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
 - Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
-- La protection TOCTOU reste partielle : les exports et le sous-système GitHub utilisent des opérations capability-based, mais la sélection/ouverture initiale des dossiers et certaines opérations de lecture locale utilisent encore des chemins ambiants. Un test Windows tente une traversée de lien symbolique de répertoire vers une cible externe et vérifie le refus ; la CI du commit `9196836` passe. La création du lien est conditionnelle et son exécution effective n'est pas encore journalisée. Les points de réanalyse et les courses concurrentes restent à tester.
+La protection TOCTOU reste partielle : les lectures de fichiers d'analyse, les réanalyses pour planches et la lecture des inventaires de comparaison utilisent désormais des handles capability-based. La sélection initiale des dossiers et l'énumération WalkDir reposent encore sur des chemins ; les points de réanalyse Windows et les courses de remplacement concurrent restent à tester.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
 - La CI Windows complète est exécutée à chaque commit. Le statut du commit courant doit être vérifié dans l'onglet Actions ; ne pas extrapoler la validation d'un commit précédent.
 

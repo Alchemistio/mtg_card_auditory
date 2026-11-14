@@ -35,7 +35,7 @@
 - [x] Première migration capability-based des opérations GitHub (cache, destinations, journaux et manifestes) vers `WorkspaceDir`/`cap-std`, avec chemins relatifs validés ; CI Windows complète validée sur `24d85e6`.
 - [x] Migrer les exports JSON/CSV/HTML, planches PNG et index texte vers des handles `cap-std`, création exclusive, synchronisation et nettoyage des fichiers partiels ; CI Windows complète validée sur `77a115e`.
 - [x] Ajouter un test Windows conditionnel de refus de traversée d'un lien symbolique de répertoire vers un dossier externe ; CI `43550560243` verte. La création du lien peut être refusée par le runner et la branche n'est pas encore instrumentée.
-- [ ] Migrer la sélection/ouverture initiale des dossiers et les lectures locales vers des handles capability-based ; instrumenter le test de lien symbolique, tester les points de réanalyse Windows et renforcer les garanties TOCTOU.
+- [~] Lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; restent la sélection initiale des dossiers, l'énumération `WalkDir`, l'instrumentation du test de lien symbolique et les tests des points de réanalyse/courses TOCTOU.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
@@ -88,7 +88,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [ ] CI test, clippy, build sur le dernier commit.
+- [x] CI test, clippy et build Release validés sur `ca14afa` (run `43588307764`) ; relancer et vérifier la CI du HEAD après les migrations locales suivantes.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
