@@ -877,15 +877,27 @@ impl eframe::App for AuditorApp {
                                     if asset.mse_has_include_directives == Some(true) {
                                         ui.colored_label(egui::Color32::YELLOW, "Directive include file détectée (non suivie)");
                                     }
-                                    if !asset.mse_resources.is_empty() {
-                                        ui.label(format!("Ressources du dossier : {}", asset.mse_resources.len()));
+                                    if !asset.mse_resources.is_empty() || asset.mse_resources_truncated {
+                                        ui.label(format!("Ressources internes indexées : {}", asset.mse_resources.len()));
                                         for resource in asset.mse_resources.iter().take(20) {
-                                            ui.label(format!(
-                                                "  {} — {} octets — SHA-256 {}",
-                                                resource.relative_path,
-                                                resource.size_bytes,
-                                                &resource.sha256[..12.min(resource.sha256.len())],
-                                            ));
+                                            if let Some(hash) = &resource.sha256 {
+                                                ui.label(format!(
+                                                    "  {} — {} octets — SHA-256 {}",
+                                                    resource.relative_path,
+                                                    resource.size_bytes,
+                                                    &hash[..12.min(hash.len())],
+                                                ));
+                                            } else {
+                                                ui.colored_label(
+                                                    egui::Color32::YELLOW,
+                                                    format!(
+                                                        "  {} — {} octets — empreinte non calculée ({})",
+                                                        resource.relative_path,
+                                                        resource.size_bytes,
+                                                        resource.hash_status,
+                                                    ),
+                                                );
+                                            }
                                         }
                                         if asset.mse_resources.len() > 20 || asset.mse_resources_truncated {
                                             ui.label("  Affichage limité ; consulter l'inventaire JSON pour la liste complète disponible.");

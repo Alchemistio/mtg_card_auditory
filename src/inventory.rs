@@ -12,10 +12,11 @@ pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MseResourceRecord {
-    /// Chemin relatif au package MSE dossier.
+    /// Chemin relatif au package MSE, dossier ou archive ZIP.
     pub relative_path: String,
     pub size_bytes: u64,
-    pub sha256: String,
+    pub sha256: Option<String>,
+    pub hash_status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -570,6 +571,116 @@ impl ZipMetadata {
     }
 }
 
+
+fn mse_zip_resources(
+    workspace: &CapabilityDir,
+    relative: &Path,
+    main_name: &str,
+) -> (Vec<MseResourceRecord>, bool) {
+    const MAX_RESOURCES: usize = 10_000;
+    const MAX_RESOURCE_BYTES: u64 = 64 * 1024 * 1024;
+    const MAX_TOTAL_HASH_BYTES: u64 = 256 * 1024 * 1024;
+    let file = match workspace.open(relative) {
+        Ok(file) => file,
+        Err(_) => return (Vec::new(), true),
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(archive) => archive,
+        Err(_) => return (Vec::new(), true),
+    };
+    if archive.len() > 200_000 {
+        return (Vec::new(), true);
+    }
+
+    let mut resources = Vec::new();
+    let mut hashed_bytes = 0_u64;
+    let mut truncated = false;
+    for index in 0..archive.len() {
+        let mut entry = match archive.by_index(index) {
+            Ok(entry) => entry,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        let name = entry.name().to_string();
+        if name == main_name || entry.is_dir() {
+            continue;
+        }
+        if name.len() > 4096 {
+            truncated = true;
+            continue;
+        }
+        if resources.len() >= MAX_RESOURCES {
+            truncated = true;
+            break;
+        }
+        let size = entry.size();
+        let suspicious_path = entry.enclosed_name().is_none()
+            || name.contains('\\')
+            || name.contains(':')
+            || name.split('/').any(|part| part == "." || part == "..");
+        let hash_status = if suspicious_path {
+            "suspicious-path"
+        } else if size > entry.compressed_size().saturating_mul(1000) && size > 1024 * 1024 {
+            "suspicious-ratio"
+        } else if size > MAX_RESOURCE_BYTES {
+            "size-limit"
+        } else if hashed_bytes.saturating_add(size) > MAX_TOTAL_HASH_BYTES {
+            "total-budget"
+        } else {
+            let mut hasher = Sha256::new();
+            let mut buffer = [0_u8; 64 * 1024];
+            let mut bytes_read = 0_u64;
+            let mut read_error = false;
+            let mut budget_exceeded = false;
+            loop {
+                match entry.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(count) => {
+                        bytes_read = bytes_read.saturating_add(count as u64);
+                        if bytes_read > MAX_RESOURCE_BYTES
+                            || hashed_bytes.saturating_add(bytes_read) > MAX_TOTAL_HASH_BYTES
+                        {
+                            budget_exceeded = true;
+                            break;
+                        }
+                        hasher.update(&buffer[..count]);
+                    }
+                    Err(_) => {
+                        read_error = true;
+                        break;
+                    }
+                }
+            }
+            if read_error {
+                "read-error"
+            } else if budget_exceeded {
+                "total-budget"
+            } else if bytes_read != size {
+                "size-mismatch"
+            } else {
+                hashed_bytes = hashed_bytes.saturating_add(bytes_read);
+                resources.push(MseResourceRecord {
+                    relative_path: name,
+                    size_bytes: size,
+                    sha256: Some(format!("{:x}", hasher.finalize())),
+                    hash_status: "hashed".to_string(),
+                });
+                continue;
+            }
+        };
+        resources.push(MseResourceRecord {
+            relative_path: name,
+            size_bytes: size,
+            sha256: None,
+            hash_status: hash_status.to_string(),
+        });
+    }
+    (resources, truncated)
+}
+
+
 fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> ZipMetadata {
     let expected_main = mse_package_type(extension);
     if extension != "zip" && expected_main.is_none() {
@@ -836,7 +947,8 @@ fn attach_mse_folder_resources(assets: &mut [AssetRecord]) {
                     resources.push(MseResourceRecord {
                         relative_path: package_relative_path,
                         size_bytes: asset.size_bytes,
-                        sha256: asset.sha256.clone(),
+                        sha256: Some(asset.sha256.clone()),
+                        hash_status: "hashed".to_string(),
                     });
                 } else {
                     truncated_by_package[package_index] = true;
@@ -848,8 +960,10 @@ fn attach_mse_folder_resources(assets: &mut [AssetRecord]) {
     }
 
     for (index, asset) in assets.iter_mut().enumerate() {
-        asset.mse_resources = std::mem::take(&mut resources_by_package[index]);
-        asset.mse_resources_truncated = truncated_by_package[index];
+        if package_main_paths.contains(&asset.relative_path) {
+            asset.mse_resources = std::mem::take(&mut resources_by_package[index]);
+            asset.mse_resources_truncated = truncated_by_package[index];
+        }
     }
 }
 
@@ -1146,6 +1260,15 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_main_file_present,
         mse_header,
     } = package_metadata;
+    let (mut mse_resources, mse_resources_truncated) =
+        if !is_folder_package_main && mse_main_file_present == Some(true) && archive_entry_count.is_some() {
+            match mse_package_type(&extension) {
+                Some(main_name) => mse_zip_resources(workspace, relative, main_name),
+                None => (Vec::new(), false),
+            }
+        } else {
+            (Vec::new(), false)
+        };
     let analysis_warning = raster.warning.or(svg_warning).or(font_warning).or(archive_warning);
     let notice_kind = classify_notice(&file_name);
     let mse_package_type = mse_package_type(&extension)
@@ -1197,8 +1320,8 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_stylesheet_resolved_path: None,
         mse_has_include_directives,
         mse_dependencies,
-        mse_resources: Vec::new(),
-        mse_resources_truncated: false,
+        mse_resources: std::mem::take(&mut mse_resources),
+        mse_resources_truncated,
         analysis_warning,
         notice_kind,
         duplicate_of: None,
@@ -1896,6 +2019,34 @@ mod tests {
     }
 
     #[test]
+    fn indexes_mse_zip_resources_with_bounded_streaming_sha256() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-zip-resources-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let content = b"zip resource bytes";
+        std::fs::write(root.join("reference.png"), content).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\nshort name: Zip Set\n").unwrap();
+        writer.start_file("cards/example.png", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(content).unwrap();
+        writer.finish().unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let package = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set").unwrap();
+        let reference = inventory.assets.iter().find(|asset| asset.relative_path == "reference.png").unwrap();
+        assert_eq!(package.mse_resources.len(), 1);
+        assert_eq!(package.mse_resources[0].relative_path, "cards/example.png");
+        assert_eq!(package.mse_resources[0].size_bytes, content.len() as u64);
+        assert_eq!(package.mse_resources[0].sha256.as_deref(), Some(reference.sha256.as_str()));
+        assert_eq!(package.mse_resources[0].hash_status, "hashed");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn flags_suspicious_mse_zip_resource_paths_without_extracting() {
         use std::io::Write;
         let root = std::env::temp_dir().join(format!("mtg-auditor-mse-traversal-{}", std::process::id()));
@@ -1917,6 +2068,9 @@ mod tests {
         assert_eq!(package.archive_suspicious_paths, Some(1));
         assert!(package.analysis_warning.as_deref().is_some_and(|warning| warning.contains("chemins suspects")));
         assert!(!root.join("escape.png").exists());
+        assert_eq!(package.mse_resources.len(), 1);
+        assert_eq!(package.mse_resources[0].hash_status, "suspicious-path");
+        assert!(package.mse_resources[0].sha256.is_none());
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1941,6 +2095,9 @@ mod tests {
         let package = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set").unwrap();
         assert_eq!(package.mse_main_file_present, Some(true));
         assert!(package.analysis_warning.as_deref().is_some_and(|warning| warning.contains("ratio de compression")));
+        assert_eq!(package.mse_resources.len(), 1);
+        assert_eq!(package.mse_resources[0].hash_status, "suspicious-ratio");
+        assert!(package.mse_resources[0].sha256.is_none());
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -2195,7 +2352,8 @@ mod tests {
         assert_eq!(set.mse_resources[0].size_bytes, 14);
         let outer_asset = inventory.assets.iter()
             .find(|asset| asset.relative_path == "sample.mse-set/cards/example.png").unwrap();
-        assert_eq!(set.mse_resources[0].sha256, outer_asset.sha256);
+        assert_eq!(set.mse_resources[0].sha256.as_deref(), Some(outer_asset.sha256.as_str()));
+        assert_eq!(set.mse_resources[0].hash_status, "hashed");
 
         let game = inventory.assets.iter()
             .find(|asset| asset.relative_path == "sample.mse-set/nested.mse-game/game").unwrap();
