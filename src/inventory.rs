@@ -1483,6 +1483,24 @@ pub fn scan_multiple_directories_with_progress_and_cancel<F>(
 where
     F: Fn(u64, u64) + Sync,
 {
+    let mut mse_hash_budget = MAX_MSE_ZIP_HASH_BYTES_PER_SCAN;
+    scan_multiple_directories_with_progress_and_cancel_with_budget(
+        roots,
+        progress,
+        cancelled,
+        &mut mse_hash_budget,
+    )
+}
+
+fn scan_multiple_directories_with_progress_and_cancel_with_budget<F>(
+    roots: &[PathBuf],
+    progress: F,
+    cancelled: &AtomicBool,
+    mse_hash_budget: &mut u64,
+) -> Result<InventoryDocument>
+where
+    F: Fn(u64, u64) + Sync,
+{
     if roots.is_empty() {
         anyhow::bail!("Sélectionne au moins un dossier source.");
     }
@@ -1520,7 +1538,6 @@ where
     })?;
     let mut assets = Vec::new();
     let mut completed_bytes = 0_u64;
-    let mut mse_hash_budget = MAX_MSE_ZIP_HASH_BYTES_PER_SCAN;
     let mut source_roots = Vec::with_capacity(canonical_roots.len());
     for (index, root) in canonical_roots.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) { anyhow::bail!("Scan annulé par l'utilisateur."); }
@@ -2459,6 +2476,43 @@ mod tests {
         let main = inventory.assets.iter().find(|asset| asset.relative_path == "sample.mse-set/set").unwrap();
         assert_eq!(main.mse_dependencies[0].resolution_status.as_deref(), Some("ambiguous"));
         assert!(main.mse_dependencies[0].resolved_path.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn shares_one_deterministic_mse_zip_hash_budget_across_multiple_sources() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-multi-budget-{}", std::process::id()));
+        let first = root.join("first");
+        let second = root.join("second");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        for (directory, package_name) in [(&first, "a.mse-set"), (&second, "b.mse-set")] {
+            let file = File::create(directory.join(package_name)).unwrap();
+            let mut writer = zip::ZipWriter::new(file);
+            writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+            writer.write_all(b"mse version: 0.3.4\n").unwrap();
+            writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
+            writer.write_all(b"1234").unwrap();
+            writer.finish().unwrap();
+        }
+
+        let roots = vec![first, second];
+        let mut scan_budget = 4_u64;
+        let inventory = scan_multiple_directories_with_progress_and_cancel_with_budget(
+            &roots,
+            |_, _| {},
+            &AtomicBool::new(false),
+            &mut scan_budget,
+        ).unwrap();
+        let first_package = inventory.assets.iter()
+            .find(|asset| asset.relative_path == "source-0001/a.mse-set").unwrap();
+        let second_package = inventory.assets.iter()
+            .find(|asset| asset.relative_path == "source-0002/b.mse-set").unwrap();
+        assert_eq!(first_package.mse_resources[0].hash_status, "hashed");
+        assert_eq!(second_package.mse_resources[0].hash_status, "scan-budget");
+        assert_eq!(scan_budget, 0);
         std::fs::remove_dir_all(root).unwrap();
     }
 
