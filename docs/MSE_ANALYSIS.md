@@ -23,7 +23,7 @@ Les fichiers hiérarchiques peuvent également déclarer `include file:`. Cette 
 
 ## État de l'implémentation
 
-La première tranche est en place pour les conteneurs ZIP : les extensions `.mse-set`, `.mse-game` et `.mse-style` sont reconnues, le type attendu est affiché et la présence du fichier principal à la racine (`set`, `game` ou `style`) est vérifiée depuis la table centrale ZIP. Le préfixe du fichier principal est lu en flux borné à 1 Mio, sans extraction ; les lignes complètes permettent d'extraire `mse version`, `short name`, `full name`, `version`, `game` et `stylesheet`. Les directives `include file:` sont détectées mais jamais suivies. Les packages sous forme de dossiers, les dépendances, la lecture complète des en-têtes et les ressources restent à faire.
+La première tranche est en place pour les conteneurs ZIP : les extensions `.mse-set`, `.mse-game` et `.mse-style` sont reconnues, le type attendu est affiché et la présence du fichier principal à la racine (`set`, `game` ou `style`) est vérifiée depuis la table centrale ZIP. Le préfixe du fichier principal est lu en flux borné à 1 Mio, sans extraction ; les lignes complètes permettent d'extraire `mse version`, `short name`, `full name`, `version`, `game` et `stylesheet`. Les directives `include file:` sont détectées mais jamais suivies. Les dépendances `depends on` sont extraites dans les syntaxes compacte et en bloc (`package`/`version`), mais ne sont ni résolues ni installées. Les packages sous forme de dossiers, la résolution locale des dépendances, la lecture complète des en-têtes et les ressources restent à faire.
 
 ## Objectif fonctionnel
 

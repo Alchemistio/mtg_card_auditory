@@ -7,8 +7,8 @@
 - [x] Première exploration de l'arbre GitHub.
 - [x] Téléchargement sélectif initial des blobs.
 - [x] CI Windows complète sur commit `c1c71fd` : formatage, Clippy, tests, build Release et upload d'artefact.
-- [x] CI Windows : formatage, Clippy, 33 tests, build Release et upload d'artefact ; validation du HEAD `824c5a0` (run `43629103037`).
-- [x] CI Unix : formatage, Clippy et 33 tests de sécurité (dont liens symboliques, lectures bornées, reconnaissance et lecture bornée MSE ZIP) ; validation du HEAD `824c5a0` (run `43629103026`).
+- [x] CI Windows : formatage, Clippy, 34 tests, build Release et upload d'artefact ; validation du HEAD `e3ce756` (run `43629455821`).
+- [x] CI Unix : formatage, Clippy et 34 tests de sécurité (dont liens symboliques, lectures bornées, reconnaissance MSE ZIP, en-têtes et dépendances) ; validation du HEAD `e3ce756` (run `43629455790`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
 
 ## Phase 1 — Connectivité GitHub robuste
@@ -72,9 +72,9 @@
 - [~] SVG : parsing XML sans exécution, viewBox et détection de références externes ; aperçu sandboxé et inspection CSS complète à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
-- [~] MSE : reconnaissance des packages ZIP `.mse-set`, `.mse-game` et `.mse-style`, vérification du fichier principal et lecture bornée à 1 Mio des champs scalaires d'en-tête, sans extraction.
+- [~] MSE : reconnaissance des packages ZIP, vérification du fichier principal, lecture bornée à 1 Mio des champs scalaires et extraction des dépendances compactes/en bloc, sans extraction.
 - [ ] MSE : reconnaissance des packages sous forme de dossiers.
-- [ ] MSE : analyse des dépendances `depends on`, références jeu/feuille de style et inventaire des ressources.\n- [ ] MSE : lecture bornée des métadonnées et dépendances, sans exécution des scripts ni résolution des includes.\n- [ ] MSE : graphe de dépendances local, ressources et références manquantes.\n- [~] MSE : tests de non-extraction et de présence/absence du fichier principal pour les conteneurs ZIP ; tests de traversal, limites de taille et entrées malformées supplémentaires à faire.
+- [ ] MSE : résolution locale des dépendances et références jeu/feuille de style, puis inventaire des ressources.\n- [ ] MSE : lecture bornée des métadonnées et dépendances, sans exécution des scripts ni résolution des includes.\n- [ ] MSE : graphe de dépendances local, ressources et références manquantes.\n- [~] MSE : tests de non-extraction et de présence/absence du fichier principal pour les conteneurs ZIP ; tests de traversal, limites de taille et entrées malformées supplémentaires à faire.
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle
@@ -95,7 +95,7 @@
 - [ ] Tests de cohérence et non-régression.
 
 ## Phase 6 — Livraison
-- [x] CI Windows (formatage, Clippy, 33 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 33 tests) validées sur le HEAD `824c5a0` : runs `43629103037` et `43629103026`.
+- [x] CI Windows (formatage, Clippy, 34 tests, build Release, upload exe) et CI Unix (formatage, Clippy, 34 tests) validées sur le HEAD `e3ce756` : runs `43629455821` et `43629455790`.
 - [ ] Exécutable Windows x64 autonome.
 - [ ] Versionnement et notes de version.
 - [ ] GitHub Releases.
