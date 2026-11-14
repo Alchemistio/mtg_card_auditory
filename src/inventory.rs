@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
-use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}, time::UNIX_EPOCH};
+use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}};
 use image::{ImageDecoder, ImageReader};
 use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs::File, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
