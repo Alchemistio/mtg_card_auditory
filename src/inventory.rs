@@ -213,7 +213,11 @@ fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (Op
         return (None, None, None, None);
     }
     const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
-    let bytes = match workspace.open(relative).and_then(|file| read_limited(file, MAX_SVG_BYTES)) {
+    let file = match workspace.open(relative) {
+        Ok(file) => file,
+        Err(error) => return (None, None, Some(false), Some(format!("Ouverture SVG impossible : {}", error))),
+    };
+    let bytes = match read_limited(file, MAX_SVG_BYTES) {
         Ok(bytes) => bytes,
         Err(error) => return (None, None, Some(false), Some(format!("Lecture SVG impossible ou supérieure à 32 Mio : {}", error))),
     };
@@ -279,7 +283,11 @@ fn font_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> (O
         return (None, None, Some("Police ignorée : taille supérieure à 64 Mio.".to_string()));
     }
     const MAX_FONT_BYTES: u64 = 64 * 1024 * 1024;
-    let data = match workspace.open(relative).and_then(|file| read_limited(file, MAX_FONT_BYTES)) {
+    let file = match workspace.open(relative) {
+        Ok(file) => file,
+        Err(error) => return (None, None, Some(format!("Ouverture de police impossible : {}", error))),
+    };
+    let data = match read_limited(file, MAX_FONT_BYTES) {
         Ok(data) => data,
         Err(error) => return (None, None, Some(format!("Lecture de police impossible ou supérieure à 64 Mio : {}", error))),
     };
