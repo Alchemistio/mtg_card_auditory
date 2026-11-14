@@ -745,7 +745,15 @@ fn parse_mse_version(value: &str) -> Option<MseVersion> {
         let year = date[0].parse().ok()?;
         let month = date[1].parse().ok()?;
         let day = date[2].parse().ok()?;
-        if (1..=12).contains(&month) && (1..=31).contains(&day) {
+        let leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        let days_in_month = match month {
+            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+            4 | 6 | 9 | 11 => 30,
+            2 if leap_year => 29,
+            2 => 28,
+            _ => 0,
+        };
+        if (1..=days_in_month).contains(&day) {
             return Some(MseVersion::Date(year, month, day));
         }
     }
@@ -1911,6 +1919,17 @@ mod tests {
         assert_eq!(b.mse_dependencies[0].cycle_detected, Some(true));
         assert_eq!(c.mse_dependencies[0].cycle_detected, Some(false));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn validates_mse_calendar_dates_and_leap_years() {
+        assert!(parse_mse_version("2008-02-29").is_some());
+        assert!(parse_mse_version("2000-02-29").is_some());
+        assert!(parse_mse_version("1900-02-29").is_none());
+        assert!(parse_mse_version("2007-02-29").is_none());
+        assert!(parse_mse_version("2007-04-31").is_none());
+        assert!(parse_mse_version("2007-13-01").is_none());
+        assert!(parse_mse_version("2007-00-10").is_none());
     }
 
     #[test]
