@@ -66,7 +66,7 @@ Les catégories automatiques restent des suggestions, jamais une validation.
 ## Sécurité
 - Lecture seule GitHub et sources locales.
 - Aucun secret dans logs, exports ou commits.
-- Validation des chemins et limites de taille/profondeur ; confinement capability-based des opérations workspace, avec tests de non-écrasement et de chemins dangereux. Les garanties TOCTOU doivent être documentées et testées selon les opérations et plateformes.
+- Validation des chemins et limites de taille/profondeur ; confinement capability-based des opérations workspace (téléchargements, cache, journaux, manifestes, exports JSON/CSV/HTML/PNG et index), création exclusive et tests de non-écrasement. Les garanties TOCTOU doivent être documentées et testées selon les opérations et plateformes.
 - Ne jamais exécuter scripts, macros, HTML ou fichiers téléchargés.
 - Pas de suppression, déplacement, renommage ou normalisation automatique.
 - Promotion vers une bibliothèque approuvée uniquement après revue visuelle, provenance, licence et test d'intégration.

@@ -35,8 +35,8 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 5. Extraire dimensions, format, type de canaux et alpha raster sans décodage complet ; analyser le XML SVG sans rendu ; relever famille/sous-famille des polices prises en charge ; inspecter la table centrale ZIP sans extraction.
 6. Détecter les doublons exacts par SHA-256 sans supprimer ni modifier les fichiers.
 7. Comparer avec un inventaire JSON antérieur par chemin et SHA-256.
-8. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source.
-9. Générer des planches raster PNG de 16 éléments/page et un index texte ; le SHA est revérifié avant décodage.
+8. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source ; les fichiers sont créés exclusivement via un handle `cap-std` du dossier parent, puis synchronisés.
+9. Générer des planches raster PNG de 16 éléments/page et un index texte ; le SHA est revérifié avant décodage, et la planche comme son index sont créés exclusivement via des handles capability-based.
 10. Les rapports de comparaison JSON sont écrits hors des deux sources comparées. Pour un inventaire multi-sources, les exports et planches vérifient chaque racine source ; les planches résolvent chaque préfixe vers le dossier correspondant.
 
 ## Séparation des états
@@ -57,9 +57,9 @@ La reprise après fermeture des fichiers terminés est implémentée ; la persis
 ## Limites techniques
 - Les requêtes HTTP utilisent reqwest bloquant dans les workers ; les tentatives transitoires sont bornées. La reprise après fermeture des fichiers terminés est disponible via le journal JSONL ; les blobs partiellement téléchargés ne sont pas repris.
 - Le jeton peut être chargé, enregistré explicitement ou supprimé dans Windows Credential Manager via `keyring`. Le tampon temporaire de saisie egui, le champ applicatif et les copies explicites envoyées aux workers utilisent `zeroize::Zeroizing<String>` ; les copies internes éventuelles des bibliothèques HTTP/TLS et les dumps mémoire avant libération restent hors de garantie.
-- Les exports/inventaires locaux utilisent encore des opérations `std::fs` ambiantes ; migration capability-based et tests Windows des points de réanalyse/courses TOCTOU à poursuivre.
+- Les exports JSON/CSV/HTML/PNG et index sont capability-based. La sélection/ouverture initiale des dossiers, la lecture des sources et certaines vérifications locales utilisent encore `std::fs` ambiant ; tests Windows des points de réanalyse/courses TOCTOU à poursuivre.
 - Les analyseurs ZIP ne décompressent rien ; 7z/RAR ne sont pas pris en charge.
 - Les miniatures avancées, aperçu SVG sandboxé, MSE, licences/provenance et revue humaine sont à faire.
 
 ## Déploiement
-GitHub Actions construit un binaire Windows x64. Le commit `24d85e6` a passé la CI Windows complète (formatage, Clippy, tests, build Release et upload d'exécutable). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.
+GitHub Actions construit un binaire Windows x64. Le commit `77a115e` a passé la CI Windows complète (formatage, Clippy, tests, build Release et upload d'exécutable). Vérifier l'onglet Actions pour chaque nouveau HEAD. La signature de code pourra être ajoutée avec un certificat externe.
