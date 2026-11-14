@@ -855,14 +855,18 @@ impl eframe::App for AuditorApp {
                                                     ui.label(format!("  Présente localement : {}", path));
                                                 }
                                             }
-                                            Some("ambiguous") => ui.colored_label(
-                                                egui::Color32::YELLOW,
-                                                "  Plusieurs packages locaux correspondent ; résolution ambiguë",
-                                            ),
-                                            Some("missing") => ui.colored_label(
-                                                egui::Color32::YELLOW,
-                                                "  Package absent des sources analysées",
-                                            ),
+                                            Some("ambiguous") => {
+                                                ui.colored_label(
+                                                    egui::Color32::YELLOW,
+                                                    "  Plusieurs packages locaux correspondent ; résolution ambiguë",
+                                                );
+                                            }
+                                            Some("missing") => {
+                                                ui.colored_label(
+                                                    egui::Color32::YELLOW,
+                                                    "  Package absent des sources analysées",
+                                                );
+                                            }
                                             _ => {}
                                         }
                                     }
