@@ -16,7 +16,7 @@ enum DownloadMessage {
     Progress(usize, usize, String),
     Finished(String),
 }
-use std::{collections::HashSet, io::Write, path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, TryRecvError}, Arc}, time::Duration};
+use std::{collections::HashSet, io::{Read, Write}, path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, TryRecvError}, Arc}, time::Duration};
 
 #[derive(Default)]
 struct AuditorApp {
@@ -493,7 +493,19 @@ impl WorkspaceDir {
     }
 
     fn read_to_string(&self, relative: &Path) -> anyhow::Result<String> {
-        Ok(self.inner.read_to_string(relative)?)
+        const MAX_JOURNAL_BYTES: u64 = 64 * 1024 * 1024;
+        self.read_to_string_limited(relative, MAX_JOURNAL_BYTES)
+    }
+
+    fn read_to_string_limited(&self, relative: &Path, maximum_bytes: u64) -> anyhow::Result<String> {
+        let file = self.open_read(relative)?;
+        let mut bytes = Vec::new();
+        file.take(maximum_bytes.saturating_add(1)).read_to_end(&mut bytes)
+            .context("Lecture du fichier limitée impossible")?;
+        if bytes.len() as u64 > maximum_bytes {
+            anyhow::bail!("Fichier supérieur à la limite de lecture de {} octets.", maximum_bytes);
+        }
+        Ok(String::from_utf8(bytes).context("Le fichier lu n'est pas un texte UTF-8 valide")?)
     }
 
     fn symlink_metadata(&self, relative: &Path) -> anyhow::Result<cap_std::fs::Metadata> {
@@ -1009,6 +1021,20 @@ mod write_tests {
             assert!(!outside.join("escaped.txt").exists());
             fs::remove_dir_all(&outside).unwrap();
         }
+        drop(workspace);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn workspace_journal_read_enforces_byte_limit() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let directory = std::env::temp_dir().join(format!("mtg-auditor-journal-limit-{}-{}", std::process::id(), nonce));
+        fs::create_dir_all(&directory).unwrap();
+        let workspace = super::WorkspaceDir::open(&directory).unwrap();
+        workspace.write_new(Path::new("journal.jsonl"), b"123456789").unwrap();
+        assert_eq!(workspace.read_to_string_limited(Path::new("journal.jsonl"), 9).unwrap(), "123456789");
+        let error = workspace.read_to_string_limited(Path::new("journal.jsonl"), 8).unwrap_err();
+        assert!(error.to_string().contains("supérieur à la limite"));
         drop(workspace);
         fs::remove_dir_all(directory).unwrap();
     }
