@@ -844,6 +844,13 @@ impl eframe::App for AuditorApp {
                                     if asset.mse_has_include_directives == Some(true) {
                                         ui.colored_label(egui::Color32::YELLOW, "Directive include file détectée (non suivie)");
                                     }
+                                    for dependency in &asset.mse_dependencies {
+                                        if let Some(version) = &dependency.min_version {
+                                            ui.label(format!("Dépendance : {} (version minimale {})", dependency.package, version));
+                                        } else {
+                                            ui.label(format!("Dépendance : {}", dependency.package));
+                                        }
+                                    }
                                 }
                                 if let Some(notice) = &asset.notice_kind {
                                     ui.colored_label(egui::Color32::LIGHT_GREEN, format!("Notice : {}", notice));

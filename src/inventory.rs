@@ -65,6 +65,8 @@ pub struct AssetRecord {
     #[serde(default)]
     pub mse_has_include_directives: Option<bool>,
     #[serde(default)]
+    pub mse_dependencies: Vec<MseDependency>,
+    #[serde(default)]
     pub analysis_warning: Option<String>,
     #[serde(default)]
     pub notice_kind: Option<String>,
@@ -351,6 +353,34 @@ fn mse_package_type(extension: &str) -> Option<&'static str> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MseDependency {
+    pub package: String,
+    pub min_version: Option<String>,
+}
+
+fn finish_mse_dependency(
+    dependencies: &mut Vec<MseDependency>,
+    package: &mut Option<String>,
+    version: &mut Option<String>,
+) -> Result<()> {
+    if let Some(package) = package.take() {
+        if package.len() > 4096 {
+            anyhow::bail!("Nom de package MSE supérieur à 4 Kio.");
+        }
+        if dependencies.len() >= 128 {
+            anyhow::bail!("Plus de 128 dépendances MSE déclarées.");
+        }
+        dependencies.push(MseDependency {
+            package,
+            min_version: version.take(),
+        });
+    } else {
+        version.take();
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct MseHeader {
     mse_version: Option<String>,
@@ -360,6 +390,7 @@ struct MseHeader {
     game: Option<String>,
     stylesheet: Option<String>,
     has_include_directives: Option<bool>,
+    dependencies: Vec<MseDependency>,
 }
 
 fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
@@ -368,6 +399,9 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
     let source = std::str::from_utf8(bytes).context("En-tête MSE non UTF-8")?;
     let mut header = MseHeader::default();
     let mut has_include_directives = false;
+    let mut in_dependency_block = false;
+    let mut dependency_package = None;
+    let mut dependency_version = None;
     for (line_index, line) in source.lines().enumerate() {
         if line_index >= MAX_MSE_HEADER_LINES {
             anyhow::bail!("En-tête MSE supérieur à {} lignes.", MAX_MSE_HEADER_LINES);
@@ -379,17 +413,68 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
         if unindented.starts_with("include file:") {
             has_include_directives = true;
         }
+        let indentation = line.chars().take_while(|character| *character == '\t').count();
         if line.starts_with('\t') || line.starts_with(' ') {
+            if in_dependency_block && indentation == 1 {
+                if let Some((key, value)) = unindented.split_once(':') {
+                    let value = value.trim();
+                    match key.trim().to_ascii_lowercase().as_str() {
+                        "package" => {
+                            finish_mse_dependency(
+                                &mut header.dependencies,
+                                &mut dependency_package,
+                                &mut dependency_version,
+                            )?;
+                            if !value.is_empty() {
+                                dependency_package = Some(value.to_string());
+                            }
+                        }
+                        "version" if !value.is_empty() => {
+                            dependency_version = Some(value.to_string());
+                        }
+                        _ => {}
+                    }
+                }
+            }
             continue;
+        }
+        if in_dependency_block {
+            finish_mse_dependency(
+                &mut header.dependencies,
+                &mut dependency_package,
+                &mut dependency_version,
+            )?;
+            in_dependency_block = false;
         }
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
+        let key = key.trim().to_ascii_lowercase();
         let value = value.trim();
+        if key == "depends on" {
+            if value.is_empty() {
+                in_dependency_block = true;
+            } else {
+                let mut parts = value.split_whitespace();
+                if let Some(package) = parts.next() {
+                    if package.len() > 4096 {
+                        anyhow::bail!("Nom de package MSE supérieur à 4 Kio.");
+                    }
+                    if header.dependencies.len() >= 128 {
+                        anyhow::bail!("Plus de 128 dépendances MSE déclarées.");
+                    }
+                    header.dependencies.push(MseDependency {
+                        package: package.to_string(),
+                        min_version: parts.next().map(str::to_string),
+                    });
+                }
+            }
+            continue;
+        }
         if value.is_empty() {
             continue;
         }
-        match key.trim().to_ascii_lowercase().as_str() {
+        match key.as_str() {
             "mse version" => header.mse_version = Some(value.to_string()),
             "short name" => header.short_name = Some(value.to_string()),
             "full name" => header.full_name = Some(value.to_string()),
@@ -398,6 +483,13 @@ fn parse_mse_header(bytes: &[u8]) -> Result<MseHeader> {
             "stylesheet" | "style" => header.stylesheet = Some(value.to_string()),
             _ => {}
         }
+    }
+    if in_dependency_block {
+        finish_mse_dependency(
+            &mut header.dependencies,
+            &mut dependency_package,
+            &mut dependency_version,
+        )?;
     }
     header.has_include_directives = Some(has_include_directives);
     Ok(header)
@@ -642,6 +734,7 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
     let mse_game = mse_header.as_ref().and_then(|header| header.game.clone());
     let mse_stylesheet = mse_header.as_ref().and_then(|header| header.stylesheet.clone());
     let mse_has_include_directives = mse_header.as_ref().and_then(|header| header.has_include_directives);
+    let mse_dependencies = mse_header.as_ref().map_or_else(Vec::new, |header| header.dependencies.clone());
     Ok(AssetRecord {
         id: format!("sha256:{}:{}", sha256, relative_path),
         relative_path,
@@ -673,6 +766,7 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
         mse_game,
         mse_stylesheet,
         mse_has_include_directives,
+        mse_dependencies,
         analysis_warning,
         notice_kind,
         duplicate_of: None,
@@ -1388,6 +1482,17 @@ mod tests {
         assert!(!root.join("set").exists(), "ZIP contents must never be extracted");
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn parses_compact_and_block_mse_dependencies() {
+        let source = b"mse version: 0.3.4\ndepends on: magic.mse-game 2007-06-06\ndepends on:\n\tpackage: shared.mse-style\n\tversion: 1.2.3\n";
+        let header = parse_mse_header(source).unwrap();
+        assert_eq!(header.dependencies.len(), 2);
+        assert_eq!(header.dependencies[0].package, "magic.mse-game");
+        assert_eq!(header.dependencies[0].min_version.as_deref(), Some("2007-06-06"));
+        assert_eq!(header.dependencies[1].package, "shared.mse-style");
+        assert_eq!(header.dependencies[1].min_version.as_deref(), Some("1.2.3"));
     }
 
     #[test]
