@@ -993,7 +993,20 @@ mod write_tests {
                 let escaped = PathBuf::from("outside-link/escaped.txt");
                 assert!(workspace.create_new(&escaped).is_err());
                 assert!(!outside.join("escaped.txt").exists());
+            } else {
+                eprintln!("SKIP: création du lien symbolique de répertoire Windows refusée par l'environnement");
             }
+            fs::remove_dir_all(&outside).unwrap();
+        }
+        #[cfg(unix)]
+        {
+            let outside = directory.with_file_name(format!("mtg-auditor-cap-outside-{}-{}", std::process::id(), nonce));
+            fs::create_dir_all(&outside).unwrap();
+            let link = directory.join("outside-link");
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+            let escaped = PathBuf::from("outside-link/escaped.txt");
+            assert!(workspace.create_new(&escaped).is_err());
+            assert!(!outside.join("escaped.txt").exists());
             fs::remove_dir_all(&outside).unwrap();
         }
         drop(workspace);
