@@ -8,6 +8,8 @@ La conception s'appuie sur la documentation et le code source de Magic Set Edito
 - [Documentation du format des fichiers hiérarchiques](https://github.com/twanvl/MagicSetEditor2/blob/master/doc/file/format.txt)
 - [Documentation des sets](https://github.com/twanvl/MagicSetEditor2/blob/master/doc/type/set.txt)
 - [Documentation des jeux](https://github.com/twanvl/MagicSetEditor2/blob/master/doc/type/game.txt)
+- [Documentation des feuilles de style](https://github.com/twanvl/MagicSetEditor2/blob/master/doc/type/stylesheet.txt)
+- [Documentation des dépendances](https://github.com/twanvl/MagicSetEditor2/blob/master/doc/type/dependency.txt)
 - [Implémentation du conteneur Package](https://github.com/twanvl/MagicSetEditor2/blob/master/src/util/io/package.cpp)
 - [Déclaration C++ de Package et Packaged](https://github.com/twanvl/MagicSetEditor2/blob/master/src/util/io/package.hpp)
 
