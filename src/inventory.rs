@@ -331,19 +331,6 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
     (Some(entry_count), Some(uncompressed_bytes), Some(suspicious_paths), warning)
 }
 
-fn sha256_file(path: &Path) -> Result<String> {
-    let file = File::open(path).with_context(|| format!("Ouverture impossible : {}", path.display()))?;
-    let mut reader = BufReader::with_capacity(1024 * 1024, file);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
-    loop {
-        let read = reader.read(&mut buffer)?;
-        if read == 0 { break; }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
 fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
     let file = workspace.open(relative)
         .with_context(|| format!("Ouverture capability-based impossible : {}", relative.display()))?;
@@ -760,21 +747,29 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
     let source_roots = if document.source_roots.is_empty() { vec![document.source_root.clone()] } else { document.source_roots.clone() };
     let mut rendered = 0usize;
     for (slot, asset) in selected.iter().enumerate() {
-        let source = if source_roots.len() > 1 {
+        let (source_root, relative) = if source_roots.len() > 1 {
             let mut parts = asset.relative_path.splitn(2, '/');
             let prefix = parts.next().unwrap_or_default();
             let relative = parts.next().unwrap_or_default();
             let index = prefix.strip_prefix("source-").and_then(|value| value.parse::<usize>().ok()).and_then(|value| value.checked_sub(1));
-            index.and_then(|value| source_roots.get(value)).map(|root| Path::new(root).join(relative))
-                .context("Source de la planche introuvable dans l'inventaire multi-dossiers")?
+            let root = index.and_then(|value| source_roots.get(value))
+                .context("Source de la planche introuvable dans l'inventaire multi-dossiers")?;
+            (root.as_str(), PathBuf::from(relative))
         } else {
-            Path::new(&source_roots[0]).join(&asset.relative_path)
+            (source_roots[0].as_str(), PathBuf::from(&asset.relative_path))
         };
-        if std::fs::symlink_metadata(&source).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(true) {
+        let workspace = match CapabilityDir::open_ambient_dir(Path::new(source_root), ambient_authority()) {
+            Ok(workspace) => workspace,
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tSOURCE ABSENTE OU INACCESSIBLE\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        if workspace.symlink_metadata(&relative).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(true) {
             index_text.push_str(&format!("{:02}\tLIEN SYMBOLIQUE OU SOURCE ABSENTE\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let current_hash = match sha256_file(&source) {
+        let current_hash = match sha256_file_capability(&workspace, &relative) {
             Ok(hash) => hash,
             Err(_) => {
                 index_text.push_str(&format!("{:02}\tSOURCE ABSENTE OU ILLISIBLE\t{}\n", slot + 1, asset.relative_path));
@@ -785,14 +780,21 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
             index_text.push_str(&format!("{:02}\tSOURCE MODIFIÉE DEPUIS LE SCAN\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let file_size = std::fs::metadata(&source).map(|metadata| metadata.len()).unwrap_or(u64::MAX);
+        let file_size = workspace.metadata(&relative).map(|metadata| metadata.len()).unwrap_or(u64::MAX);
         if file_size > 100 * 1024 * 1024 {
             index_text.push_str(&format!("{:02}\tIGNORÉ (fichier > 100 Mio)\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let dimensions = ImageReader::open(&source)
+        let dimensions_file = match workspace.open(&relative) {
+            Ok(file) => file,
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tILLISIBLE\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        let dimensions = ImageReader::new(BufReader::new(dimensions_file))
+            .with_guessed_format()
             .map_err(anyhow::Error::from)
-            .and_then(|reader| reader.with_guessed_format().map_err(anyhow::Error::from))
             .and_then(|reader| reader.into_dimensions().map_err(anyhow::Error::from));
         let (width, height) = match dimensions {
             Ok(dimensions) => dimensions,
@@ -805,8 +807,15 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
             index_text.push_str(&format!("{:02}\tIGNORÉ (plus de 30 Mpx)\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let decoded = ImageReader::open(&source)
-            .and_then(|reader| reader.with_guessed_format())
+        let decoded_file = match workspace.open(&relative) {
+            Ok(file) => file,
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tDÉCODAGE IMPOSSIBLE\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        let decoded = ImageReader::new(BufReader::new(decoded_file))
+            .with_guessed_format()
             .map_err(anyhow::Error::from)
             .and_then(|reader| reader.decode().map_err(anyhow::Error::from));
         let image = match decoded {

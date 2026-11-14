@@ -4,7 +4,7 @@ mod models;
 
 use anyhow::Context;
 use eframe::egui;
-use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
+use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}};
 use zeroize::Zeroizing;
 
 enum ScanMessage {
@@ -200,7 +200,11 @@ impl AuditorApp {
         }
         if let Some(path) = rfd::FileDialog::new().add_filter("Inventaire JSON", &["json"]).pick_file() {
             let result = (|| -> anyhow::Result<inventory::InventoryComparison> {
-                let file = std::fs::File::open(&path)?;
+                let parent = path.parent().context("Dossier de l'inventaire de référence absent")?;
+                let file_name = path.file_name().context("Nom du fichier d'inventaire absent")?;
+                let workspace = CapabilityDir::open_ambient_dir(parent, ambient_authority())
+                    .context("Ouverture capability-based du dossier de référence impossible")?;
+                let file = workspace.open(Path::new(file_name))?;
                 let baseline: inventory::InventoryDocument = serde_json::from_reader(file)?;
                 let current = self.local_inventory.as_ref().context("Inventaire courant absent")?;
                 Ok(inventory::compare_inventories(current, &baseline))
