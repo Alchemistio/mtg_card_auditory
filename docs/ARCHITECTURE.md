@@ -37,7 +37,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 6. Détecter les doublons exacts par SHA-256 sans supprimer ni modifier les fichiers.
 7. Comparer avec un inventaire JSON antérieur par chemin et SHA-256.
 8. Exporter JSON versionné, CSV UTF-8 ou HTML autonome après validation que la destination est hors de la source ; les fichiers sont créés exclusivement via un handle `cap-std` du dossier parent, puis synchronisés.
-9. Générer des planches raster PNG de 16 éléments/page et un index texte ; le SHA est revérifié avant décodage, et la planche comme son index sont créés exclusivement via des handles capability-based.
+9. Générer des planches raster PNG de 16 éléments/page et un index texte ; chaque source est lue une seule fois dans un tampon plafonné à 100 Mio, puis hash, dimensions et pixels sont calculés sur les mêmes octets ; la planche comme son index sont créés exclusivement via des handles capability-based.
 10. Les rapports de comparaison JSON sont écrits hors des deux sources comparées. Pour un inventaire multi-sources, les exports et planches vérifient chaque racine source ; les planches résolvent chaque préfixe vers le dossier correspondant.
 
 ## Séparation des états
