@@ -18,8 +18,9 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 3. **Fermer la fenêtre de remplacement des planches de contact** — terminée.
    - Réalisé : chaque image est lue une seule fois depuis un handle capability-based dans un tampon limité à 100 Mio ; SHA-256, dimensions et pixels sont calculés à partir des mêmes octets. Test de non-régression : une source modifiée depuis le scan est refusée et notée dans l'index. Aucun fichier source n'est écrit.
 
-4. **Éprouver la sélection initiale des sources et les exports sous concurrence**.
-   - Acceptation : tests Unix/Windows pour liens symboliques, remplacement de répertoire, destination symlinkée, création concurrente de destination et échec d'écriture ; les tests Windows conditionnels doivent rendre chaque `SKIP` visible et ne pas être comptés comme preuve d'exécution.
+4. **Éprouver la sélection initiale des sources et les exports sous concurrence** — partiellement implémentée.
+   - Réalisé : test Unix de destination d'export symlinkée (la cible reste intacte), test concurrent à deux écrivains (exactement un gagnant), test d'échec d'écriture avec suppression du fichier partiel, et test de remplacement d'une source par lien symbolique après énumération.
+   - Reste à faire : remplacement concurrent de répertoire racine/sous-répertoire, course entre validation du parent de destination et ouverture du handle, et scénarios Windows de destination symlinkée/création concurrente. Les tests Windows conditionnels doivent rendre chaque `SKIP` visible et ne pas être comptés comme preuve d'exécution.
 
 ### P1 — Robustesse des formats et tests
 
