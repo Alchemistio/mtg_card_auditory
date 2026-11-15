@@ -337,13 +337,46 @@ fn svg_metadata(
     let mut viewbox = None;
     let mut external_refs = false;
     let mut found_svg_root = false;
+    let mut event_count = 0_usize;
+    let mut depth = 0_usize;
     loop {
-        match reader.read_event() {
+        let event = reader.read_event();
+        event_count = event_count.saturating_add(1);
+        if event_count > 100_000 {
+            return (
+                viewbox,
+                Some(external_refs),
+                Some(false),
+                Some("SVG refusé : nombre maximal d'événements XML dépassé.".to_string()),
+            );
+        }
+        if matches!(&event, Ok(Event::Start(_))) {
+            depth = depth.saturating_add(1);
+            if depth > 256 {
+                return (
+                    viewbox,
+                    Some(external_refs),
+                    Some(false),
+                    Some("SVG refusé : profondeur XML maximale dépassée.".to_string()),
+                );
+            }
+        }
+        match event {
             Ok(Event::Start(element)) | Ok(Event::Empty(element)) => {
                 if element.name().as_ref() == b"svg" {
                     found_svg_root = true;
                 }
+                let mut attribute_count = 0_usize;
                 for attribute in element.attributes() {
+                    attribute_count = attribute_count.saturating_add(1);
+                    if attribute_count > 256 {
+                        return (
+                            viewbox,
+                            Some(external_refs),
+                            Some(false),
+                            Some("SVG refusé : nombre maximal d'attributs par élément dépassé.".to_string()),
+                        );
+                    }
                     let attribute = match attribute {
                         Ok(attribute) => attribute,
                         Err(error) => {
@@ -377,6 +410,9 @@ fn svg_metadata(
                         external_refs = true;
                     }
                 }
+            }
+            Ok(Event::End(_)) => {
+                depth = depth.saturating_sub(1);
             }
             Ok(Event::Eof) => break,
             Ok(_) => {}
@@ -2895,6 +2931,53 @@ mod tests {
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
         assert!(warning.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_svg_with_excessive_xml_nesting() {
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-svg-depth-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let mut source = String::from("<svg>");
+        for _ in 0..256 {
+            source.push_str("<g>");
+        }
+        for _ in 0..256 {
+            source.push_str("</g>");
+        }
+        source.push_str("</svg>");
+        std::fs::write(root.join("deep.svg"), source).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("deep.svg"), "svg");
+        assert_eq!(valid, Some(false));
+        assert!(warning.unwrap().contains("profondeur XML maximale"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_svg_with_excessive_xml_event_count() {
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-svg-events-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let mut source = String::from("<svg>");
+        for _ in 0..100_001 {
+            source.push_str("<g/>");
+        }
+        source.push_str("</svg>");
+        std::fs::write(root.join("many.svg"), source).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("many.svg"), "svg");
+        assert_eq!(valid, Some(false));
+        assert!(warning.unwrap().contains("nombre maximal d'événements"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
