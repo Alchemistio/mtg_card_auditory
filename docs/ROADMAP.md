@@ -1,6 +1,8 @@
 # Feuille de route
 
 ## Phase 0 — Fondation
+- [x] Index documentaire central créé dans `docs/INDEX.md`, avec correspondance entre domaines et documents de référence.
+- [x] Workflow de reprise modifié pour consulter obligatoirement l'index et la feuille de route à chaque session, vérifier les tâches sur le code et ne clôturer qu'avec des preuves.
 - [x] Dépôt Rust initialisé.
 - [x] Cahier des charges, architecture et sécurité.
 - [x] Fenêtre desktop initiale.
@@ -14,7 +16,7 @@
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
-- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances (artefact `cargo-lockfile` récupéré depuis le run Windows `43625687052`, fichier de 115 720 octets ; transfert exact dans Git encore à réaliser). Les workflows actuels régénèrent encore le lockfile Windows à chaque run et Unix ne le verrouille pas ; ne pas présenter les builds comme reproductibles tant que le fichier n'est pas commité et utilisé avec `--locked`.
+- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances (artefact `cargo-lockfile` récupéré depuis le run Windows `43625687052`, fichier de 115 720 octets ; transfert exact dans Git encore à réaliser). Le workflow Windows exécute encore `cargo generate-lockfile` à chaque run et Unix ne verrouille pas les dépendances. Après commit du lockfile : supprimer la génération, ajouter `--locked` à fmt/clippy/test/build si la commande le supporte, et vérifier les deux plateformes sur le même HEAD.
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
