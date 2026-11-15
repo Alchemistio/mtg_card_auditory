@@ -31,7 +31,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 6. **Compléter les métadonnées raster et SVG sans activer de contenu**.
    - Raster : orientation, dimensions extrêmes, limites de décodage et miniatures plafonnées.
-   - SVG : lecture plafonnée à 32 Mio, 100 000 événements XML, profondeur maximale 256 et 256 attributs par élément ; tests de dépassement de profondeur, d'événements et d'attributs. Les références relatives et les `url()` CSS avec espaces/guillemets sont détectées de façon conservative. Reste : dimensions SVG, couverture complète de la grammaire CSS et aperçu sandboxé.
+   - SVG : lecture plafonnée à 32 Mio, 100 000 événements XML, profondeur maximale 256 et 256 attributs par élément ; tests de dépassement de profondeur, d'événements et d'attributs. Les références relatives et les `url()` CSS avec espaces/guillemets sont détectées de façon conservative. Validation du HEAD `90702ae` : CI Unix `43741242233` (67 tests) et Windows `43741242200` (65 tests) vertes, avec formatage, Clippy, build Release et upload de l'exécutable. Reste : dimensions SVG, couverture complète de la grammaire CSS et aperçu sandboxé.
    - Acceptation : fixtures malveillantes synthétiques, temps/mémoire bornés et aucun script/ressource externe exécuté.
 
 7. **Préciser les formats de polices et les notices**.
