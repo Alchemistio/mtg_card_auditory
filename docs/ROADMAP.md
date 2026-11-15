@@ -6,9 +6,9 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ### P0 — Reproductibilité et intégrité des sources
 
-1. **Versionner le lockfile** — implémenté, validation CI en attente.
+1. **Versionner le lockfile** — terminé.
    - Réalisé : `Cargo.lock` v4 (115 720 octets) récupéré depuis l'artefact Windows historique ; son manifeste correspond au `Cargo.toml` courant (blob SHA `2d1a0d7ae3204b099c2c1c27e6de139b37dd4abc`). Windows et Unix utilisent désormais ce lockfile ; `cargo generate-lockfile` et l'upload de lockfile temporaire ont été retirés ; Clippy, tests et build Windows utilisent `--locked`.
-   - Reste à faire : obtenir les CI Windows et Unix vertes sur le même SHA après fusion ; `cargo fmt` ne propose pas d'option `--locked` dans sa commande dédiée.
+   - Preuve : CI Unix `43738862441` et Windows `43738862446` vertes sur le même commit de PR `dbdd55f70e66369989bb5ac3c0bbc2a24eea5d7b` ; l'arbre de ce commit est identique à celui du commit de fusion `37521c3fdd3451592afdd5af59b80897184846d7`. Unix : 59 tests réussis ; Windows : formatage, Clippy, tests, build Release et upload de l'exécutable réussis. Une seconde exécution sur `main` est également en cours. `cargo fmt` ne propose pas d'option `--locked` dans sa commande dédiée.
 
 2. **Détecter les modifications concurrentes pendant l'analyse locale** — partiellement implémentée.
    - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille. Après l'indexation secondaire des ressources ZIP MSE, recalculer le SHA-256 des archives et refuser l'inventaire si le contenu diffère du hash initial ou si les métadonnées changent pendant ce contrôle ; test de non-régression sur archive remplacée après scan.
@@ -100,7 +100,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Ajouter des tests de non-suivi des liens symboliques de fichiers et de répertoires sous Unix, et de fichiers sous Windows ; le test Windows affiche `SKIP` si les permissions du runner interdisent la création du lien.
 - [x] Ajouter un test de confinement `WorkspaceDir` contre un lien symbolique de répertoire vers une cible externe sous Unix et Windows ; le test Windows affiche explicitement `SKIP` si le runner interdit la création du lien.
 - [x] Documenter le workflow de développement autonome dans `docs/WORKFLOW.md` : poursuivre les tâches indépendantes pendant les CI, contrôler les logs et les `SKIP`, et ne s'arrêter qu'en l'absence de travail réalisable.
-- [~] Énumération récursive et lectures de contenu capability-based ; SVG et polices plafonnés en flux (32/64 Mio). `analyze_file` vérifie désormais taille, horodatage et type de fichier avant/après les analyseurs, et invalide le scan si ces métadonnées changent. Limites restantes : mutations conservant les mêmes métadonnées, handles multiples et réouverture des archives lors de l'indexation des ressources MSE ; la sélection initiale des dossiers et les courses de répertoires restent à traiter. Les planches utilisent désormais un tampon unique dont le SHA-256, les dimensions et les pixels sont cohérents.
+- [~] Énumération récursive et lectures de contenu capability-based ; SVG et polices plafonnés en flux (32/64 Mio). `analyze_file` vérifie désormais taille, horodatage et type de fichier avant/après les analyseurs, et invalide le scan si ces métadonnées changent. Après l'indexation des ressources ZIP MSE, les archives sont re-hachées et le scan est invalidé si le contenu diffère du SHA initial. Limites restantes : mutations conservant les mêmes métadonnées pendant l'analyse, handles multiples, remplacement transitoire suivi d'une restauration avant le contrôle final, sélection initiale des dossiers et courses de répertoires. Les planches utilisent désormais un tampon unique dont le SHA-256, les dimensions et les pixels sont cohérents.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
