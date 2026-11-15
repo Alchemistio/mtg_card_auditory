@@ -657,15 +657,15 @@ fn mse_zip_resources_with_limits_and_cancel(
                 // Ne jamais demander au décompresseur un bloc qui dépasse le budget
                 // restant : contrôler après Read() autoriserait jusqu'à 64 Kio de
                 // traitement supplémentaire à chaque limite.
-                if bytes_read == size {
-                    break;
-                }
                 let entry_remaining = limits.max_resource_bytes.saturating_sub(bytes_read);
                 let package_remaining = limits.max_total_hash_bytes
                     .saturating_sub(hashed_bytes.saturating_add(bytes_read));
                 let scan_remaining = scan_budget_before.saturating_sub(bytes_read);
                 let remaining = entry_remaining.min(package_remaining).min(scan_remaining);
                 if remaining == 0 {
+                    if bytes_read == size {
+                        break;
+                    }
                     budget_status = Some(if entry_remaining == 0 {
                         "size-limit"
                     } else if package_remaining == 0 {
@@ -675,11 +675,18 @@ fn mse_zip_resources_with_limits_and_cancel(
                     });
                     break;
                 }
-                let read_limit = remaining.min(buffer.len() as u64) as usize;
+                // Lire au plus un octet au-delà de la taille déclarée permet de
+                // détecter une entrée incohérente sans franchir les budgets.
+                let declared_remaining = size.saturating_sub(bytes_read).saturating_add(1);
+                let read_limit = remaining.min(declared_remaining).min(buffer.len() as u64) as usize;
                 match entry.read(&mut buffer[..read_limit]) {
                     Ok(0) => break,
                     Ok(count) => {
                         bytes_read = bytes_read.saturating_add(count as u64);
+                        if bytes_read > size {
+                            budget_status = Some("size-mismatch");
+                            break;
+                        }
                         hasher.update(&buffer[..count]);
                     }
                     Err(_) => {
