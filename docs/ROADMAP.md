@@ -12,8 +12,8 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
    - Preuve : deux workflows verts sur le même SHA, sans étape de génération du lockfile.
 
 2. **Détecter les modifications concurrentes pendant l'analyse locale** — partiellement implémentée.
-   - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille.
-   - Reste à faire : test de remplacement concurrent pendant l'analyse, détection des mutations conservant taille/horodatage lorsque possible, handle unique/instantané et contrôle cohérent de l'indexation ZIP MSE postérieure.
+   - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille. Après l'indexation secondaire des ressources ZIP MSE, recalculer le SHA-256 des archives et refuser l'inventaire si le contenu diffère du hash initial ou si les métadonnées changent pendant ce contrôle ; test de non-régression sur archive remplacée après scan.
+   - Reste à faire : test de remplacement concurrent pendant l'analyse, détection des mutations conservant taille/horodatage lorsque possible, handle unique/instantané et couverture des courses de répertoires.
 
 3. **Fermer la fenêtre de remplacement des planches de contact** — terminée.
    - Réalisé : chaque image est lue une seule fois depuis un handle capability-based dans un tampon limité à 100 Mio ; SHA-256, dimensions et pixels sont calculés à partir des mêmes octets. Test de non-régression : une source modifiée depuis le scan est refusée et notée dans l'index. Aucun fichier source n'est écrit.
