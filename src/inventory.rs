@@ -3081,7 +3081,7 @@ mod tests {
         let file = File::create(&archive_path).unwrap();
         let mut writer = zip::ZipWriter::new(file);
         writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
-        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
         writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
         writer.write_all(b"original").unwrap();
         writer.finish().unwrap();
@@ -3091,7 +3091,7 @@ mod tests {
         let file = File::create(&archive_path).unwrap();
         let mut writer = zip::ZipWriter::new(file);
         writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
-        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
         writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
         writer.write_all(b"replaced").unwrap();
         writer.finish().unwrap();
