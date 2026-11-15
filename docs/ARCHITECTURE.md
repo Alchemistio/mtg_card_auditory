@@ -31,7 +31,7 @@ Les workers utilisent des canaux de messages pour ne pas bloquer la boucle d'aff
 ## Flux local actuel
 1. Choisir un ou plusieurs dossiers sources distincts (les sélections identiques ou imbriquées sont refusées).
 2. Parcourir chaque dossier récursivement sans suivre les liens symboliques, avec profondeur maximale ; les chemins multi-sources sont préfixés par `source-0001`, `source-0002`, etc.
-3. Calculer SHA-256 en blocs et relever taille/date/extension ; progression en octets traités, notifiée par lots de 100 fichiers.
+3. Calculer SHA-256 en blocs et relever taille/date/extension ; après les lectures des analyseurs, comparer à nouveau taille, date de modification et type de fichier et faire échouer le scan si le fichier a changé ; progression en octets traités, notifiée par lots de 100 fichiers.
 4. Classifier indicativement par extension et repérer les fichiers de type LICENSE/NOTICE/README sans en déduire de statut légal.
 5. Extraire dimensions, format, type de canaux et alpha raster sans décodage complet ; analyser le XML SVG sans rendu ; relever famille/sous-famille des polices prises en charge ; inspecter la table centrale ZIP sans extraction, reconnaître les packages MSE ZIP et dossiers, lire au plus 1 Mio de leur fichier principal et extraire les champs scalaires et les dépendances déclarées, puis résoudre localement les dépendances et références parmi les sources sélectionnées sans suivre les directives include.
 6. Détecter les doublons exacts par SHA-256 sans supprimer ni modifier les fichiers.
