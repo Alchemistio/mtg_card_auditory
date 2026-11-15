@@ -26,7 +26,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 5. **Compléter les fixtures ZIP/MSE malformées**.
    - Réalisé : archive MSE globalement corrompue et ressource dont les octets ne correspondent plus au CRC déclaré ; le test dédié confirme `read-error` sans SHA-256, sans panique ni extraction. Validé sur CI Unix `43740381338` (63 tests) et Windows `43740381471` (61 tests).
-   - Réalisé dans cette tranche : test d'une ressource Deflate dont le flux compressé est altéré sans modifier la table centrale ni le CRC ; le statut attendu est `read-error`, sans SHA-256 ni extraction. Validation CI du nouveau commit en attente.
+   - Réalisé dans cette tranche : test d'une ressource Deflate dont le flux compressé est altéré sans modifier la table centrale ni le CRC ; le statut attendu est `read-error`, sans SHA-256 ni extraction. Validé sur le HEAD `006aef27e2cc9063aa06721ebe8f2e52b54a1ffd` : CI Unix run `43742700037` (68 tests réussis) et Windows run `43742700103` (66 tests réussis), avec formatage et Clippy ; Windows a aussi compilé le binaire Release et téléversé l'artefact.
    - Reste à couvrir : table centrale incohérente, entrée tronquée, tailles déclarées incohérentes, noms encodés atypiques et chemins ambigus.
    - Acceptation : erreurs contrôlées, aucune panique, aucune extraction, budgets respectés avant chaque lecture, annulation propagée et ressources non hachées marquées explicitement.
 
