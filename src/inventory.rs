@@ -573,51 +573,18 @@ impl ZipMetadata {
 }
 
 
-fn mse_zip_resources(
-    workspace: &CapabilityDir,
-    relative: &Path,
-    main_name: &str,
-    scan_budget: &mut u64,
-) -> (Vec<MseResourceRecord>, bool) {
-    mse_zip_resources_with_limits(
-        workspace,
-        relative,
-        main_name,
-        10_000,
-        64 * 1024 * 1024,
-        256 * 1024 * 1024,
-        scan_budget,
-    )
-}
-
-fn mse_zip_resources_with_limits(
-    workspace: &CapabilityDir,
-    relative: &Path,
-    main_name: &str,
+#[derive(Debug, Clone, Copy)]
+struct MseZipResourceLimits {
     max_resources: usize,
     max_resource_bytes: u64,
     max_total_hash_bytes: u64,
-    scan_budget: &mut u64,
-) -> (Vec<MseResourceRecord>, bool) {
-    mse_zip_resources_with_limits_and_cancel(
-        workspace,
-        relative,
-        main_name,
-        max_resources,
-        max_resource_bytes,
-        max_total_hash_bytes,
-        scan_budget,
-        &AtomicBool::new(false),
-    )
 }
 
 fn mse_zip_resources_with_limits_and_cancel(
     workspace: &CapabilityDir,
     relative: &Path,
     main_name: &str,
-    max_resources: usize,
-    max_resource_bytes: u64,
-    max_total_hash_bytes: u64,
+    limits: MseZipResourceLimits,
     scan_budget: &mut u64,
     cancelled: &AtomicBool,
 ) -> (Vec<MseResourceRecord>, bool) {
@@ -656,7 +623,7 @@ fn mse_zip_resources_with_limits_and_cancel(
             truncated = true;
             continue;
         }
-        if resources.len() >= max_resources {
+        if resources.len() >= limits.max_resources {
             truncated = true;
             break;
         }
@@ -669,9 +636,9 @@ fn mse_zip_resources_with_limits_and_cancel(
             "suspicious-path"
         } else if size > entry.compressed_size().saturating_mul(1000) && size > 1024 * 1024 {
             "suspicious-ratio"
-        } else if size > max_resource_bytes {
+        } else if size > limits.max_resource_bytes {
             "size-limit"
-        } else if hashed_bytes.saturating_add(size) > max_total_hash_bytes {
+        } else if hashed_bytes.saturating_add(size) > limits.max_total_hash_bytes {
             "total-budget"
         } else if size > *scan_budget {
             "scan-budget"
@@ -691,11 +658,11 @@ fn mse_zip_resources_with_limits_and_cancel(
                     Ok(0) => break,
                     Ok(count) => {
                         bytes_read = bytes_read.saturating_add(count as u64);
-                        if bytes_read > max_resource_bytes {
+                        if bytes_read > limits.max_resource_bytes {
                             budget_status = Some("size-limit");
                             break;
                         }
-                        if hashed_bytes.saturating_add(bytes_read) > max_total_hash_bytes {
+                        if hashed_bytes.saturating_add(bytes_read) > limits.max_total_hash_bytes {
                             budget_status = Some("total-budget");
                             break;
                         }
@@ -980,9 +947,11 @@ fn attach_mse_zip_resources(
             workspace,
             Path::new(&asset.relative_path),
             main_name,
-            10_000,
-            64 * 1024 * 1024,
-            256 * 1024 * 1024,
+            MseZipResourceLimits {
+                max_resources: 10_000,
+                max_resource_bytes: 64 * 1024 * 1024,
+                max_total_hash_bytes: 256 * 1024 * 1024,
+            },
             scan_budget,
             cancelled,
         );
@@ -2329,14 +2298,17 @@ mod tests {
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let mut scan_budget = 10_u64;
-        let (resources, truncated) = mse_zip_resources_with_limits(
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
             &workspace,
             Path::new("sample.mse-set"),
             "set",
-            10,
-            5,
-            5,
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 5,
+                max_total_hash_bytes: 5,
+            },
             &mut scan_budget,
+            &AtomicBool::new(false),
         );
         assert!(!truncated);
         assert_eq!(resources.len(), 3);
@@ -2349,14 +2321,17 @@ mod tests {
         assert_eq!(scan_budget, 5);
 
         let mut scan_budget = 5_u64;
-        let (scan_limited, truncated) = mse_zip_resources_with_limits(
+        let (scan_limited, truncated) = mse_zip_resources_with_limits_and_cancel(
             &workspace,
             Path::new("sample.mse-set"),
             "set",
-            10,
-            5,
-            10,
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 5,
+                max_total_hash_bytes: 10,
+            },
             &mut scan_budget,
+            &AtomicBool::new(false),
         );
         assert!(!truncated);
         assert_eq!(scan_limited[1].hash_status, "hashed");
@@ -2422,9 +2397,11 @@ mod tests {
             &workspace,
             Path::new("sample.mse-set"),
             "set",
-            10,
-            1024,
-            1024,
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 1024,
+                max_total_hash_bytes: 1024,
+            },
             &mut scan_budget,
             &cancelled,
         );
