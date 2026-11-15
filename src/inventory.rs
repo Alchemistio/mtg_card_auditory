@@ -977,6 +977,33 @@ fn attach_mse_zip_resources(
     }
 }
 
+fn verify_mse_zip_sources_unchanged(
+    assets: &[AssetRecord],
+    workspace: &CapabilityDir,
+) -> Result<()> {
+    for asset in assets {
+        if asset.mse_main_file_present != Some(true) || asset.archive_entry_count.is_none()
+            || mse_package_type(&asset.extension).is_none()
+        {
+            continue;
+        }
+        let relative = Path::new(&asset.relative_path);
+        let before = workspace.metadata(relative)
+            .with_context(|| format!("Métadonnées ZIP MSE indisponibles : {}", asset.relative_path))?;
+        let current_hash = sha256_file_capability(workspace, relative)
+            .with_context(|| format!("Vérification ZIP MSE impossible : {}", asset.relative_path))?;
+        let after = workspace.metadata(relative)
+            .with_context(|| format!("Métadonnées ZIP MSE indisponibles après indexation : {}", asset.relative_path))?;
+        if !file_metadata_is_stable(&before, &after) || current_hash != asset.sha256 {
+            anyhow::bail!(
+                "Archive MSE modifiée pendant ou après son indexation ; résultat invalidé : {}",
+                asset.relative_path
+            );
+        }
+    }
+    Ok(())
+}
+
 fn attach_mse_folder_resources(assets: &mut [AssetRecord]) {
     const MAX_RESOURCES_PER_PACKAGE: usize = 10_000;
     let mut package_indices = HashMap::<String, usize>::new();
@@ -1491,6 +1518,7 @@ where
     resolve_mse_dependencies(&mut assets);
     attach_mse_folder_resources(&mut assets);
     attach_mse_zip_resources(&mut assets, &workspace, mse_hash_budget, cancelled);
+    verify_mse_zip_sources_unchanged(&assets, &workspace)?;
     if cancelled.load(Ordering::Relaxed) {
         anyhow::bail!("Scan annulé par l'utilisateur.");
     }
@@ -3041,6 +3069,37 @@ mod tests {
         assert!(sheet_path.exists());
         assert!(output.join("sheet.txt").exists());
         std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn mse_zip_indexing_rejects_archive_changed_after_scan() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-mutation-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"original").unwrap();
+        writer.finish().unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"replaced").unwrap();
+        writer.finish().unwrap();
+
+        let error = verify_mse_zip_sources_unchanged(&inventory.assets, &workspace).unwrap_err();
+        assert!(error.to_string().contains("modifiée"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
