@@ -60,6 +60,7 @@ Ne pas lancer une modification qui rendrait ambiguë ou annulerait la CI en cour
 - Si elle échoue, diagnostiquer les logs précis, corriger la cause, ajouter un test de non-régression si pertinent, puis relancer.
 - Si elle réussit, vérifier toutes les étapes pertinentes et les éventuels messages `SKIP`. Une CI réussie avec un test ignoré ne prouve pas que ce test a été exécuté.
 - Vérifier le statut de chaque workflow pertinent (Windows et Unix) pour le HEAD exact, pas celui d'un commit antérieur.
+- Les workflows doivent contrôler `cargo fmt --all -- --check` sans exécuter préalablement `cargo fmt --all`, afin que le contrôle détecte réellement les fichiers mal formatés au lieu de les corriger dans le runner.
 
 ### F. Fin de cycle / condition d'arrêt
 
