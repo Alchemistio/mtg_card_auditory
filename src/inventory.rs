@@ -374,7 +374,10 @@ fn svg_metadata(
                             viewbox,
                             Some(external_refs),
                             Some(false),
-                            Some("SVG refusé : nombre maximal d'attributs par élément dépassé.".to_string()),
+                            Some(
+                                "SVG refusé : nombre maximal d'attributs par élément dépassé."
+                                    .to_string(),
+                            ),
                         );
                     }
                     let attribute = match attribute {
@@ -2952,8 +2955,7 @@ mod tests {
         std::fs::write(root.join("deep.svg"), source).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, _, valid, warning) =
-            svg_metadata(&workspace, Path::new("deep.svg"), "svg");
+        let (_, _, valid, warning) = svg_metadata(&workspace, Path::new("deep.svg"), "svg");
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("profondeur XML maximale"));
         drop(workspace);
@@ -2974,8 +2976,7 @@ mod tests {
         std::fs::write(root.join("many.svg"), source).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, _, valid, warning) =
-            svg_metadata(&workspace, Path::new("many.svg"), "svg");
+        let (_, _, valid, warning) = svg_metadata(&workspace, Path::new("many.svg"), "svg");
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("nombre maximal d'événements"));
         drop(workspace);
