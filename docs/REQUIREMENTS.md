@@ -23,7 +23,7 @@ Outil Windows autonome en Rust pour auditer les assets d'un dossier local ou de 
 - Inventaire stable : ID, chemin, nom, extension, taille, source et statut.
 - SHA-256 des octets, distinct du Git blob SHA-1.
 - Raster : format réel, dimensions, orientation, canaux et transparence.
-- SVG : XML, dimensions, viewBox, références externes et aperçu sécurisé.
+- SVG : XML, dimensions, viewBox, références externes et aperçu sécurisé. Le parseur d'inventaire reste sans rendu et borne la lecture à 32 Mio, 100 000 événements XML, 256 niveaux et 256 attributs par élément.
 - Fonts : famille, style, poids et métadonnées ; aucune licence déduite.
 - ZIP : liste du contenu, tailles, chemins suspects, protection zip-bomb ; extraction désactivée par défaut.
 - HTML/JSON/XML/MSE/texte : type, encodage, notices et dépendances.

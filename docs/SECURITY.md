@@ -12,7 +12,7 @@
 - Les rapports de comparaison JSON sont exportés hors des deux sources comparées.
 - Le repérage de noms LICENSE/NOTICE/README est une simple aide à l'inventaire ; il ne certifie aucune licence ni droit de redistribution.
 - Les fichiers HTML, scripts, macros et contenus récupérés ne sont jamais exécutés.
-- Les SVG sont analysés comme XML sans rendu ; la lecture est plafonnée à 32 Mio au niveau du flux, même si le fichier grossit après la vérification de ses métadonnées.
+- Les SVG sont analysés comme XML sans rendu ; la lecture est plafonnée à 32 Mio au niveau du flux, même si le fichier grossit après la vérification de ses métadonnées. Le parseur limite aussi le document à 100 000 événements XML, 256 niveaux d'imbrication et 256 attributs par élément ; les dépassements sont signalés comme SVG invalide sans rendu ni accès réseau.
 - Les archives ZIP sont inspectées par leur table centrale ; aucune extraction n'est effectuée. Les packages MSE ZIP sont reconnus uniquement par extension et par présence du fichier principal attendu dans cette table ; le préfixe du fichier principal est lu avec une limite stricte de 1 Mio ; les lignes sont plafonnées à 16 Kio et 4 096 lignes. Les directives `include file:` sont uniquement signalées et ne sont jamais suivies.
 
 ## Chemins et liens
