@@ -10,6 +10,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - [Feuille de route](docs/ROADMAP.md)
 - [Sécurité](docs/SECURITY.md)
 - [Analyse des packages MSE](docs/MSE_ANALYSIS.md)
+- [Index documentaire](docs/INDEX.md)
 - [Workflow de développement autonome](docs/WORKFLOW.md)
 
 ## Fonctionnalités présentes dans le socle
@@ -43,13 +44,13 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Confinement capability-based (`cap-std`) des opérations GitHub, des exports et des lectures locales sensibles : cache, téléchargements, journaux, manifestes, JSON/CSV/HTML, planches PNG, index, réanalyse des images et lecture des inventaires de comparaison utilisent des handles de répertoire et des créations exclusives.
 
 ## Limites connues
-- Les packages MSE sous forme de dossiers, la lecture complète des en-têtes, la résolution locale des dépendances, les directives `include file:` et le graphe de ressources restent à implémenter.
+- L'analyse MSE est déjà partiellement intégrée : packages ZIP et dossiers, en-têtes bornés, dépendances et références résolues localement, cycles détectés, ressources indexées et hachées sous budgets. Restent notamment l'enrichissement des synthèses et rapports, la lecture au-delà du préfixe d'en-tête borné et des cas de corruption avancés.
 - Cache GitHub local par commit/blob vérifié avec le SHA-1 Git.
 - Journal de progression persistant par dépôt et commit complet dans `.mtg-auditor-cache/download-sessions/owner/repository/` ; les fichiers terminés sont repris uniquement si leur taille et leur SHA-1 Git correspondent encore. Les manifestes sont également séparés par dépôt dans `.mtg-auditor-cache/download-manifests/`. Les fichiers absents ou modifiés ne sont jamais écrasés. La vérification des fichiers repris est effectuée en flux avec un tampon de 64 Kio ; la lecture du journal de reprise est plafonnée à 64 Mio.
 - La reprise concerne les fichiers terminés d'une sélection relancée. La reprise d'un blob interrompu au niveau des octets n'est pas implémentée ; la documentation GitHub de l'API Git Blobs ne garantit pas la prise en charge de `Range` ou d'ETag, donc aucun fragment partiel n'est réutilisé.
 - Estimation du temps restant.
 - Le contenu et les obligations des fichiers de licence doivent être analysés et reliés à une provenance vérifiable ; aucune validation juridique automatique.
-- Orientation, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices, 7z/RAR et analyse MSE.
+- Orientation raster, miniatures avancées, aperçu SVG sandboxé, inspection CSS approfondie, métadonnées avancées de polices et formats 7z/RAR.
 - Galerie visuelle, planches annotées, licences/provenance, revue humaine et export HTML de comparaison.
 La protection TOCTOU reste partielle : l'énumération récursive et les lectures de fichiers d'analyse, les réanalyses pour planches et la lecture des inventaires de comparaison utilisent des handles capability-based. La sélection initiale des dossiers repose encore sur des chemins ; les points de réanalyse Windows et les courses de remplacement concurrent restent à tester.
 - L'interface est un prototype ; l'ergonomie et les tests de charge restent à faire.
