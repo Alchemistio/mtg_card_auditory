@@ -61,6 +61,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] README actualisé pour référencer l'index et ne plus présenter les fonctions MSE déjà intégrées comme non implémentées.
 - [x] Documentation d'architecture corrigée pour rétablir le retour à la ligne entre les références de modules.
 - [x] Architecture et cahier des charges réalignés sur l'énumération capability-based déjà implémentée et sur les fonctions MSE réellement disponibles.
+- [x] Audit documentaire de reprise : preuves CI historiques actualisées dans `SECURITY.md` (56 tests sur `a9ed50a`, sans les présenter comme validation du HEAD courant) et description de l'architecture corrigée pour refléter la résolution locale des dépendances/références MSE.
 - [x] Workflow de reprise modifié pour consulter obligatoirement l'index et la feuille de route à chaque session, vérifier les tâches sur le code et ne clôturer qu'avec des preuves.
 - [x] Dépôt Rust initialisé.
 - [x] Cahier des charges, architecture et sécurité.
