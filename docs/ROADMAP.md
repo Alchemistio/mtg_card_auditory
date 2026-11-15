@@ -60,6 +60,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Index documentaire central créé dans `docs/INDEX.md`, avec correspondance entre domaines et documents de référence.
 - [x] README actualisé pour référencer l'index et ne plus présenter les fonctions MSE déjà intégrées comme non implémentées.
 - [x] Documentation d'architecture corrigée pour rétablir le retour à la ligne entre les références de modules.
+- [x] Architecture et cahier des charges réalignés sur l'énumération capability-based déjà implémentée et sur les fonctions MSE réellement disponibles.
 - [x] Workflow de reprise modifié pour consulter obligatoirement l'index et la feuille de route à chaque session, vérifier les tâches sur le code et ne clôturer qu'avec des preuves.
 - [x] Dépôt Rust initialisé.
 - [x] Cahier des charges, architecture et sécurité.
