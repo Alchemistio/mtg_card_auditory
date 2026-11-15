@@ -11,14 +11,12 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
    - Acceptation : fichier généré avec le manifeste courant, aucun changement de dépendances implicite en CI ; les workflows Windows et Unix utilisent le même lockfile et toutes les commandes Cargo de validation/build utilisent `--locked` lorsque pris en charge.
    - Preuve : deux workflows verts sur le même SHA, sans étape de génération du lockfile.
 
-2. **Détecter les modifications concurrentes pendant l'analyse locale**.
-   - Livrable : une analyse ne publie pas de métadonnées incohérentes si un fichier change pendant le scan.
-   - Acceptation minimale : capturer les métadonnées pertinentes avant et après les lectures ; invalider l'enregistrement avec un diagnostic explicite si taille/horodatage/identité disponible diffère ; ajouter des tests déterministes de modification/remplacement pendant le scan.
-   - Acceptation cible : réduire les réouvertures et analyser depuis un handle stable quand l'API des analyseurs le permet ; documenter les limites spécifiques Windows/Unix.
+2. **Détecter les modifications concurrentes pendant l'analyse locale** — <badge>En cours</badge>.
+   - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille.
+   - Reste à faire : test de remplacement concurrent pendant l'analyse, détection des mutations conservant taille/horodatage lorsque possible, handle unique/instantané et contrôle cohérent de l'indexation ZIP MSE postérieure.
 
-3. **Fermer la fenêtre de remplacement des planches de contact**.
-   - Livrable : dimensions et pixels décodés correspondent au contenu dont le SHA-256 a été vérifié.
-   - Acceptation : calculer/valider l'empreinte sur le même handle ou détecter toute mutation entre vérification et décodage ; test de remplacement concurrent ; aucune écriture dans les sources.
+3. **Fermer la fenêtre de remplacement des planches de contact** — terminée.
+   - Réalisé : chaque image est lue une seule fois depuis un handle capability-based dans un tampon limité à 100 Mio ; SHA-256, dimensions et pixels sont calculés à partir des mêmes octets. Test de non-régression : une source modifiée depuis le scan est refusée et notée dans l'index. Aucun fichier source n'est écrit.
 
 4. **Éprouver la sélection initiale des sources et les exports sous concurrence**.
    - Acceptation : tests Unix/Windows pour liens symboliques, remplacement de répertoire, destination symlinkée, création concurrente de destination et échec d'écriture ; les tests Windows conditionnels doivent rendre chaque `SKIP` visible et ne pas être comptés comme preuve d'exécution.
@@ -103,7 +101,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Ajouter des tests de non-suivi des liens symboliques de fichiers et de répertoires sous Unix, et de fichiers sous Windows ; le test Windows affiche `SKIP` si les permissions du runner interdisent la création du lien.
 - [x] Ajouter un test de confinement `WorkspaceDir` contre un lien symbolique de répertoire vers une cible externe sous Unix et Windows ; le test Windows affiche explicitement `SKIP` si le runner interdit la création du lien.
 - [x] Documenter le workflow de développement autonome dans `docs/WORKFLOW.md` : poursuivre les tâches indépendantes pendant les CI, contrôler les logs et les `SKIP`, et ne s'arrêter qu'en l'absence de travail réalisable.
-- [~] Énumération récursive, lectures de contenu, réanalyse des images de planches et ouverture de l'inventaire JSON de comparaison migrées vers des handles capability-based ; SVG et polices bénéficient de limites de lecture en flux (32/64 Mio). Audit détaillé : `analyze_file` rouvre le fichier entre hash, métadonnées et inspection ZIP ; une modification concurrente peut rendre ces informations incohérentes. Les planches présentent aussi une fenêtre entre vérification SHA-256 et décodage. Prochaine étape : détecter les changements via métadonnées avant/après et invalider les analyses instables, puis réduire les réouvertures ; sélection initiale des dossiers et tests de courses restent à traiter.
+- [~] Énumération récursive et lectures de contenu capability-based ; SVG et polices plafonnés en flux (32/64 Mio). `analyze_file` vérifie désormais taille, horodatage et type de fichier avant/après les analyseurs, et invalide le scan si ces métadonnées changent. Limites restantes : mutations conservant les mêmes métadonnées, handles multiples et réouverture des archives lors de l'indexation des ressources MSE ; la sélection initiale des dossiers et les courses de répertoires restent à traiter. Les planches utilisent désormais un tampon unique dont le SHA-256, les dimensions et les pixels sont cohérents.
 - [x] Filtrage de la liste distante par chemin, extension et plage de taille.
 - [x] Filtre distant par famille technique (classification indicative par extension).
 
