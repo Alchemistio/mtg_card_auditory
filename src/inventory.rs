@@ -2790,7 +2790,10 @@ mod tests {
             }));
         }
         barrier.wait();
-        let results: Vec<_> = workers.into_iter().map(|worker| worker.join().unwrap()).collect();
+        let results: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect();
         assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
         assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
         let content = std::fs::read(&destination).unwrap();
