@@ -6,10 +6,9 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ### P0 — Reproductibilité et intégrité des sources
 
-1. **Versionner le lockfile** (bloqué sur le transfert de l'artefact récupéré).
-   - Livrable : `Cargo.lock` commité et suivi par Git.
-   - Acceptation : fichier généré avec le manifeste courant, aucun changement de dépendances implicite en CI ; les workflows Windows et Unix utilisent le même lockfile et toutes les commandes Cargo de validation/build utilisent `--locked` lorsque pris en charge.
-   - Preuve : deux workflows verts sur le même SHA, sans étape de génération du lockfile.
+1. **Versionner le lockfile** — implémenté, validation CI en attente.
+   - Réalisé : `Cargo.lock` v4 (115 720 octets) récupéré depuis l'artefact Windows historique ; son manifeste correspond au `Cargo.toml` courant (blob SHA `2d1a0d7ae3204b099c2c1c27e6de139b37dd4abc`). Windows et Unix utilisent désormais ce lockfile ; `cargo generate-lockfile` et l'upload de lockfile temporaire ont été retirés ; Clippy, tests et build Windows utilisent `--locked`.
+   - Reste à faire : obtenir les CI Windows et Unix vertes sur le même SHA après fusion ; `cargo fmt` ne propose pas d'option `--locked` dans sa commande dédiée.
 
 2. **Détecter les modifications concurrentes pendant l'analyse locale** — partiellement implémentée.
    - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille. Après l'indexation secondaire des ressources ZIP MSE, recalculer le SHA-256 des archives et refuser l'inventaire si le contenu diffère du hash initial ou si les métadonnées changent pendant ce contrôle ; test de non-régression sur archive remplacée après scan.
@@ -74,7 +73,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
-- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances (artefact `cargo-lockfile` récupéré depuis le run Windows `43625687052`, fichier de 115 720 octets ; transfert exact dans Git encore à réaliser). Le workflow Windows exécute encore `cargo generate-lockfile` à chaque run et Unix ne verrouille pas les dépendances. Après commit du lockfile : supprimer la génération, ajouter `--locked` à fmt/clippy/test/build si la commande le supporte, et vérifier les deux plateformes sur le même HEAD.
+- [~] `Cargo.lock` v4 versionné depuis l'artefact historique `cargo-lockfile` (run `43625687052`, 115 720 octets) ; cohérence vérifiée avec le manifeste courant par `cargo metadata --locked --no-deps`. Les workflows Windows et Unix utilisent désormais le lockfile commun ; Clippy/tests/build Windows sont verrouillés avec `--locked`. Validation des deux plateformes sur un même SHA encore attendue.
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
