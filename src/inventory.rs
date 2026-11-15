@@ -3030,6 +3030,26 @@ mod tests {
     }
 
     #[test]
+    fn contact_sheet_rejects_source_changed_after_scan() {
+        let base = std::env::temp_dir().join(format!("mtg-auditor-sheet-mutation-{}", std::process::id()));
+        let source = base.join("source");
+        let output = base.join("output");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&output).unwrap();
+        let source_image = source.join("card.png");
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([20, 40, 60, 128])).save(&source_image).unwrap();
+        let document = scan_directory(&source).unwrap();
+        image::RgbaImage::from_pixel(9, 9, image::Rgba([60, 40, 20, 255])).save(&source_image).unwrap();
+        let sheet_path = output.join("sheet.png");
+        let rendered = export_contact_sheet(&document, 0, &sheet_path).unwrap();
+        assert_eq!(rendered, 0);
+        let index = std::fs::read_to_string(output.join("sheet.txt")).unwrap();
+        assert!(index.contains("SOURCE MODIFIÉE DEPUIS LE SCAN"));
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn scans_multiple_roots_without_path_collisions_and_detects_cross_root_duplicates() {
         let base = std::env::temp_dir().join(format!("mtg-auditor-multi-test-{}", std::process::id()));
         let first = base.join("first");
