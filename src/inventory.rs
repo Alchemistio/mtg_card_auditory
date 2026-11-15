@@ -599,6 +599,28 @@ fn mse_zip_resources_with_limits(
     max_total_hash_bytes: u64,
     scan_budget: &mut u64,
 ) -> (Vec<MseResourceRecord>, bool) {
+    mse_zip_resources_with_limits_and_cancel(
+        workspace,
+        relative,
+        main_name,
+        max_resources,
+        max_resource_bytes,
+        max_total_hash_bytes,
+        scan_budget,
+        &AtomicBool::new(false),
+    )
+}
+
+fn mse_zip_resources_with_limits_and_cancel(
+    workspace: &CapabilityDir,
+    relative: &Path,
+    main_name: &str,
+    max_resources: usize,
+    max_resource_bytes: u64,
+    max_total_hash_bytes: u64,
+    scan_budget: &mut u64,
+    cancelled: &AtomicBool,
+) -> (Vec<MseResourceRecord>, bool) {
     let file = match workspace.open(relative) {
         Ok(file) => file,
         Err(_) => return (Vec::new(), true),
@@ -615,6 +637,10 @@ fn mse_zip_resources_with_limits(
     let mut hashed_bytes = 0_u64;
     let mut truncated = false;
     for index in 0..archive.len() {
+        if cancelled.load(Ordering::Relaxed) {
+            truncated = true;
+            break;
+        }
         let mut entry = match archive.by_index(index) {
             Ok(entry) => entry,
             Err(_) => {
@@ -657,6 +683,10 @@ fn mse_zip_resources_with_limits(
             let mut read_error = false;
             let mut budget_status = None;
             loop {
+                if cancelled.load(Ordering::Relaxed) {
+                    *scan_budget = (*scan_budget).saturating_sub(bytes_read);
+                    return (resources, true);
+                }
                 match entry.read(&mut buffer) {
                     Ok(0) => break,
                     Ok(count) => {
@@ -934,19 +964,27 @@ fn attach_mse_zip_resources(
     assets: &mut [AssetRecord],
     workspace: &CapabilityDir,
     scan_budget: &mut u64,
+    cancelled: &AtomicBool,
 ) {
     for asset in assets.iter_mut() {
+        if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
         if asset.mse_main_file_present != Some(true) || asset.archive_entry_count.is_none() {
             continue;
         }
         let Some(main_name) = mse_package_type(&asset.extension) else {
             continue;
         };
-        let (resources, truncated) = mse_zip_resources(
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
             workspace,
             Path::new(&asset.relative_path),
             main_name,
+            10_000,
+            64 * 1024 * 1024,
+            256 * 1024 * 1024,
             scan_budget,
+            cancelled,
         );
         asset.mse_resources = resources;
         asset.mse_resources_truncated = truncated;
@@ -1448,7 +1486,10 @@ where
     assets.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
     resolve_mse_dependencies(&mut assets);
     attach_mse_folder_resources(&mut assets);
-    attach_mse_zip_resources(&mut assets, &workspace, mse_hash_budget);
+    attach_mse_zip_resources(&mut assets, &workspace, mse_hash_budget, cancelled);
+    if cancelled.load(Ordering::Relaxed) {
+        anyhow::bail!("Scan annulé par l'utilisateur.");
+    }
     let mut first_path_by_hash = HashMap::<String, String>::new();
     let mut duplicate_files = 0usize;
     for asset in &mut assets {
@@ -2356,6 +2397,41 @@ mod tests {
         assert_eq!(second.mse_resources[0].hash_status, "scan-budget");
         assert!(second.mse_resources[0].sha256.is_none());
         assert_eq!(scan_budget, 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stops_mse_zip_resource_indexing_when_scan_is_cancelled() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mse-cancel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer.start_file("set", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer.start_file("cards/image.bin", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"resource").unwrap();
+        writer.finish().unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let cancelled = AtomicBool::new(true);
+        let mut scan_budget = 1024;
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            10,
+            1024,
+            1024,
+            &mut scan_budget,
+            &cancelled,
+        );
+        assert!(resources.is_empty());
+        assert!(truncated);
+        assert_eq!(scan_budget, 1024);
+        drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
 
