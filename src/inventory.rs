@@ -1811,30 +1811,34 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
             index_text.push_str(&format!("{:02}\tLIEN SYMBOLIQUE OU SOURCE ABSENTE\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let current_hash = match sha256_file_capability(&workspace, &relative) {
-            Ok(hash) => hash,
-            Err(_) => {
-                index_text.push_str(&format!("{:02}\tSOURCE ABSENTE OU ILLISIBLE\t{}\n", slot + 1, asset.relative_path));
-                continue;
-            }
-        };
-        if current_hash != asset.sha256 {
-            index_text.push_str(&format!("{:02}\tSOURCE MODIFIÉE DEPUIS LE SCAN\t{}\n", slot + 1, asset.relative_path));
-            continue;
-        }
         let file_size = workspace.metadata(&relative).map(|metadata| metadata.len()).unwrap_or(u64::MAX);
         if file_size > 100 * 1024 * 1024 {
             index_text.push_str(&format!("{:02}\tIGNORÉ (fichier > 100 Mio)\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let dimensions_file = match workspace.open(&relative) {
+        // Lire une seule fois dans un tampon plafonné : le hash, les dimensions et
+        // les pixels portent ainsi exactement sur les mêmes octets, même si le chemin
+        // source est remplacé après l'ouverture du handle.
+        let source_file = match workspace.open(&relative) {
             Ok(file) => file,
             Err(_) => {
-                index_text.push_str(&format!("{:02}\tILLISIBLE\t{}\n", slot + 1, asset.relative_path));
+                index_text.push_str(&format!("{:02}\tSOURCE ABSENTE OU ILLISIBLE\t{}\n", slot + 1, asset.relative_path));
                 continue;
             }
         };
-        let dimensions = ImageReader::new(BufReader::new(dimensions_file))
+        let bytes = match read_limited(source_file, 100 * 1024 * 1024) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                index_text.push_str(&format!("{:02}\tSOURCE MODIFIÉE OU SUPÉRIEURE À 100 Mio\t{}\n", slot + 1, asset.relative_path));
+                continue;
+            }
+        };
+        let current_hash = format!("{:x}", Sha256::digest(&bytes));
+        if current_hash != asset.sha256 {
+            index_text.push_str(&format!("{:02}\tSOURCE MODIFIÉE DEPUIS LE SCAN\t{}\n", slot + 1, asset.relative_path));
+            continue;
+        }
+        let dimensions = ImageReader::new(std::io::Cursor::new(&bytes))
             .with_guessed_format()
             .map_err(anyhow::Error::from)
             .and_then(|reader| reader.into_dimensions().map_err(anyhow::Error::from));
@@ -1849,14 +1853,7 @@ pub fn export_contact_sheet(document: &InventoryDocument, page_index: usize, des
             index_text.push_str(&format!("{:02}\tIGNORÉ (plus de 30 Mpx)\t{}\n", slot + 1, asset.relative_path));
             continue;
         }
-        let decoded_file = match workspace.open(&relative) {
-            Ok(file) => file,
-            Err(_) => {
-                index_text.push_str(&format!("{:02}\tDÉCODAGE IMPOSSIBLE\t{}\n", slot + 1, asset.relative_path));
-                continue;
-            }
-        };
-        let decoded = ImageReader::new(BufReader::new(decoded_file))
+        let decoded = ImageReader::new(std::io::Cursor::new(&bytes))
             .with_guessed_format()
             .map_err(anyhow::Error::from)
             .and_then(|reader| reader.decode().map_err(anyhow::Error::from));
