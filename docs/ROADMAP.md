@@ -13,7 +13,7 @@
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
-- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances (artefact `cargo-lockfile` récupéré depuis le run Windows `43625687052`, fichier de 115 720 octets ; transfert exact dans Git encore à réaliser).
+- [ ] Ajouter et versionner `Cargo.lock` afin de figer les versions résolues des dépendances (artefact `cargo-lockfile` récupéré depuis le run Windows `43625687052`, fichier de 115 720 octets ; transfert exact dans Git encore à réaliser). Les workflows actuels régénèrent encore le lockfile Windows à chaque run et Unix ne le verrouille pas ; ne pas présenter les builds comme reproductibles tant que le fichier n'est pas commité et utilisé avec `--locked`.
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
