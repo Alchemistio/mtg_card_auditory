@@ -1,7 +1,65 @@
 # Feuille de route
 
+## File d'exécution priorisée et critères d'acceptation
+
+Cette file complète les phases ci-dessus : elle transforme les chantiers partiels en tâches vérifiables. L'ordre peut évoluer si un audit révèle un risque plus prioritaire.
+
+### P0 — Reproductibilité et intégrité des sources
+
+1. **Versionner le lockfile** (bloqué sur le transfert de l'artefact récupéré).
+   - Livrable : `Cargo.lock` commité et suivi par Git.
+   - Acceptation : fichier généré avec le manifeste courant, aucun changement de dépendances implicite en CI ; les workflows Windows et Unix utilisent le même lockfile et toutes les commandes Cargo de validation/build utilisent `--locked` lorsque pris en charge.
+   - Preuve : deux workflows verts sur le même SHA, sans étape de génération du lockfile.
+
+2. **Détecter les modifications concurrentes pendant l'analyse locale**.
+   - Livrable : une analyse ne publie pas de métadonnées incohérentes si un fichier change pendant le scan.
+   - Acceptation minimale : capturer les métadonnées pertinentes avant et après les lectures ; invalider l'enregistrement avec un diagnostic explicite si taille/horodatage/identité disponible diffère ; ajouter des tests déterministes de modification/remplacement pendant le scan.
+   - Acceptation cible : réduire les réouvertures et analyser depuis un handle stable quand l'API des analyseurs le permet ; documenter les limites spécifiques Windows/Unix.
+
+3. **Fermer la fenêtre de remplacement des planches de contact**.
+   - Livrable : dimensions et pixels décodés correspondent au contenu dont le SHA-256 a été vérifié.
+   - Acceptation : calculer/valider l'empreinte sur le même handle ou détecter toute mutation entre vérification et décodage ; test de remplacement concurrent ; aucune écriture dans les sources.
+
+4. **Éprouver la sélection initiale des sources et les exports sous concurrence**.
+   - Acceptation : tests Unix/Windows pour liens symboliques, remplacement de répertoire, destination symlinkée, création concurrente de destination et échec d'écriture ; les tests Windows conditionnels doivent rendre chaque `SKIP` visible et ne pas être comptés comme preuve d'exécution.
+
+### P1 — Robustesse des formats et tests
+
+5. **Compléter les fixtures ZIP/MSE malformées**.
+   - Couvrir table centrale incohérente, entrée tronquée, tailles déclarées incohérentes, CRC invalide, noms encodés atypiques, chemins ambigus et données compressées invalides.
+   - Acceptation : erreurs contrôlées, aucune panique, aucune extraction, budgets respectés avant chaque lecture, annulation propagée et ressources non hachées marquées explicitement.
+
+6. **Compléter les métadonnées raster et SVG sans activer de contenu**.
+   - Raster : orientation, dimensions extrêmes, limites de décodage et miniatures plafonnées.
+   - SVG : limites de taille/profondeur/nœuds, CSS et références externes détectées sans rendu ni requête réseau.
+   - Acceptation : fixtures malveillantes synthétiques, temps/mémoire bornés et aucun script/ressource externe exécuté.
+
+7. **Préciser les formats de polices et les notices**.
+   - Acceptation : formats reconnus listés, fichiers invalides/volumineux bornés ; notices collectées avec chemin, hash et extrait borné, sans inférer de licence ni statut juridique.
+
+### P2 — Revue et rapports
+
+8. **Galerie hors ligne et revue humaine persistante**.
+   - Acceptation : navigation paginée, filtres, ouverture locale sûre, annotations et décisions persistées séparément des sources ; aucune ressource active exécutée.
+
+9. **Rapports de comparaison et synthèses MSE**.
+   - Acceptation : synthèse des packages, dépendances, références, ressources ignorées et raisons de troncature ; HTML autonome avec échappement systématique et export JSON versionné.
+
+10. **Candidats visuels similaires**.
+    - Acceptation : métrique documentée, seuil ajustable, faux positifs présentés comme suggestions et aucune déduplication/suppression automatique.
+
+### P3 — Livraison
+
+11. **Mesures de performance et estimation de durée**.
+    - Acceptation : estimation basée sur progression observée, recalculée et présentée comme indicative ; tests sur corpus synthétique de tailles variées et absence de blocage UI.
+
+12. **Paquet Windows autonome et publication**.
+    - Acceptation : exécutable x64 lancé sur Windows propre sans runtime non prévu ; version sémantique, notes de version, artefacts signés si certificat disponible et GitHub Release reproductible.
+
 ## Phase 0 — Fondation
 - [x] Index documentaire central créé dans `docs/INDEX.md`, avec correspondance entre domaines et documents de référence.
+- [x] README actualisé pour référencer l'index et ne plus présenter les fonctions MSE déjà intégrées comme non implémentées.
+- [x] Documentation d'architecture corrigée pour rétablir le retour à la ligne entre les références de modules.
 - [x] Workflow de reprise modifié pour consulter obligatoirement l'index et la feuille de route à chaque session, vérifier les tâches sur le code et ne clôturer qu'avec des preuves.
 - [x] Dépôt Rust initialisé.
 - [x] Cahier des charges, architecture et sécurité.
