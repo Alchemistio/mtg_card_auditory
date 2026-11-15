@@ -8,7 +8,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 1. **Versionner le lockfile** — terminé.
    - Réalisé : `Cargo.lock` v4 (115 720 octets) récupéré depuis l'artefact Windows historique ; son manifeste correspond au `Cargo.toml` courant (blob SHA `2d1a0d7ae3204b099c2c1c27e6de139b37dd4abc`). Windows et Unix utilisent désormais ce lockfile ; `cargo generate-lockfile` et l'upload de lockfile temporaire ont été retirés ; Clippy, tests et build Windows utilisent `--locked`.
-   - Preuve : CI Unix `43738862441` et Windows `43738862446` vertes sur le même commit de PR `dbdd55f70e66369989bb5ac3c0bbc2a24eea5d7b` ; l'arbre de ce commit est identique à celui du commit de fusion `37521c3fdd3451592afdd5af59b80897184846d7`. Unix : 59 tests réussis ; Windows : formatage, Clippy, tests, build Release et upload de l'exécutable réussis. Une seconde exécution sur `main` est également en cours. `cargo fmt` ne propose pas d'option `--locked` dans sa commande dédiée.
+   - Preuve : CI Unix `43738862441` et Windows `43738862446` vertes sur le même commit de PR `dbdd55f70e66369989bb5ac3c0bbc2a24eea5d7b` ; l'arbre de ce commit est identique à celui du commit de fusion `37521c3fdd3451592afdd5af59b80897184846d7`. Validation supplémentaire du HEAD `e77dfe8` : Unix run `43739937199` (62 tests réussis) et Windows run `43739937239` (formatage, Clippy, tests, build Release et upload de l'exécutable réussis). `cargo fmt` ne propose pas d'option `--locked` dans sa commande dédiée.
 
 2. **Détecter les modifications concurrentes pendant l'analyse locale** — partiellement implémentée.
    - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille. Après l'indexation secondaire des ressources ZIP MSE, recalculer le SHA-256 des archives et refuser l'inventaire si le contenu diffère du hash initial ou si les métadonnées changent pendant ce contrôle ; test de non-régression sur archive remplacée après scan.
@@ -19,13 +19,14 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
    - Réalisé : chaque image est lue une seule fois depuis un handle capability-based dans un tampon limité à 100 Mio ; SHA-256, dimensions et pixels sont calculés à partir des mêmes octets. Test de non-régression : une source modifiée depuis le scan est refusée et notée dans l'index. Aucun fichier source n'est écrit.
 
 4. **Éprouver la sélection initiale des sources et les exports sous concurrence** — partiellement implémentée.
-   - Réalisé : test Unix de destination d'export symlinkée (la cible reste intacte), test concurrent à deux écrivains (exactement un gagnant), test d'échec d'écriture avec suppression du fichier partiel, et test de remplacement d'une source par lien symbolique après énumération.
+   - Réalisé : test Unix de destination d'export symlinkée (la cible reste intacte), test concurrent à deux écrivains (exactement un gagnant, exécuté sur CI Unix et Windows), test d'échec d'écriture avec suppression du fichier partiel, et test de remplacement d'une source par lien symbolique après énumération (test Unix).
    - Reste à faire : remplacement concurrent de répertoire racine/sous-répertoire, course entre validation du parent de destination et ouverture du handle, et scénarios Windows de destination symlinkée/création concurrente. Les tests Windows conditionnels doivent rendre chaque `SKIP` visible et ne pas être comptés comme preuve d'exécution.
 
 ### P1 — Robustesse des formats et tests
 
 5. **Compléter les fixtures ZIP/MSE malformées**.
-   - Couvrir table centrale incohérente, entrée tronquée, tailles déclarées incohérentes, CRC invalide, noms encodés atypiques, chemins ambigus et données compressées invalides.
+   - Réalisé : archive MSE globalement corrompue et ressource dont les octets ne correspondent plus au CRC déclaré ; cette dernière doit produire `read-error` sans SHA-256.
+   - Reste à couvrir : table centrale incohérente, entrée tronquée, tailles déclarées incohérentes, noms encodés atypiques, chemins ambigus et données compressées invalides.
    - Acceptation : erreurs contrôlées, aucune panique, aucune extraction, budgets respectés avant chaque lecture, annulation propagée et ressources non hachées marquées explicitement.
 
 6. **Compléter les métadonnées raster et SVG sans activer de contenu**.
