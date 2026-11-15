@@ -31,7 +31,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 6. **Compléter les métadonnées raster et SVG sans activer de contenu**.
    - Raster : orientation, dimensions extrêmes, limites de décodage et miniatures plafonnées.
-   - SVG : lecture plafonnée à 32 Mio, 100 000 événements XML, profondeur maximale 256 et 256 attributs par élément ; les tests de dépassement de profondeur et d'événements passent sur CI Unix `43740747584` (65 tests) et Windows `43740747683` (63 tests). Reste : dimensions SVG, CSS et références externes plus complètes, aperçu sandboxé.
+   - SVG : lecture plafonnée à 32 Mio, 100 000 événements XML, profondeur maximale 256 et 256 attributs par élément ; tests de dépassement de profondeur, d'événements et d'attributs. Les références relatives et les `url()` CSS avec espaces/guillemets sont détectées de façon conservative. Reste : dimensions SVG, couverture complète de la grammaire CSS et aperçu sandboxé.
    - Acceptation : fixtures malveillantes synthétiques, temps/mémoire bornés et aucun script/ressource externe exécuté.
 
 7. **Préciser les formats de polices et les notices**.
@@ -132,7 +132,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
-- [~] SVG : parsing XML sans exécution, viewBox et détection indicative de références externes ; lecture 32 Mio, 100 000 événements, profondeur 256 et 256 attributs par élément. Dimensions, analyse CSS plus complète et aperçu sandboxé à faire.
+- [~] SVG : parsing XML sans exécution, viewBox, références relatives et `url()` CSS détectés de façon conservative ; lecture 32 Mio, 100 000 événements, profondeur 256 et 256 attributs par élément. Dimensions, couverture CSS complète et aperçu sandboxé à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
 - [x] MSE : reconnaissance des packages ZIP, vérification du fichier principal, lecture bornée à 1 Mio des champs scalaires et extraction des dépendances compactes/en bloc, sans extraction.

@@ -518,13 +518,33 @@ fn font_metadata(
 }
 
 fn is_external_reference(value: &str) -> bool {
-    let value = value.trim().to_ascii_lowercase();
-    value.starts_with("http://") || value.starts_with("https://") || value.starts_with("//")
+    let value = value.trim();
+    !value.is_empty()
+        && !value.starts_with('#')
+        && !value.to_ascii_lowercase().starts_with("data:")
 }
 
 fn contains_external_css_reference(value: &str) -> bool {
-    let value = value.to_ascii_lowercase().replace(' ', "");
-    value.contains("url(http://") || value.contains("url(https://") || value.contains("url(//")
+    let normalized = value
+        .chars()
+        .filter(|character| {
+            !character.is_ascii_whitespace() && *character != '"' && *character != '\''
+        })
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let mut remaining = normalized.as_str();
+    while let Some(start) = remaining.find("url(") {
+        let after_url = &remaining[start + 4..];
+        let Some(end) = after_url.find(')') else {
+            break;
+        };
+        let target = &after_url[..end];
+        if !target.is_empty() && !target.starts_with('#') && !target.starts_with("data:") {
+            return true;
+        }
+        remaining = &after_url[end + 1..];
+    }
+    normalized.contains("@import")
 }
 
 fn mse_package_type(extension: &str) -> Option<&'static str> {
@@ -2934,6 +2954,50 @@ mod tests {
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
         assert!(warning.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detects_quoted_css_and_relative_svg_references() {
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-svg-css-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("references.svg"),
+            r#"<svg xmlns="http://www.w3.org/2000/svg" style="fill: url( '#gradient' ); filter: url( 'https://example.invalid/filter.svg' )"><image href="../images/card.png"/></svg>"#,
+        )
+        .unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, external, valid, warning) =
+            svg_metadata(&workspace, Path::new("references.svg"), "svg");
+        assert_eq!(external, Some(true));
+        assert_eq!(valid, Some(true));
+        assert!(warning.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_svg_with_too_many_attributes_on_one_element() {
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-svg-attributes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let mut source = String::from("<svg");
+        for index in 0..257 {
+            source.push_str(&format!(" a{}=\"x\"", index));
+        }
+        source.push_str("/>");
+        std::fs::write(root.join("attributes.svg"), source).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("attributes.svg"), "svg");
+        assert_eq!(valid, Some(false));
+        assert!(warning.unwrap().contains("attributs par élément"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
