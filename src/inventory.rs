@@ -4245,6 +4245,49 @@ mod tests {
     }
 
     #[test]
+    fn reports_truncated_mse_zip_central_directory_without_indexing_resources() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-truncated-central-directory-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("set", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer
+            .start_file("cards/image.bin", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"resource payload").unwrap();
+        writer.finish().unwrap();
+
+        let mut bytes = std::fs::read(&archive_path).unwrap();
+        assert!(bytes.len() > 8);
+        bytes.truncate(bytes.len() - 8);
+        std::fs::write(&archive_path, bytes).unwrap();
+
+        let inventory = scan_directory(&root).unwrap();
+        let package = inventory
+            .assets
+            .iter()
+            .find(|asset| asset.relative_path == "sample.mse-set")
+            .unwrap();
+        assert_eq!(package.mse_package_type.as_deref(), Some("set"));
+        assert!(package.analysis_warning.is_some());
+        assert!(package.mse_main_file_present.is_none());
+        assert!(package.mse_resources.is_empty());
+        assert!(!package.mse_resources_truncated);
+        assert!(!root.join("cards/image.bin").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn reports_mse_zip_package_missing_its_main_file() {
         use std::io::Write;
         let root =
