@@ -1299,6 +1299,12 @@ fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn file_metadata_is_stable(before: &cap_std::fs::Metadata, after: &cap_std::fs::Metadata) -> bool {
+    before.len() == after.len()
+        && before.modified().ok() == after.modified().ok()
+        && before.file_type().is_file() == after.file_type().is_file()
+}
+
 fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -> Result<AssetRecord> {
     let relative = path.strip_prefix(canonical_root)
         .context("Chemin hors du dossier source")?;
@@ -1350,6 +1356,18 @@ fn analyze_file(path: &Path, canonical_root: &Path, workspace: &CapabilityDir) -
     let mse_stylesheet = mse_header.as_ref().and_then(|header| header.stylesheet.clone());
     let mse_has_include_directives = mse_header.as_ref().and_then(|header| header.has_include_directives);
     let mse_dependencies = mse_header.as_ref().map_or_else(Vec::new, |header| header.dependencies.clone());
+
+    // Les analyseurs ouvrent actuellement le fichier séparément. Refuser le scan si
+    // ses métadonnées changent pendant ces lectures plutôt que publier un hash et des
+    // métadonnées qui pourraient provenir de versions différentes.
+    let final_metadata = workspace.metadata(relative)?;
+    if !file_metadata_is_stable(&metadata, &final_metadata) {
+        anyhow::bail!(
+            "Fichier modifié pendant l'analyse ; résultat invalidé : {}",
+            relative.display()
+        );
+    }
+
     Ok(AssetRecord {
         id: format!("sha256:{}:{}", sha256, relative_path),
         relative_path,
@@ -2251,6 +2269,22 @@ mod tests {
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
         assert!(warning.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detects_file_metadata_change_during_analysis() {
+        let root = std::env::temp_dir().join(format!("mtg-auditor-mutation-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("sample.txt");
+        std::fs::write(&path, b"before").unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let before = workspace.metadata(Path::new("sample.txt")).unwrap();
+        std::fs::write(&path, b"after content with a different size").unwrap();
+        let after = workspace.metadata(Path::new("sample.txt")).unwrap();
+        assert!(!file_metadata_is_stable(&before, &after));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
