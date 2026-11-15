@@ -1179,16 +1179,22 @@ fn verify_mse_zip_sources_unchanged(
             continue;
         }
         let relative = Path::new(&asset.relative_path);
-        let before = workspace.metadata(relative).with_context(|| {
+        let before = workspace.symlink_metadata(relative).with_context(|| {
             format!(
                 "Métadonnées ZIP MSE indisponibles : {}",
                 asset.relative_path
             )
         })?;
+        if !before.file_type().is_file() {
+            anyhow::bail!(
+                "Archive MSE absente, non régulière ou remplacée par un lien symbolique : {}",
+                asset.relative_path
+            );
+        }
         let current_hash = sha256_file_capability(workspace, relative).with_context(|| {
             format!("Vérification ZIP MSE impossible : {}", asset.relative_path)
         })?;
-        let after = workspace.metadata(relative).with_context(|| {
+        let after = workspace.symlink_metadata(relative).with_context(|| {
             format!(
                 "Métadonnées ZIP MSE indisponibles après indexation : {}",
                 asset.relative_path
@@ -1598,7 +1604,13 @@ fn analyze_file(
     let relative = path
         .strip_prefix(canonical_root)
         .context("Chemin hors du dossier source")?;
-    let metadata = workspace.metadata(relative)?;
+    let metadata = workspace.symlink_metadata(relative)?;
+    if !metadata.file_type().is_file() {
+        anyhow::bail!(
+            "Source absente, non régulière ou remplacée par un lien symbolique : {}",
+            relative.display()
+        );
+    }
     let relative_path = relative.to_string_lossy().replace('\\', "/");
     let file_name = path
         .file_name()
@@ -1689,7 +1701,7 @@ fn analyze_file(
     // Les analyseurs ouvrent actuellement le fichier séparément. Refuser le scan si
     // ses métadonnées changent pendant ces lectures plutôt que publier un hash et des
     // métadonnées qui pourraient provenir de versions différentes.
-    let final_metadata = workspace.metadata(relative)?;
+    let final_metadata = workspace.symlink_metadata(relative)?;
     if !file_metadata_is_stable(&metadata, &final_metadata) {
         anyhow::bail!(
             "Fichier modifié pendant l'analyse ; résultat invalidé : {}",
@@ -2843,6 +2855,35 @@ mod tests {
         assert!(!file_metadata_is_stable(&before, &after));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn analysis_rejects_file_replaced_by_symlink_after_enumeration() {
+        use std::os::unix::fs::symlink;
+        let base =
+            std::env::temp_dir().join(format!("mtg-auditor-symlink-race-{}", std::process::id()));
+        let root = base.join("root");
+        let outside = base.join("outside");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let source = root.join("sample.txt");
+        let external = outside.join("secret.txt");
+        std::fs::write(&source, b"original").unwrap();
+        std::fs::write(&external, b"outside secret").unwrap();
+
+        // Simule une entrée régulière observée pendant l'énumération, puis remplacée
+        // par un lien avant que l'analyse du chemin relatif ne commence.
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        std::fs::remove_file(&source).unwrap();
+        symlink(&external, &source).unwrap();
+
+        let error = analyze_file(&source, &root, &workspace).unwrap_err();
+        assert!(error.to_string().contains("lien symbolique"));
+        assert_eq!(std::fs::read(&external).unwrap(), b"outside secret");
+        drop(workspace);
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[test]
