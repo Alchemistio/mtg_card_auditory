@@ -19,7 +19,7 @@
 - Les URL de dépôt sont analysées avec un parseur URL dédié : HTTPS uniquement, hôte exactement `github.com`, absence d'identifiants/port/query/fragment, et chemin limité à `owner/repository`.
 - Les noms owner/repository sont limités aux caractères autorisés par le parseur ; les sous-chemins arbitraires sont rejetés.
 - Les chemins contenant racine, préfixe, parent ou composant spécial sont rejetés.
-- Les destinations existantes ne sont pas écrasées pour les téléchargements et planches. Les exports locaux utilisent `create_new` depuis un handle du dossier parent ; des tests Unix vérifient qu'une destination déjà liée symboliquement n'écrase pas sa cible et que deux créations concurrentes produisent exactement un gagnant.
+- Les destinations existantes ne sont pas écrasées pour les téléchargements et planches. Les exports locaux utilisent `create_new` depuis un handle du dossier parent ; un test Unix vérifie qu'une destination déjà liée symboliquement n'écrase pas sa cible, et un test multiplateforme vérifie que deux créations concurrentes produisent exactement un gagnant (CI Unix et Windows validées sur `e77dfe8`).
 - Les fichiers téléchargés et les manifestes sont ouverts avec création exclusive (`create_new`) pour refuser un fichier déjà présent au moment de l'ouverture.
 - Les blobs GitHub sont refusés au-delà de 90 Mio ; le téléchargement utilise le média type brut documenté `application/vnd.github.raw+json` en flux, vérifie la taille déclarée et calcule le SHA-1 Git en mémoire bornée (tampon 64 Kio).
 - Le SHA-1 Git de chaque blob est recalculé avec l'en-tête objet Git `blob {taille}\0` avant écriture et avant réutilisation du cache.
