@@ -3360,6 +3360,87 @@ mod tests {
     }
 
     #[test]
+    fn marks_mse_zip_resource_with_corrupt_deflate_stream_as_read_error() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-invalid-deflate-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let payload = b"DEFLATE-CORRUPTION-PROBE-".repeat(128);
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("set", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer
+            .start_file(
+                "cards/broken.bin",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated),
+            )
+            .unwrap();
+        writer.write_all(&payload).unwrap();
+        writer.finish().unwrap();
+
+        // Altérer le flux compressé sans modifier la table centrale ni le CRC.
+        let mut archive_bytes = std::fs::read(&archive_path).unwrap();
+        let filename = b"cards/broken.bin";
+        let filename_offset = archive_bytes
+            .windows(filename.len())
+            .position(|window| window == filename)
+            .expect("nom de ressource dans l'en-tête local");
+        let local_header = filename_offset - 30;
+        assert_eq!(&archive_bytes[local_header..local_header + 4], b"PK\\x03\\x04");
+        let filename_len = u16::from_le_bytes([
+            archive_bytes[local_header + 26],
+            archive_bytes[local_header + 27],
+        ]) as usize;
+        let extra_len = u16::from_le_bytes([
+            archive_bytes[local_header + 28],
+            archive_bytes[local_header + 29],
+        ]) as usize;
+        assert_eq!(filename_len, filename.len());
+        let compressed_size = u32::from_le_bytes([
+            archive_bytes[local_header + 18],
+            archive_bytes[local_header + 19],
+            archive_bytes[local_header + 20],
+            archive_bytes[local_header + 21],
+        ]) as usize;
+        assert!(compressed_size > 8);
+        let data_start = filename_offset + filename_len + extra_len;
+        archive_bytes[data_start + compressed_size / 2] ^= 0xff;
+        std::fs::write(&archive_path, archive_bytes).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut scan_budget = 16 * 1024;
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 16 * 1024,
+                max_total_hash_bytes: 16 * 1024,
+            },
+            &mut scan_budget,
+            &AtomicBool::new(false),
+        );
+
+        assert!(!truncated);
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].relative_path, "cards/broken.bin");
+        assert_eq!(resources[0].hash_status, "read-error");
+        assert!(resources[0].sha256.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn indexes_mse_zip_resources_with_bounded_streaming_sha256() {
         use std::io::Write;
         let root = std::env::temp_dir().join(format!(
