@@ -15,6 +15,20 @@ Faire progresser MTG Asset Auditor de manière continue, sûre et vérifiable. U
 7. Ne pas poser de question sauf blocage réellement crucial ou décision produit irréversible qui ne peut être déduite des exigences existantes.
 8. Ne pas créer de rappels ou d'automatisations.
 
+## Consultation obligatoire de la feuille de route et de l'index
+
+À chaque reprise, avant toute question ou modification :
+
+1. Lire intégralement `docs/ROADMAP.md` et `docs/INDEX.md` sur le HEAD courant de `main`.
+2. Utiliser l'index pour repérer les documents de référence correspondant à chaque catégorie de tâche (exigences, architecture, sécurité, MSE, tests/CI, livraison).
+3. Lire les passages pertinents des documents référencés, puis vérifier dans le code et les tests si la tâche est réellement accomplie.
+4. Comparer chaque tâche ouverte à l'état réel du dépôt. Corriger les tâches obsolètes, scinder les tâches trop larges en unités vérifiables, ajouter les dépendances et critères d'acceptation manquants.
+5. Prioriser les tâches autonomes et poursuivre jusqu'à ce qu'il ne reste que des blocages externes ou des décisions indispensables.
+6. Mettre à jour la feuille de route après chaque livraison : statut `[ ]` non commencée, `[~]` en cours/partielle, `[x]` terminée avec preuve. Une tâche n'est `[x]` que si son critère d'acceptation a été vérifié sur le code et, lorsque pertinent, par tests/CI.
+7. Mettre à jour l'index lorsqu'un document est créé, renommé, fusionné ou change de périmètre.
+
+Si `docs/INDEX.md` ou `docs/ROADMAP.md` manque, le recréer immédiatement à partir des documents réellement présents avant de poursuivre.
+
 ## Cycle de travail obligatoire
 
 ### A. Reprise de session
