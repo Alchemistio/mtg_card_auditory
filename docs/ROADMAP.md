@@ -11,7 +11,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
    - Acceptation : fichier généré avec le manifeste courant, aucun changement de dépendances implicite en CI ; les workflows Windows et Unix utilisent le même lockfile et toutes les commandes Cargo de validation/build utilisent `--locked` lorsque pris en charge.
    - Preuve : deux workflows verts sur le même SHA, sans étape de génération du lockfile.
 
-2. **Détecter les modifications concurrentes pendant l'analyse locale** — <badge>En cours</badge>.
+2. **Détecter les modifications concurrentes pendant l'analyse locale** — partiellement implémentée.
    - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille.
    - Reste à faire : test de remplacement concurrent pendant l'analyse, détection des mutations conservant taille/horodatage lorsque possible, handle unique/instantané et contrôle cohérent de l'indexation ZIP MSE postérieure.
 
