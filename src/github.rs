@@ -1,9 +1,14 @@
 use anyhow::{Context, Result};
-use sha1::{Digest, Sha1};
 use reqwest::blocking::{Client, Response};
-use reqwest::header::{ACCEPT, HeaderValue};
+use reqwest::header::{HeaderValue, ACCEPT};
 use serde::Deserialize;
-use std::{collections::HashSet, io::{Read, Write}, path::Path, time::{Duration, SystemTime}};
+use sha1::{Digest, Sha1};
+use std::{
+    collections::HashSet,
+    io::{Read, Write},
+    path::Path,
+    time::{Duration, SystemTime},
+};
 
 use crate::models::{RemoteEntry, RepositoryTree};
 
@@ -55,7 +60,8 @@ pub fn parse_repository_url(input: &str) -> Result<(String, String)> {
     {
         anyhow::bail!("Une URL HTTPS canonique de github.com est attendue.");
     }
-    let parts: Vec<_> = url.path_segments()
+    let parts: Vec<_> = url
+        .path_segments()
         .context("Chemin de dépôt GitHub invalide.")?
         .filter(|part| !part.is_empty())
         .collect();
@@ -65,11 +71,15 @@ pub fn parse_repository_url(input: &str) -> Result<(String, String)> {
     let owner = parts[0];
     let repository = parts[1].strip_suffix(".git").unwrap_or(parts[1]);
     let valid_owner = !owner.is_empty()
-        && owner.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        && owner
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-');
     let valid_repository = !repository.is_empty()
         && repository != "."
         && repository != ".."
-        && repository.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
+        && repository
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
     if !valid_owner || !valid_repository {
         anyhow::bail!("Nom de propriétaire ou de dépôt GitHub invalide.");
     }
@@ -85,7 +95,9 @@ fn retry_delay(attempt: usize, retry_after: Option<&str>) -> Duration {
             return Duration::from_secs(seconds.min(MAX_RETRY_AFTER_SECS));
         }
         if let Ok(deadline) = httpdate::parse_http_date(value) {
-            let delay = deadline.duration_since(SystemTime::now()).unwrap_or_default();
+            let delay = deadline
+                .duration_since(SystemTime::now())
+                .unwrap_or_default();
             return delay.min(Duration::from_secs(MAX_RETRY_AFTER_SECS));
         }
     }
@@ -107,14 +119,18 @@ fn api_get_with_accept(url: &str, token: &str, accept: &str) -> Result<Response>
         .build()?;
 
     for attempt in 0..=MAX_HTTP_RETRIES {
-        let mut request = client.get(url).header(ACCEPT, HeaderValue::from_str(accept)?);
+        let mut request = client
+            .get(url)
+            .header(ACCEPT, HeaderValue::from_str(accept)?);
         if !token.trim().is_empty() {
             request = request.bearer_auth(token.trim());
         }
 
         let response = match request.send() {
             Ok(response) => response,
-            Err(error) if attempt < MAX_HTTP_RETRIES && (error.is_timeout() || error.is_connect()) => {
+            Err(error)
+                if attempt < MAX_HTTP_RETRIES && (error.is_timeout() || error.is_connect()) =>
+            {
                 std::thread::sleep(retry_delay(attempt, None));
                 continue;
             }
@@ -128,12 +144,23 @@ fn api_get_with_accept(url: &str, token: &str, accept: &str) -> Result<Response>
             return Ok(response);
         }
 
-        let remaining = response.headers().get("x-ratelimit-remaining")
-            .and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
-        let reset = response.headers().get("x-ratelimit-reset")
-            .and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
-        let retry_after = response.headers().get("retry-after")
-            .and_then(|value| value.to_str().ok()).map(str::to_owned);
+        let remaining = response
+            .headers()
+            .get("x-ratelimit-remaining")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let reset = response
+            .headers()
+            .get("x-ratelimit-reset")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
         let retryable = retryable_status(status, retry_after.is_some());
         let body = response.text().unwrap_or_default();
 
@@ -173,10 +200,23 @@ fn repository_base(owner: &str, repository: &str) -> String {
     )
 }
 
-fn fetch_tree(owner: &str, repository: &str, tree_sha: &str, recursive: bool, token: &str) -> Result<TreeResponse> {
+fn fetch_tree(
+    owner: &str,
+    repository: &str,
+    tree_sha: &str,
+    recursive: bool,
+    token: &str,
+) -> Result<TreeResponse> {
     let suffix = if recursive { "?recursive=1" } else { "" };
-    let url = format!("{}/git/trees/{}{}", repository_base(owner, repository), tree_sha, suffix);
-    api_get(&url, token)?.json().context("Réponse arbre GitHub invalide")
+    let url = format!(
+        "{}/git/trees/{}{}",
+        repository_base(owner, repository),
+        tree_sha,
+        suffix
+    );
+    api_get(&url, token)?
+        .json()
+        .context("Réponse arbre GitHub invalide")
 }
 
 struct TreeWalker<'a> {
@@ -220,7 +260,12 @@ impl TreeWalker<'_> {
     }
 }
 
-pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: &str) -> Result<RepositoryTree> {
+pub fn list_repository_tree(
+    owner: &str,
+    repository: &str,
+    branch: &str,
+    token: &str,
+) -> Result<RepositoryTree> {
     let owner = owner.trim();
     let repository = repository.trim();
     if owner.is_empty() || repository.is_empty() {
@@ -267,7 +312,8 @@ pub fn list_repository_tree(owner: &str, repository: &str, branch: &str, token: 
 const MAX_BLOB_BYTES: u64 = 90 * 1024 * 1024;
 
 fn validate_blob_size(expected_size: Option<u64>) -> Result<u64> {
-    let size = expected_size.context("Taille du blob absente dans l'arbre GitHub ; téléchargement refusé.")?;
+    let size = expected_size
+        .context("Taille du blob absente dans l'arbre GitHub ; téléchargement refusé.")?;
     if size > MAX_BLOB_BYTES {
         anyhow::bail!(
             "Blob trop volumineux : {} octets, limite actuelle {} octets.",
@@ -278,7 +324,6 @@ fn validate_blob_size(expected_size: Option<u64>) -> Result<u64> {
     Ok(size)
 }
 
-
 #[cfg(test)]
 fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
     let mut hasher = Sha1::new();
@@ -286,27 +331,51 @@ fn verify_git_blob_sha(expected_sha: &str, bytes: &[u8]) -> Result<()> {
     hasher.update(bytes);
     let actual = format!("{:x}", hasher.finalize());
     if !actual.eq_ignore_ascii_case(expected_sha.trim()) {
-        anyhow::bail!("Empreinte Git blob invalide : {} reçue, {} attendue.", actual, expected_sha);
+        anyhow::bail!(
+            "Empreinte Git blob invalide : {} reçue, {} attendue.",
+            actual,
+            expected_sha
+        );
     }
     Ok(())
 }
 
-pub fn verify_git_blob_reader<R: Read>(expected_sha: &str, reader: &mut R, expected_size: u64) -> Result<()> {
+pub fn verify_git_blob_reader<R: Read>(
+    expected_sha: &str,
+    reader: &mut R,
+    expected_size: u64,
+) -> Result<()> {
     let mut hasher = Sha1::new();
     hasher.update(format!("blob {}\0", expected_size).as_bytes());
     let mut buffer = [0u8; 64 * 1024];
     let mut total = 0u64;
     loop {
         let count = reader.read(&mut buffer)?;
-        if count == 0 { break; }
-        total = total.checked_add(count as u64).context("Taille du blob débordée")?;
-        if total > expected_size { anyhow::bail!("Fichier plus grand que la taille attendue."); }
+        if count == 0 {
+            break;
+        }
+        total = total
+            .checked_add(count as u64)
+            .context("Taille du blob débordée")?;
+        if total > expected_size {
+            anyhow::bail!("Fichier plus grand que la taille attendue.");
+        }
         hasher.update(&buffer[..count]);
     }
-    if total != expected_size { anyhow::bail!("Fichier incomplet : {} octets, {} attendus.", total, expected_size); }
+    if total != expected_size {
+        anyhow::bail!(
+            "Fichier incomplet : {} octets, {} attendus.",
+            total,
+            expected_size
+        );
+    }
     let actual = format!("{:x}", hasher.finalize());
     if !actual.eq_ignore_ascii_case(expected_sha.trim()) {
-        anyhow::bail!("Empreinte Git blob invalide : {} reçue, {} attendue.", actual, expected_sha);
+        anyhow::bail!(
+            "Empreinte Git blob invalide : {} reçue, {} attendue.",
+            actual,
+            expected_sha
+        );
     }
     Ok(())
 }
@@ -328,42 +397,76 @@ pub fn download_blob_to_file(
 ) -> Result<()> {
     let expected_size = validate_blob_size(expected_size)?;
     if destination.is_absolute()
-        || destination.components().any(|component| !matches!(component, std::path::Component::Normal(_))) {
+        || destination
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
         anyhow::bail!("Chemin temporaire de cache non relatif ou invalide.");
     }
-    let name = destination.file_name().context("Nom du fichier temporaire absent")?;
+    let name = destination
+        .file_name()
+        .context("Nom du fichier temporaire absent")?;
     let parent = destination.parent().unwrap_or_else(|| Path::new(""));
     let parent_dir = if parent.as_os_str().is_empty() {
         workspace.try_clone()?
     } else {
         workspace.open_dir(parent)?
     };
-    let url = format!("{}/git/blobs/{}", repository_base(owner, repository), urlencoding::encode(sha.trim()));
+    let url = format!(
+        "{}/git/blobs/{}",
+        repository_base(owner, repository),
+        urlencoding::encode(sha.trim())
+    );
     let mut response = api_get_with_accept(&url, token, "application/vnd.github.raw+json")?;
-    if response.content_length().is_some_and(|length| length > expected_size) {
+    if response
+        .content_length()
+        .is_some_and(|length| length > expected_size)
+    {
         anyhow::bail!("Réponse blob GitHub supérieure à la taille déclarée.");
     }
     let mut options = cap_std::fs::OpenOptions::new();
     options.write(true).create_new(true);
-    let mut file = parent_dir.open_with(name, &options)
-        .with_context(|| format!("Fichier temporaire déjà présent ou inaccessible : {}", destination.display()))?;
+    let mut file = parent_dir.open_with(name, &options).with_context(|| {
+        format!(
+            "Fichier temporaire déjà présent ou inaccessible : {}",
+            destination.display()
+        )
+    })?;
     let result = (|| -> Result<()> {
         let mut hasher = Sha1::new();
         hasher.update(format!("blob {}\0", expected_size).as_bytes());
         let mut buffer = [0u8; 64 * 1024];
         let mut total = 0u64;
         loop {
-            let count = response.read(&mut buffer).context("Lecture du flux blob GitHub impossible")?;
-            if count == 0 { break; }
-            total = total.checked_add(count as u64).context("Taille du blob débordée")?;
-            if total > expected_size { anyhow::bail!("Blob GitHub plus grand que la taille déclarée."); }
+            let count = response
+                .read(&mut buffer)
+                .context("Lecture du flux blob GitHub impossible")?;
+            if count == 0 {
+                break;
+            }
+            total = total
+                .checked_add(count as u64)
+                .context("Taille du blob débordée")?;
+            if total > expected_size {
+                anyhow::bail!("Blob GitHub plus grand que la taille déclarée.");
+            }
             hasher.update(&buffer[..count]);
             file.write_all(&buffer[..count])?;
         }
-        if total != expected_size { anyhow::bail!("Blob GitHub incomplet : {} octets reçus, {} attendus.", total, expected_size); }
+        if total != expected_size {
+            anyhow::bail!(
+                "Blob GitHub incomplet : {} octets reçus, {} attendus.",
+                total,
+                expected_size
+            );
+        }
         let actual = format!("{:x}", hasher.finalize());
         if !actual.eq_ignore_ascii_case(sha.trim()) {
-            anyhow::bail!("Empreinte Git blob invalide : {} reçue, {} attendue.", actual, sha);
+            anyhow::bail!(
+                "Empreinte Git blob invalide : {} reçue, {} attendue.",
+                actual,
+                sha
+            );
         }
         file.sync_all()?;
         Ok(())
@@ -383,17 +486,32 @@ mod blob_size_tests {
     fn verifies_git_blob_sha1_with_git_object_header() {
         let bytes = b"hello world\n";
         assert!(verify_git_blob_sha("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", bytes).is_ok());
-        assert!(verify_git_blob_sha("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", b"tampered").is_err());
+        assert!(
+            verify_git_blob_sha("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", b"tampered").is_err()
+        );
     }
 
     #[test]
     fn verifies_git_blob_file_incrementally() {
-        let path = std::env::temp_dir().join(format!("mtg-auditor-blob-test-{}.tmp", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("mtg-auditor-blob-test-{}.tmp", std::process::id()));
         let bytes = b"hello world\n";
         std::fs::write(&path, bytes).unwrap();
-        assert!(verify_git_blob_file("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", &path, bytes.len() as u64).is_ok());
-        assert!(verify_git_blob_file("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", &path, 1).is_err());
-        assert!(verify_git_blob_file("0000000000000000000000000000000000000000", &path, bytes.len() as u64).is_err());
+        assert!(verify_git_blob_file(
+            "3b18e512dba79e4c8300dd08aeb37f8e728b8dad",
+            &path,
+            bytes.len() as u64
+        )
+        .is_ok());
+        assert!(
+            verify_git_blob_file("3b18e512dba79e4c8300dd08aeb37f8e728b8dad", &path, 1).is_err()
+        );
+        assert!(verify_git_blob_file(
+            "0000000000000000000000000000000000000000",
+            &path,
+            bytes.len() as u64
+        )
+        .is_err());
         std::fs::remove_file(path).unwrap();
     }
 
@@ -402,7 +520,10 @@ mod blob_size_tests {
         assert!(validate_blob_size(None).is_err());
         assert!(validate_blob_size(Some(MAX_BLOB_BYTES + 1)).is_err());
         assert_eq!(validate_blob_size(Some(0)).unwrap(), 0);
-        assert_eq!(validate_blob_size(Some(MAX_BLOB_BYTES)).unwrap(), MAX_BLOB_BYTES);
+        assert_eq!(
+            validate_blob_size(Some(MAX_BLOB_BYTES)).unwrap(),
+            MAX_BLOB_BYTES
+        );
     }
 }
 
@@ -412,9 +533,15 @@ mod tests {
 
     #[test]
     fn retries_transient_github_responses_only() {
-        assert!(retryable_status(reqwest::StatusCode::TOO_MANY_REQUESTS, false));
+        assert!(retryable_status(
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            false
+        ));
         assert!(retryable_status(reqwest::StatusCode::BAD_GATEWAY, false));
-        assert!(retryable_status(reqwest::StatusCode::SERVICE_UNAVAILABLE, false));
+        assert!(retryable_status(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            false
+        ));
         assert!(retryable_status(reqwest::StatusCode::FORBIDDEN, true));
         assert!(!retryable_status(reqwest::StatusCode::FORBIDDEN, false));
         assert!(!retryable_status(reqwest::StatusCode::NOT_FOUND, true));
@@ -425,15 +552,16 @@ mod tests {
         assert_eq!(retry_delay(0, None), Duration::from_millis(500));
         assert_eq!(retry_delay(2, None), Duration::from_millis(2000));
         assert_eq!(retry_delay(0, Some("4")), Duration::from_secs(4));
-        assert_eq!(retry_delay(0, Some("999")), Duration::from_secs(MAX_RETRY_AFTER_SECS));
+        assert_eq!(
+            retry_delay(0, Some("999")),
+            Duration::from_secs(MAX_RETRY_AFTER_SECS)
+        );
         assert_eq!(retry_delay(0, Some("invalid")), Duration::from_millis(500));
         assert_eq!(
             retry_delay(0, Some("Wed, 21 Oct 2015 07:28:00 GMT")),
             Duration::ZERO
         );
-        let future_date = httpdate::fmt_http_date(
-            SystemTime::now() + Duration::from_secs(3600)
-        );
+        let future_date = httpdate::fmt_http_date(SystemTime::now() + Duration::from_secs(3600));
         assert_eq!(
             retry_delay(0, Some(&future_date)),
             Duration::from_secs(MAX_RETRY_AFTER_SECS)
@@ -442,10 +570,14 @@ mod tests {
 
     #[test]
     fn parses_supported_github_repository_urls() {
-        assert_eq!(parse_repository_url("https://github.com/octocat/Hello-World").unwrap(),
-            ("octocat".to_string(), "Hello-World".to_string()));
-        assert_eq!(parse_repository_url("https://github.com/octocat/Hello-World.git/").unwrap(),
-            ("octocat".to_string(), "Hello-World".to_string()));
+        assert_eq!(
+            parse_repository_url("https://github.com/octocat/Hello-World").unwrap(),
+            ("octocat".to_string(), "Hello-World".to_string())
+        );
+        assert_eq!(
+            parse_repository_url("https://github.com/octocat/Hello-World.git/").unwrap(),
+            ("octocat".to_string(), "Hello-World".to_string())
+        );
     }
 
     #[test]

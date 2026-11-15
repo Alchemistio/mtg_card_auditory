@@ -3,8 +3,11 @@ mod inventory;
 mod models;
 
 use anyhow::Context;
+use cap_std::{
+    ambient_authority,
+    fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions},
+};
 use eframe::egui;
-use cap_std::{ambient_authority, fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions}};
 use zeroize::Zeroizing;
 
 enum ScanMessage {
@@ -16,7 +19,17 @@ enum DownloadMessage {
     Progress(usize, usize, String),
     Finished(String),
 }
-use std::{collections::HashSet, io::{Read, Write}, path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, TryRecvError}, Arc}, time::Duration};
+use std::{
+    collections::HashSet,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, TryRecvError},
+        Arc,
+    },
+    time::Duration,
+};
 
 #[derive(Default)]
 struct AuditorApp {
@@ -40,10 +53,10 @@ struct AuditorApp {
     local_inventory: Option<inventory::InventoryDocument>,
     comparison: Option<inventory::InventoryComparison>,
     scan_receiver: Option<Receiver<ScanMessage>>,
-    scan_cancel: Option<Arc<AtomicBool>>, 
+    scan_cancel: Option<Arc<AtomicBool>>,
     github_receiver: Option<Receiver<std::result::Result<models::RepositoryTree, String>>>,
     download_receiver: Option<Receiver<DownloadMessage>>,
-    download_cancel: Option<Arc<AtomicBool>>, 
+    download_cancel: Option<Arc<AtomicBool>>,
     status: String,
     entries: Vec<models::RemoteEntry>,
     selected: HashSet<String>,
@@ -54,13 +67,20 @@ impl AuditorApp {
     fn load_github_token(&mut self) {
         let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
             .context("Initialisation du Windows Credential Manager impossible")
-            .and_then(|entry| entry.get_password().context("Lecture du jeton enregistré impossible"));
+            .and_then(|entry| {
+                entry
+                    .get_password()
+                    .context("Lecture du jeton enregistré impossible")
+            });
         match result {
             Ok(token) => {
                 self.token = Zeroizing::new(token);
-                self.status = "Jeton GitHub chargé depuis le Gestionnaire d’identifiants Windows.".into();
+                self.status =
+                    "Jeton GitHub chargé depuis le Gestionnaire d’identifiants Windows.".into();
             }
-            Err(error) => self.status = format!("Aucun jeton disponible ou lecture impossible : {:#}", error),
+            Err(error) => {
+                self.status = format!("Aucun jeton disponible ou lecture impossible : {:#}", error)
+            }
         }
     }
 
@@ -71,7 +91,11 @@ impl AuditorApp {
         }
         let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
             .context("Initialisation du Windows Credential Manager impossible")
-            .and_then(|entry| entry.set_password(&self.token).context("Enregistrement du jeton impossible"));
+            .and_then(|entry| {
+                entry
+                    .set_password(&self.token)
+                    .context("Enregistrement du jeton impossible")
+            });
         self.status = match result {
             Ok(()) => "Jeton enregistré dans le Gestionnaire d’identifiants Windows.".into(),
             Err(error) => format!("Enregistrement sécurisé impossible : {:#}", error),
@@ -81,13 +105,24 @@ impl AuditorApp {
     fn delete_github_token(&mut self) {
         let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
             .context("Initialisation du Windows Credential Manager impossible")
-            .and_then(|entry| entry.delete_credential().context("Suppression du jeton enregistré impossible"));
+            .and_then(|entry| {
+                entry
+                    .delete_credential()
+                    .context("Suppression du jeton enregistré impossible")
+            });
         match result {
             Ok(()) => {
                 self.token = Zeroizing::default();
-                self.status = "Jeton supprimé du Gestionnaire d’identifiants Windows et du champ courant.".into();
+                self.status =
+                    "Jeton supprimé du Gestionnaire d’identifiants Windows et du champ courant."
+                        .into();
             }
-            Err(error) => self.status = format!("Suppression impossible (jeton absent ou magasin indisponible) : {:#}", error),
+            Err(error) => {
+                self.status = format!(
+                    "Suppression impossible (jeton absent ou magasin indisponible) : {:#}",
+                    error
+                )
+            }
         }
     }
 
@@ -123,7 +158,13 @@ impl AuditorApp {
             self.status = "Choisis un dossier source à analyser.".into();
             return;
         }
-        let sources: Vec<PathBuf> = self.local_source.lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).collect();
+        let sources: Vec<PathBuf> = self
+            .local_source
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(PathBuf::from)
+            .collect();
         if sources.is_empty() {
             self.status = "Ajoute au moins un dossier source.".into();
             return;
@@ -137,12 +178,23 @@ impl AuditorApp {
         self.status = "Inventaire local parallèle et calcul SHA-256 en arrière-plan…".into();
         std::thread::spawn(move || {
             let progress_sender = sender.clone();
-            let progress = |done, total| { let _ = progress_sender.send(ScanMessage::Progress(done, total)); };
+            let progress = |done, total| {
+                let _ = progress_sender.send(ScanMessage::Progress(done, total));
+            };
             let result = if sources.len() == 1 {
-                inventory::scan_directory_with_progress_and_cancel(&sources[0], progress, &worker_cancelled)
+                inventory::scan_directory_with_progress_and_cancel(
+                    &sources[0],
+                    progress,
+                    &worker_cancelled,
+                )
             } else {
-                inventory::scan_multiple_directories_with_progress_and_cancel(&sources, progress, &worker_cancelled)
-            }.map_err(|error| format!("{:#}", error));
+                inventory::scan_multiple_directories_with_progress_and_cancel(
+                    &sources,
+                    progress,
+                    &worker_cancelled,
+                )
+            }
+            .map_err(|error| format!("{:#}", error));
             let _ = sender.send(ScanMessage::Finished(result));
         });
     }
@@ -150,7 +202,8 @@ impl AuditorApp {
     fn cancel_scan(&mut self) {
         if let Some(cancelled) = self.scan_cancel.as_ref() {
             cancelled.store(true, Ordering::Relaxed);
-            self.status = "Annulation du scan demandée ; arrêt après les opérations en cours…".into();
+            self.status =
+                "Annulation du scan demandée ; arrêt après les opérations en cours…".into();
         }
     }
 
@@ -159,7 +212,10 @@ impl AuditorApp {
             self.status = "Aucun inventaire à exporter.".into();
             return;
         };
-        if let Some(path) = rfd::FileDialog::new().set_file_name("asset-inventory.json").save_file() {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name("asset-inventory.json")
+            .save_file()
+        {
             match inventory::export_json(document, &path) {
                 Ok(()) => self.status = format!("Inventaire JSON exporté : {}", path.display()),
                 Err(error) => self.status = format!("Échec export JSON : {:#}", error),
@@ -172,7 +228,10 @@ impl AuditorApp {
             self.status = "Aucun inventaire à exporter.".into();
             return;
         };
-        if let Some(path) = rfd::FileDialog::new().set_file_name("asset-inventory.csv").save_file() {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name("asset-inventory.csv")
+            .save_file()
+        {
             match inventory::export_csv(document, &path) {
                 Ok(()) => self.status = format!("Inventaire CSV exporté : {}", path.display()),
                 Err(error) => self.status = format!("Échec export CSV : {:#}", error),
@@ -185,7 +244,10 @@ impl AuditorApp {
             self.status = "Aucun inventaire à exporter.".into();
             return;
         };
-        if let Some(path) = rfd::FileDialog::new().set_file_name("asset-inventory.html").save_file() {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name("asset-inventory.html")
+            .save_file()
+        {
             match inventory::export_html(document, &path) {
                 Ok(()) => self.status = format!("Rapport HTML exporté : {}", path.display()),
                 Err(error) => self.status = format!("Échec export HTML : {:#}", error),
@@ -198,15 +260,25 @@ impl AuditorApp {
             self.status = "Lance d'abord un inventaire local.".into();
             return;
         }
-        if let Some(path) = rfd::FileDialog::new().add_filter("Inventaire JSON", &["json"]).pick_file() {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Inventaire JSON", &["json"])
+            .pick_file()
+        {
             let result = (|| -> anyhow::Result<inventory::InventoryComparison> {
-                let parent = path.parent().context("Dossier de l'inventaire de référence absent")?;
-                let file_name = path.file_name().context("Nom du fichier d'inventaire absent")?;
+                let parent = path
+                    .parent()
+                    .context("Dossier de l'inventaire de référence absent")?;
+                let file_name = path
+                    .file_name()
+                    .context("Nom du fichier d'inventaire absent")?;
                 let workspace = CapabilityDir::open_ambient_dir(parent, ambient_authority())
                     .context("Ouverture capability-based du dossier de référence impossible")?;
                 let file = workspace.open(Path::new(file_name))?;
                 let baseline: inventory::InventoryDocument = serde_json::from_reader(file)?;
-                let current = self.local_inventory.as_ref().context("Inventaire courant absent")?;
+                let current = self
+                    .local_inventory
+                    .as_ref()
+                    .context("Inventaire courant absent")?;
                 Ok(inventory::compare_inventories(current, &baseline))
             })();
             match result {
@@ -228,9 +300,14 @@ impl AuditorApp {
             self.status = "Aucune comparaison à exporter.".into();
             return;
         };
-        if let Some(path) = rfd::FileDialog::new().set_file_name("inventory-comparison.json").save_file() {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name("inventory-comparison.json")
+            .save_file()
+        {
             match inventory::export_comparison_json(comparison, &path) {
-                Ok(()) => self.status = format!("Rapport de comparaison exporté : {}", path.display()),
+                Ok(()) => {
+                    self.status = format!("Rapport de comparaison exporté : {}", path.display())
+                }
                 Err(error) => self.status = format!("Échec export comparaison : {:#}", error),
             }
         }
@@ -241,10 +318,25 @@ impl AuditorApp {
             self.status = "Lance d'abord un inventaire local.".into();
             return;
         };
-        let page_number = self.contact_page.trim().parse::<usize>().unwrap_or(1).max(1);
-        if let Some(path) = rfd::FileDialog::new().set_file_name(format!("contact-sheet-{:04}.png", page_number)).save_file() {
+        let page_number = self
+            .contact_page
+            .trim()
+            .parse::<usize>()
+            .unwrap_or(1)
+            .max(1);
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name(format!("contact-sheet-{:04}.png", page_number))
+            .save_file()
+        {
             match inventory::export_contact_sheet(document, page_number - 1, &path) {
-                Ok(rendered) => self.status = format!("Planche {} créée avec {} aperçu(x) : {} (index .txt associé).", page_number, rendered, path.display()),
+                Ok(rendered) => {
+                    self.status = format!(
+                        "Planche {} créée avec {} aperçu(x) : {} (index .txt associé).",
+                        page_number,
+                        rendered,
+                        path.display()
+                    )
+                }
                 Err(error) => self.status = format!("Échec de la planche : {:#}", error),
             }
         }
@@ -253,7 +345,8 @@ impl AuditorApp {
     fn cancel_download(&mut self) {
         if let Some(cancelled) = self.download_cancel.as_ref() {
             cancelled.store(true, Ordering::Relaxed);
-            self.status = "Annulation demandée ; le blob en cours peut terminer avant l'arrêt…".into();
+            self.status =
+                "Annulation demandée ; le blob en cours peut terminer avant l'arrêt…".into();
         }
     }
 
@@ -263,9 +356,12 @@ impl AuditorApp {
             self.status = "Choisis d'abord un dossier de travail.".into();
             return;
         }
-        let chosen: Vec<_> = self.entries.iter()
+        let chosen: Vec<_> = self
+            .entries
+            .iter()
             .filter(|entry| self.selected.contains(&entry.path) && entry.kind == "blob")
-            .cloned().collect();
+            .cloned()
+            .collect();
         if chosen.is_empty() {
             self.status = "Aucun fichier sélectionné.".into();
             return;
@@ -451,17 +547,27 @@ struct WorkspaceDir {
 
 impl WorkspaceDir {
     fn open(path: &Path) -> anyhow::Result<Self> {
-        Ok(Self { inner: CapabilityDir::open_ambient_dir(path, cap_std::ambient_authority())? })
+        Ok(Self {
+            inner: CapabilityDir::open_ambient_dir(path, cap_std::ambient_authority())?,
+        })
     }
 
-    fn parent_and_name<'a>(&self, relative: &'a Path, create: bool) -> anyhow::Result<(CapabilityDir, &'a std::ffi::OsStr)> {
+    fn parent_and_name<'a>(
+        &self,
+        relative: &'a Path,
+        create: bool,
+    ) -> anyhow::Result<(CapabilityDir, &'a std::ffi::OsStr)> {
         validate_relative_path(relative)?;
-        let name = relative.file_name().context("Nom de fichier relatif absent")?;
+        let name = relative
+            .file_name()
+            .context("Nom de fichier relatif absent")?;
         let parent = relative.parent().unwrap_or_else(|| Path::new(""));
         let directory = if parent.as_os_str().is_empty() {
             self.inner.try_clone()?
         } else {
-            if create { self.inner.create_dir_all(parent)?; }
+            if create {
+                self.inner.create_dir_all(parent)?;
+            }
             self.inner.open_dir(parent)?
         };
         Ok((directory, name))
@@ -497,13 +603,21 @@ impl WorkspaceDir {
         self.read_to_string_limited(relative, MAX_JOURNAL_BYTES)
     }
 
-    fn read_to_string_limited(&self, relative: &Path, maximum_bytes: u64) -> anyhow::Result<String> {
+    fn read_to_string_limited(
+        &self,
+        relative: &Path,
+        maximum_bytes: u64,
+    ) -> anyhow::Result<String> {
         let file = self.open_read(relative)?;
         let mut bytes = Vec::new();
-        file.take(maximum_bytes.saturating_add(1)).read_to_end(&mut bytes)
+        file.take(maximum_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)
             .context("Lecture du fichier limitée impossible")?;
         if bytes.len() as u64 > maximum_bytes {
-            anyhow::bail!("Fichier supérieur à la limite de lecture de {} octets.", maximum_bytes);
+            anyhow::bail!(
+                "Fichier supérieur à la limite de lecture de {} octets.",
+                maximum_bytes
+            );
         }
         String::from_utf8(bytes).context("Le fichier lu n'est pas un texte UTF-8 valide")
     }
@@ -533,10 +647,16 @@ fn validate_relative_path(relative: &Path) -> anyhow::Result<()> {
     }
     for component in relative.components() {
         let std::path::Component::Normal(name) = component else {
-            anyhow::bail!("Composant de chemin interdit dans le workspace : {}", relative.display());
+            anyhow::bail!(
+                "Composant de chemin interdit dans le workspace : {}",
+                relative.display()
+            );
         };
         if name.to_string_lossy().contains(':') {
-            anyhow::bail!("Flux de données alternatif Windows refusé : {}", relative.display());
+            anyhow::bail!(
+                "Flux de données alternatif Windows refusé : {}",
+                relative.display()
+            );
         }
     }
     Ok(())
@@ -561,24 +681,38 @@ fn cached_github_blob(
         !value.is_empty()
             && value != "."
             && value != ".."
-            && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
     }
-    if !safe_segment(owner) || !safe_segment(repository) || !safe_segment(commit_sha) || !safe_segment(blob_sha) {
+    if !safe_segment(owner)
+        || !safe_segment(repository)
+        || !safe_segment(commit_sha)
+        || !safe_segment(blob_sha)
+    {
         anyhow::bail!("Identifiant de cache GitHub invalide.");
     }
     let size = expected_size.context("Taille du blob absente.")?;
-    let cache_directory = PathBuf::from(".mtg-auditor-cache").join("github")
-        .join(owner).join(repository).join(commit_sha);
+    let cache_directory = PathBuf::from(".mtg-auditor-cache")
+        .join("github")
+        .join(owner)
+        .join(repository)
+        .join(commit_sha);
     workspace.create_dir_all(&cache_directory)?;
     let cache_file = cache_directory.join(format!("{}.blob", blob_sha));
     if let Ok(metadata) = workspace.symlink_metadata(&cache_file) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             anyhow::bail!("Entrée de cache non régulière ou lien symbolique refusé.");
         }
-        let valid = workspace.open_read(&cache_file)
-            .is_ok_and(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size).is_ok());
-        if valid { return Ok(cache_file); }
-        workspace.remove_file(&cache_file).context("Impossible d'écarter une entrée de cache invalide")?;
+        let valid = workspace.open_read(&cache_file).is_ok_and(|mut file| {
+            github::verify_git_blob_reader(blob_sha, &mut file, size).is_ok()
+        });
+        if valid {
+            return Ok(cache_file);
+        }
+        workspace
+            .remove_file(&cache_file)
+            .context("Impossible d'écarter une entrée de cache invalide")?;
     }
 
     let temporary = cache_directory.join(format!(".{}.{}.tmp", blob_sha, std::process::id()));
@@ -586,19 +720,33 @@ fn cached_github_blob(
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             anyhow::bail!("Fichier temporaire de cache non régulier ou lien symbolique refusé.");
         }
-        workspace.remove_file(&temporary).context("Impossible de nettoyer un fichier temporaire abandonné")?;
+        workspace
+            .remove_file(&temporary)
+            .context("Impossible de nettoyer un fichier temporaire abandonné")?;
     }
 
-    github::download_blob_to_file(owner, repository, blob_sha, token, expected_size, &workspace.inner, &temporary)
-        .context("Téléchargement streaming du blob impossible")?;
-    let verified = workspace.open_read(&temporary)
+    github::download_blob_to_file(
+        owner,
+        repository,
+        blob_sha,
+        token,
+        expected_size,
+        &workspace.inner,
+        &temporary,
+    )
+    .context("Téléchargement streaming du blob impossible")?;
+    let verified = workspace
+        .open_read(&temporary)
         .and_then(|mut file| github::verify_git_blob_reader(blob_sha, &mut file, size));
     if let Err(error) = verified {
         let _ = workspace.remove_file(&temporary);
         return Err(error).context("Vérification du fichier temporaire de cache impossible");
     }
 
-    match workspace.inner.hard_link(&temporary, &workspace.inner, &cache_file) {
+    match workspace
+        .inner
+        .hard_link(&temporary, &workspace.inner, &cache_file)
+    {
         Ok(()) => {
             workspace.remove_file(&temporary)?;
             Ok(cache_file)
@@ -606,8 +754,9 @@ fn cached_github_blob(
         Err(_error) if workspace.symlink_metadata(&cache_file).is_ok() => {
             let _ = workspace.remove_file(&temporary);
             let mut existing = workspace.open_read(&cache_file)?;
-            github::verify_git_blob_reader(blob_sha, &mut existing, size)
-                .context("Une entrée de cache concurrente existe mais son empreinte est invalide")?;
+            github::verify_git_blob_reader(blob_sha, &mut existing, size).context(
+                "Une entrée de cache concurrente existe mais son empreinte est invalide",
+            )?;
             Ok(cache_file)
         }
         Err(error) => {
@@ -623,7 +772,12 @@ fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
         .write(true)
         .create_new(true)
         .open(path)
-        .with_context(|| format!("Le fichier existe déjà ou ne peut pas être créé : {}", path.display()))?;
+        .with_context(|| {
+            format!(
+                "Le fichier existe déjà ou ne peut pas être créé : {}",
+                path.display()
+            )
+        })?;
     if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
         drop(file);
         let _ = std::fs::remove_file(path);
@@ -636,7 +790,9 @@ fn safe_github_namespace_segment(value: &str) -> bool {
     !value.is_empty()
         && value != "."
         && value != ".."
-        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 impl eframe::App for AuditorApp {
@@ -648,10 +804,14 @@ impl eframe::App for AuditorApp {
                     Ok(message) => {
                         let finished = matches!(&message, ScanMessage::Finished(_));
                         scan_messages.push(message);
-                        if finished { break; }
+                        if finished {
+                            break;
+                        }
                     }
                     Err(TryRecvError::Disconnected) => {
-                        scan_messages.push(ScanMessage::Finished(Err("Le worker d'inventaire s'est arrêté sans résultat.".to_string())));
+                        scan_messages.push(ScanMessage::Finished(Err(
+                            "Le worker d'inventaire s'est arrêté sans résultat.".to_string(),
+                        )));
                         break;
                     }
                     Err(TryRecvError::Empty) => break,
@@ -680,11 +840,16 @@ impl eframe::App for AuditorApp {
                 }
             }
         }
-        let completed_github = self.github_receiver.as_ref().and_then(|receiver| match receiver.try_recv() {
-            Ok(result) => Some(result),
-            Err(TryRecvError::Disconnected) => Some(Err("Le worker GitHub s'est arrêté sans résultat.".to_string())),
-            Err(TryRecvError::Empty) => None,
-        });
+        let completed_github =
+            self.github_receiver
+                .as_ref()
+                .and_then(|receiver| match receiver.try_recv() {
+                    Ok(result) => Some(result),
+                    Err(TryRecvError::Disconnected) => Some(Err(
+                        "Le worker GitHub s'est arrêté sans résultat.".to_string(),
+                    )),
+                    Err(TryRecvError::Empty) => None,
+                });
         if let Some(result) = completed_github {
             self.github_receiver = None;
             self.busy = false;
@@ -693,11 +858,21 @@ impl eframe::App for AuditorApp {
                     let prefix = self.subdirectory.trim_matches('/').to_string();
                     self.github_commit_sha = listing.commit_sha;
                     self.github_tree_sha = listing.tree_sha;
-                    self.entries = listing.entries.into_iter()
-                        .filter(|entry| prefix.is_empty() || entry.path == prefix || entry.path.starts_with(&format!("{}/", prefix)))
+                    self.entries = listing
+                        .entries
+                        .into_iter()
+                        .filter(|entry| {
+                            prefix.is_empty()
+                                || entry.path == prefix
+                                || entry.path.starts_with(&format!("{}/", prefix))
+                        })
                         .collect();
                     self.selected.clear();
-                    self.status = format!("{} entrées trouvées — commit {}. Sources distantes inchangées.", self.entries.len(), &self.github_commit_sha[..7.min(self.github_commit_sha.len())]);
+                    self.status = format!(
+                        "{} entrées trouvées — commit {}. Sources distantes inchangées.",
+                        self.entries.len(),
+                        &self.github_commit_sha[..7.min(self.github_commit_sha.len())]
+                    );
                 }
                 Err(error) => self.status = format!("Erreur GitHub : {}", error),
             }
@@ -709,10 +884,14 @@ impl eframe::App for AuditorApp {
                     Ok(message) => {
                         let finished = matches!(&message, DownloadMessage::Finished(_));
                         download_messages.push(message);
-                        if finished { break; }
+                        if finished {
+                            break;
+                        }
                     }
                     Err(TryRecvError::Disconnected) => {
-                        download_messages.push(DownloadMessage::Finished("Le worker de téléchargement s'est arrêté sans résultat.".to_string()));
+                        download_messages.push(DownloadMessage::Finished(
+                            "Le worker de téléchargement s'est arrêté sans résultat.".to_string(),
+                        ));
                         break;
                     }
                     Err(TryRecvError::Empty) => break,
@@ -1090,7 +1269,11 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod write_tests {
     use super::{safe_github_namespace_segment, write_new_file};
-    use std::{fs, path::{Path, PathBuf}, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn github_namespace_segments_reject_path_traversal_and_separators() {
@@ -1106,8 +1289,15 @@ mod write_tests {
 
     #[test]
     fn workspace_capability_rejects_escape_and_preserves_existing_files() {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let directory = std::env::temp_dir().join(format!("mtg-auditor-cap-test-{}-{}", std::process::id(), nonce));
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "mtg-auditor-cap-test-{}-{}",
+            std::process::id(),
+            nonce
+        ));
         fs::create_dir_all(&directory).unwrap();
         let workspace = super::WorkspaceDir::open(&directory).unwrap();
         let nested = PathBuf::from("nested/folder/asset.bin");
@@ -1119,7 +1309,11 @@ mod write_tests {
         assert!(super::safe_workspace_relative("folder/file.txt:alternate").is_err());
         #[cfg(windows)]
         {
-            let outside = directory.with_file_name(format!("mtg-auditor-cap-outside-{}-{}", std::process::id(), nonce));
+            let outside = directory.with_file_name(format!(
+                "mtg-auditor-cap-outside-{}-{}",
+                std::process::id(),
+                nonce
+            ));
             fs::create_dir_all(&outside).unwrap();
             let link = directory.join("outside-link");
             if std::os::windows::fs::symlink_dir(&outside, &link).is_ok() {
@@ -1133,7 +1327,11 @@ mod write_tests {
         }
         #[cfg(unix)]
         {
-            let outside = directory.with_file_name(format!("mtg-auditor-cap-outside-{}-{}", std::process::id(), nonce));
+            let outside = directory.with_file_name(format!(
+                "mtg-auditor-cap-outside-{}-{}",
+                std::process::id(),
+                nonce
+            ));
             fs::create_dir_all(&outside).unwrap();
             let link = directory.join("outside-link");
             std::os::unix::fs::symlink(&outside, &link).unwrap();
@@ -1148,13 +1346,29 @@ mod write_tests {
 
     #[test]
     fn workspace_journal_read_enforces_byte_limit() {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let directory = std::env::temp_dir().join(format!("mtg-auditor-journal-limit-{}-{}", std::process::id(), nonce));
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "mtg-auditor-journal-limit-{}-{}",
+            std::process::id(),
+            nonce
+        ));
         fs::create_dir_all(&directory).unwrap();
         let workspace = super::WorkspaceDir::open(&directory).unwrap();
-        workspace.write_new(Path::new("journal.jsonl"), b"123456789").unwrap();
-        assert_eq!(workspace.read_to_string_limited(Path::new("journal.jsonl"), 9).unwrap(), "123456789");
-        let error = workspace.read_to_string_limited(Path::new("journal.jsonl"), 8).unwrap_err();
+        workspace
+            .write_new(Path::new("journal.jsonl"), b"123456789")
+            .unwrap();
+        assert_eq!(
+            workspace
+                .read_to_string_limited(Path::new("journal.jsonl"), 9)
+                .unwrap(),
+            "123456789"
+        );
+        let error = workspace
+            .read_to_string_limited(Path::new("journal.jsonl"), 8)
+            .unwrap_err();
         assert!(error.to_string().contains("supérieur à la limite"));
         drop(workspace);
         fs::remove_dir_all(directory).unwrap();
@@ -1162,8 +1376,15 @@ mod write_tests {
 
     #[test]
     fn exclusive_write_never_overwrites_existing_files() {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let directory = std::env::temp_dir().join(format!("mtg-auditor-write-test-{}-{}", std::process::id(), nonce));
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "mtg-auditor-write-test-{}-{}",
+            std::process::id(),
+            nonce
+        ));
         fs::create_dir_all(&directory).unwrap();
         let destination: PathBuf = directory.join("asset.bin");
 
