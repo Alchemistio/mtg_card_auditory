@@ -2744,6 +2744,62 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn capability_export_refuses_symlink_destination() {
+        use std::os::unix::fs::symlink;
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-export-symlink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("outside.txt");
+        let destination = root.join("report.json");
+        std::fs::write(&target, b"preserve me").unwrap();
+        symlink(&target, &destination).unwrap();
+
+        assert!(with_new_output_file(&destination, |file| {
+            file.write_all(b"overwrite")?;
+            Ok(())
+        })
+        .is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"preserve me");
+        assert!(std::fs::symlink_metadata(&destination)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_export_creation_has_exactly_one_winner() {
+        use std::sync::{Arc, Barrier};
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-export-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let destination = root.join("report.json");
+        let barrier = Arc::new(Barrier::new(3));
+        let mut workers = Vec::new();
+        for content in [b"first".to_vec(), b"second".to_vec()] {
+            let destination = destination.clone();
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                with_new_output_file(&destination, |file| {
+                    file.write_all(&content)?;
+                    Ok(())
+                })
+            }));
+        }
+        barrier.wait();
+        let results: Vec<_> = workers.into_iter().map(|worker| worker.join().unwrap()).collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+        let content = std::fs::read(&destination).unwrap();
+        assert!(content == b"first" || content == b"second");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn local_scan_does_not_follow_file_or_directory_symlinks() {
         use std::os::unix::fs::symlink;
         let base =
