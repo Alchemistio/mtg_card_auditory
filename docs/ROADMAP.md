@@ -10,6 +10,7 @@
 - [x] CI Windows : formatage, Clippy, 43 tests, build Release et upload d'artefact ; validation du HEAD `93b7b65` (run `43635452185`).
 - [x] CI Unix : formatage, Clippy et 43 tests de sécurité (dont liens symboliques, lectures bornées, reconnaissance MSE ZIP/dossiers, en-têtes, dépendances, références, versions minimales et cycles) ; validation du HEAD `93b7b65` (run `43635452155`).
 - [x] Workflow de développement autonome documenté dans `docs/WORKFLOW.md` ; les tâches indépendantes continuent pendant l'exécution des CI.
+- [x] Correction des workflows Windows et Unix : suppression de l'étape `cargo fmt --all` qui modifiait les sources avant le contrôle ; le formatage est désormais vérifié sans mutation. Validation des nouveaux workflows encore en attente sur un HEAD récent.
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
