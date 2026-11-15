@@ -654,22 +654,32 @@ fn mse_zip_resources_with_limits_and_cancel(
                     *scan_budget = (*scan_budget).saturating_sub(bytes_read);
                     return (resources, true);
                 }
-                match entry.read(&mut buffer) {
+                // Ne jamais demander au décompresseur un bloc qui dépasse le budget
+                // restant : contrôler après Read() autoriserait jusqu'à 64 Kio de
+                // traitement supplémentaire à chaque limite.
+                if bytes_read == size {
+                    break;
+                }
+                let entry_remaining = limits.max_resource_bytes.saturating_sub(bytes_read);
+                let package_remaining = limits.max_total_hash_bytes
+                    .saturating_sub(hashed_bytes.saturating_add(bytes_read));
+                let scan_remaining = scan_budget_before.saturating_sub(bytes_read);
+                let remaining = entry_remaining.min(package_remaining).min(scan_remaining);
+                if remaining == 0 {
+                    budget_status = Some(if entry_remaining == 0 {
+                        "size-limit"
+                    } else if package_remaining == 0 {
+                        "total-budget"
+                    } else {
+                        "scan-budget"
+                    });
+                    break;
+                }
+                let read_limit = remaining.min(buffer.len() as u64) as usize;
+                match entry.read(&mut buffer[..read_limit]) {
                     Ok(0) => break,
                     Ok(count) => {
                         bytes_read = bytes_read.saturating_add(count as u64);
-                        if bytes_read > limits.max_resource_bytes {
-                            budget_status = Some("size-limit");
-                            break;
-                        }
-                        if hashed_bytes.saturating_add(bytes_read) > limits.max_total_hash_bytes {
-                            budget_status = Some("total-budget");
-                            break;
-                        }
-                        if bytes_read > scan_budget_before {
-                            budget_status = Some("scan-budget");
-                            break;
-                        }
                         hasher.update(&buffer[..count]);
                     }
                     Err(_) => {
