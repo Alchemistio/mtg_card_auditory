@@ -12,7 +12,8 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 2. **Détecter les modifications concurrentes pendant l'analyse locale** — partiellement implémentée.
    - Réalisé : comparer taille, horodatage de modification et type de fichier avant/après les lectures des analyseurs ; le scan échoue explicitement si ces métadonnées changent ; test déterministe de changement de taille. Après l'indexation secondaire des ressources ZIP MSE, recalculer le SHA-256 des archives et refuser l'inventaire si le contenu diffère du hash initial ou si les métadonnées changent pendant ce contrôle ; test de non-régression sur archive remplacée après scan.
-   - Reste à faire : test de remplacement concurrent pendant l'analyse, détection des mutations conservant taille/horodatage lorsque possible, handle unique/instantané et couverture des courses de répertoires.
+   - Réalisé dans cette tranche : `analyze_file` contrôle `symlink_metadata` avant/après les analyseurs et refuse un chemin devenu lien symbolique ou fichier non régulier ; test Unix simulant le remplacement après énumération. Les archives ZIP MSE appliquent le même refus au contrôle final.
+   - Reste à faire : course exacte entre le contrôle `symlink_metadata` et l'ouverture, mutations conservant taille/horodatage, handle unique/instantané, sélection initiale et remplacement de répertoires.
 
 3. **Fermer la fenêtre de remplacement des planches de contact** — terminée.
    - Réalisé : chaque image est lue une seule fois depuis un handle capability-based dans un tampon limité à 100 Mio ; SHA-256, dimensions et pixels sont calculés à partir des mêmes octets. Test de non-régression : une source modifiée depuis le scan est refusée et notée dans l'index. Aucun fichier source n'est écrit.
@@ -73,7 +74,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ## Phase 1 — Connectivité GitHub robuste
 - [x] Effacement au mieux des buffers contrôlés par l'application via `zeroize::Zeroizing<String>` : champ, tampon temporaire egui et copies explicites transmises aux workers. CI Windows validée ; les copies internes des bibliothèques et du système restent hors garantie.
-- [~] `Cargo.lock` v4 versionné depuis l'artefact historique `cargo-lockfile` (run `43625687052`, 115 720 octets) ; cohérence vérifiée avec le manifeste courant par `cargo metadata --locked --no-deps`. Les workflows Windows et Unix utilisent désormais le lockfile commun ; Clippy/tests/build Windows sont verrouillés avec `--locked`. Validation des deux plateformes sur un même SHA encore attendue.
+- [x] `Cargo.lock` v4 versionné depuis l'artefact historique `cargo-lockfile` (run `43625687052`, 115 720 octets) ; cohérence vérifiée avec le manifeste courant par `cargo metadata --locked --no-deps`. Les workflows Windows et Unix utilisent désormais le lockfile commun ; Clippy/tests/build Windows sont verrouillés avec `--locked`. CI Unix et Windows vertes sur le même arbre source (commit PR `dbdd55f`, arbre identique au commit de fusion `37521c3`).
 - [x] Parser URL HTTPS canonique de dépôt GitHub, hôte exact et validation stricte du chemin/noms ; tests des URL malformées.
 - [x] Détecter la branche par défaut et résoudre branche/tag/commit en SHA immuable.
 - [x] Résoudre le SHA de l'arbre Git à partir du commit.
