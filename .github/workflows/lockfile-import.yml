@@ -1,0 +1,38 @@
+name: One-time Cargo.lock import
+
+on:
+  push:
+    branches:
+      - automation/rustfmt-repair
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  import-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: automation/rustfmt-repair
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install stable Cargo
+        run: rustup toolchain install stable
+      - name: Retrieve previously generated lockfile
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download 43625687052 --repo Alchemistio/mtg_card_auditory --name cargo-lockfile --dir /tmp/cargo-lock
+          test -s /tmp/cargo-lock/Cargo.lock
+          cp /tmp/cargo-lock/Cargo.lock Cargo.lock
+      - name: Verify lockfile against current manifest
+        run: cargo +stable metadata --locked --no-deps --format-version 1 > /dev/null
+      - name: Commit lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "Commit reproducible Cargo lockfile"
+          git push origin HEAD:automation/rustfmt-repair
