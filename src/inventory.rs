@@ -1285,20 +1285,6 @@ fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMe
     metadata
 }
 
-fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
-    let file = workspace.open(relative)
-        .with_context(|| format!("Ouverture capability-based impossible : {}", relative.display()))?;
-    let mut reader = BufReader::with_capacity(1024 * 1024, file);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
-    loop {
-        let read = reader.read(&mut buffer)?;
-        if read == 0 { break; }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
 fn file_metadata_is_stable(before: &cap_std::fs::Metadata, after: &cap_std::fs::Metadata) -> bool {
     before.len() == after.len()
         && before.modified().ok() == after.modified().ok()
