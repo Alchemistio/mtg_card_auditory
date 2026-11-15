@@ -3170,7 +3170,7 @@ mod tests {
         writer
             .start_file("set", zip::write::SimpleFileOptions::default())
             .unwrap();
-        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
         writer
             .start_file(
                 "cards/corrupt.bin",
