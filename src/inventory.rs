@@ -3395,7 +3395,10 @@ mod tests {
             .position(|window| window == filename)
             .expect("nom de ressource dans l'en-tête local");
         let local_header = filename_offset - 30;
-        assert_eq!(&archive_bytes[local_header..local_header + 4], b"PK\x03\x04");
+        assert_eq!(
+            &archive_bytes[local_header..local_header + 4],
+            b"PK\x03\x04"
+        );
         let filename_len = u16::from_le_bytes([
             archive_bytes[local_header + 26],
             archive_bytes[local_header + 27],
