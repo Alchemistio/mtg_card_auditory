@@ -519,9 +519,7 @@ fn font_metadata(
 
 fn is_external_reference(value: &str) -> bool {
     let value = value.trim();
-    !value.is_empty()
-        && !value.starts_with('#')
-        && !value.to_ascii_lowercase().starts_with("data:")
+    !value.is_empty() && !value.starts_with('#') && !value.to_ascii_lowercase().starts_with("data:")
 }
 
 fn contains_external_css_reference(value: &str) -> bool {
@@ -2960,8 +2958,7 @@ mod tests {
 
     #[test]
     fn detects_quoted_css_and_relative_svg_references() {
-        let root =
-            std::env::temp_dir().join(format!("mtg-auditor-svg-css-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("mtg-auditor-svg-css-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(
@@ -2994,8 +2991,7 @@ mod tests {
         std::fs::write(root.join("attributes.svg"), source).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, _, valid, warning) =
-            svg_metadata(&workspace, Path::new("attributes.svg"), "svg");
+        let (_, _, valid, warning) = svg_metadata(&workspace, Path::new("attributes.svg"), "svg");
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("attributs par élément"));
         drop(workspace);
