@@ -291,6 +291,14 @@ fn read_prefix<R: Read>(reader: R, maximum_bytes: u64) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+type SvgMetadata = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<bool>,
+    Option<bool>,
+    Option<String>,
+);
 fn parse_svg_dimension(value: &str) -> Option<String> {
     let value = value.trim();
     if value.is_empty() || value.len() > 64 {
@@ -333,14 +341,7 @@ fn svg_metadata(
     workspace: &CapabilityDir,
     relative: &Path,
     family: &str,
-) -> (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<bool>,
-    Option<bool>,
-    Option<String>,
-) {
+) -> SvgMetadata {
     if family != "svg" {
         return (None, None, None, None, None, None);
     }
@@ -3101,7 +3102,7 @@ mod tests {
         .unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, external, valid, warning) =
+        let (_, _, _, external, valid, warning) =
             svg_metadata(&workspace, Path::new("references.svg"), "svg");
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
@@ -3124,7 +3125,8 @@ mod tests {
         std::fs::write(root.join("attributes.svg"), source).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, _, valid, warning) = svg_metadata(&workspace, Path::new("attributes.svg"), "svg");
+        let (_, _, _, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("attributes.svg"), "svg");
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("attributs par élément"));
         drop(workspace);
@@ -3148,7 +3150,8 @@ mod tests {
         std::fs::write(root.join("deep.svg"), source).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, _, valid, warning) = svg_metadata(&workspace, Path::new("deep.svg"), "svg");
+        let (_, _, _, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("deep.svg"), "svg");
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("profondeur XML maximale"));
         drop(workspace);
@@ -3169,7 +3172,8 @@ mod tests {
         std::fs::write(root.join("many.svg"), source).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, _, valid, warning) = svg_metadata(&workspace, Path::new("many.svg"), "svg");
+        let (_, _, _, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("many.svg"), "svg");
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("nombre maximal d'événements"));
         drop(workspace);
