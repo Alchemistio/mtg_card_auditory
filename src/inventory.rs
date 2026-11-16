@@ -4292,7 +4292,7 @@ mod tests {
         use std::io::Write;
 
         let root = std::env::temp_dir().join(format!(
-            "mtg-auditor-mse-inconsistent-central-directory-{}",
+            "mtg-auditor-mse-invalid-central-directory-offset-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&root);
@@ -4303,7 +4303,7 @@ mod tests {
         writer
             .start_file("set", zip::write::SimpleFileOptions::default())
             .unwrap();
-        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
         writer
             .start_file("cards/image.bin", zip::write::SimpleFileOptions::default())
             .unwrap();
@@ -4331,6 +4331,79 @@ mod tests {
         assert!(package.mse_resources.is_empty());
         assert!(!package.mse_resources_truncated);
         assert!(!root.join("cards/image.bin").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn marks_mse_zip_resource_with_inconsistent_declared_size_as_size_mismatch() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-size-mismatch-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let payload = b"declared-size-mismatch";
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("set", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer
+            .start_file(
+                "cards/mismatch.bin",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(payload).unwrap();
+        writer.finish().unwrap();
+
+        // Modifier uniquement la taille décompressée déclarée dans la table
+        // centrale : les octets stockés et l'en-tête local restent inchangés.
+        let mut bytes = std::fs::read(&archive_path).unwrap();
+        let filename = b"cards/mismatch.bin";
+        let filename_offset = bytes
+            .windows(filename.len())
+            .rposition(|window| window == filename)
+            .expect("nom de ressource dans la table centrale");
+        let central_header = filename_offset - 46;
+        assert_eq!(&bytes[central_header..central_header + 4], b"PK\x01\x02");
+        let declared_size = u32::from_le_bytes([
+            bytes[central_header + 24],
+            bytes[central_header + 25],
+            bytes[central_header + 26],
+            bytes[central_header + 27],
+        ]);
+        assert_eq!(declared_size as usize, payload.len());
+        bytes[central_header + 24..central_header + 28]
+            .copy_from_slice(&((payload.len() + 1) as u32).to_le_bytes());
+        std::fs::write(&archive_path, bytes).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut scan_budget = 1024;
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 1024,
+                max_total_hash_bytes: 1024,
+            },
+            &mut scan_budget,
+            &AtomicBool::new(false),
+        );
+
+        assert!(!truncated);
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].relative_path, "cards/mismatch.bin");
+        assert_eq!(resources[0].hash_status, "size-mismatch");
+        assert!(resources[0].sha256.is_none());
+        drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
 
