@@ -3295,10 +3295,8 @@ mod tests {
     fn nofollow_file_open_rejects_final_symlink_when_supported() {
         use std::os::windows::fs::symlink_file;
 
-        let root = std::env::temp_dir().join(format!(
-            "mtg-auditor-nofollow-final-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-nofollow-final-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let target = root.join("target.txt");
         let link = root.join("link.txt");
