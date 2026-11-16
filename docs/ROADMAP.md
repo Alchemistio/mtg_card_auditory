@@ -160,7 +160,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.
-- [~] SVG : parsing XML sans exécution, viewBox, références relatives et `url()` CSS détectés de façon conservative ; lecture 32 Mio, 100 000 événements, profondeur 256 et 256 attributs par élément. Dimensions, couverture CSS complète et aperçu sandboxé à faire.
+- [~] SVG : parsing XML sans exécution, viewBox, dimensions racine width/height et références relatives/`url()` CSS détectées de façon conservative ; lecture 32 Mio, 100 000 événements, profondeur 256 et 256 attributs par élément. Validation CI des dimensions en cours ; couverture CSS complète et aperçu sandboxé à faire.
 - [~] Fonts : famille/sous-famille ; métadonnées avancées et formats non pris en charge à traiter.
 - [~] ZIP : inspection de la table centrale sans extraction ; analyse de formats 7z/RAR à faire.
 - [x] MSE : reconnaissance des packages ZIP, vérification du fichier principal, lecture bornée à 1 Mio des champs scalaires et extraction des dépendances compactes/en bloc, sans extraction.

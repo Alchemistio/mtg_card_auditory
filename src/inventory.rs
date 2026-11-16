@@ -297,7 +297,9 @@ fn parse_svg_dimension(value: &str) -> Option<String> {
         return None;
     }
     let split = value
-        .find(|character: char| !(character.is_ascii_digit() || matches!(character, '+' | '-' | '.' | 'e' | 'E')))
+        .find(|character: char| {
+            !(character.is_ascii_digit() || matches!(character, '+' | '-' | '.'))
+        })
         .unwrap_or(value.len());
     let (number, unit) = value.split_at(split);
     let amount = number.parse::<f64>().ok()?;
@@ -305,17 +307,40 @@ fn parse_svg_dimension(value: &str) -> Option<String> {
         return None;
     }
     let unit = unit.to_ascii_lowercase();
-    if !matches!(unit.as_str(), "" | "px" | "in" | "cm" | "mm" | "pt" | "pc" | "em" | "ex" | "ch" | "rem" | "%" | "vw" | "vh" | "vmin" | "vmax") {
+    if !matches!(
+        unit.as_str(),
+        "" | "px"
+            | "in"
+            | "cm"
+            | "mm"
+            | "pt"
+            | "pc"
+            | "em"
+            | "ex"
+            | "ch"
+            | "rem"
+            | "%"
+            | "vw"
+            | "vh"
+            | "vmin"
+            | "vmax"
+    ) {
         return None;
     }
     Some(value.to_string())
 }
-
 fn svg_metadata(
     workspace: &CapabilityDir,
     relative: &Path,
     family: &str,
-) -> (Option<String>, Option<String>, Option<String>, Option<bool>, Option<bool>, Option<String>) {
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<bool>,
+    Option<bool>,
+    Option<String>,
+) {
     if family != "svg" {
         return (None, None, None, None, None, None);
     }
@@ -337,6 +362,8 @@ fn svg_metadata(
         Ok(bytes) => bytes,
         Err(error) => {
             return (
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -406,6 +433,8 @@ fn svg_metadata(
                     if attribute_count > 256 {
                         return (
                             viewbox,
+                            width,
+                            height,
                             Some(external_refs),
                             Some(false),
                             Some(
@@ -419,6 +448,8 @@ fn svg_metadata(
                         Err(error) => {
                             return (
                                 viewbox,
+                                width,
+                                height,
                                 Some(external_refs),
                                 Some(false),
                                 Some(format!("Attribut SVG invalide : {}", error)),
@@ -431,16 +462,18 @@ fn svg_metadata(
                         Err(error) => {
                             return (
                                 viewbox,
+                                width,
+                                height,
                                 Some(external_refs),
                                 Some(false),
                                 Some(format!("Valeur d'attribut SVG invalide : {}", error)),
                             )
                         }
                     };
-                    if depth == 1 && key == b"width" && width.is_none() {
+                    if element.name().as_ref() == b"svg" && key == b"width" && width.is_none() {
                         width = parse_svg_dimension(&value);
                     }
-                    if depth == 1 && key == b"height" && height.is_none() {
+                    if element.name().as_ref() == b"svg" && key == b"height" && height.is_none() {
                         height = parse_svg_dimension(&value);
                     }
                     if key == b"viewBox" && viewbox.is_none() {
@@ -474,6 +507,8 @@ fn svg_metadata(
     if !found_svg_root {
         return (
             viewbox,
+            width,
+            height,
             Some(external_refs),
             Some(false),
             Some("Élément racine SVG absent.".to_string()),
@@ -482,7 +517,14 @@ fn svg_metadata(
     if contains_external_css_reference(&source) {
         external_refs = true;
     }
-    (viewbox, width, height, Some(external_refs), Some(true), None)
+    (
+        viewbox,
+        width,
+        height,
+        Some(external_refs),
+        Some(true),
+        None,
+    )
 }
 
 fn font_metadata(
@@ -3026,6 +3068,29 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn ignores_invalid_or_extreme_svg_dimensions() {
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-svg-dimensions-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("invalid.svg"),
+            r#"<svg width="NaN" height="1000000001px"/>"#,
+        )
+        .unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, width, height, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("invalid.svg"), "svg");
+        assert_eq!(width, None);
+        assert_eq!(height, None);
+        assert_eq!(valid, Some(true));
+        assert!(warning.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn detects_quoted_css_and_relative_svg_references() {
         let root = std::env::temp_dir().join(format!("mtg-auditor-svg-css-{}", std::process::id()));
