@@ -154,10 +154,7 @@ pub struct InventoryComparison {
     pub unchanged_files: usize,
 }
 
-fn open_file_nofollow(
-    workspace: &CapabilityDir,
-    relative: &Path,
-) -> Result<cap_std::fs::File> {
+fn open_file_nofollow(workspace: &CapabilityDir, relative: &Path) -> Result<cap_std::fs::File> {
     let components = relative
         .components()
         .map(|component| match component {
@@ -611,7 +608,7 @@ fn font_metadata(
         );
     }
     const MAX_FONT_BYTES: u64 = 64 * 1024 * 1024;
-    let file = match workspace.open(relative) {
+    let file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return (
@@ -914,7 +911,7 @@ fn mse_zip_resources_with_limits_and_cancel(
     scan_budget: &mut u64,
     cancelled: &AtomicBool,
 ) -> (Vec<MseResourceRecord>, bool) {
-    let file = match workspace.open(relative) {
+    let file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(_) => return (Vec::new(), true),
     };
@@ -1086,7 +1083,7 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
             None,
         );
     }
-    let file = match workspace.open(relative) {
+    let file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return ZipMetadata::new(
@@ -1711,7 +1708,7 @@ fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMe
             )
         }
     };
-    let file = match workspace.open(relative) {
+    let file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return ZipMetadata::new(
@@ -1774,7 +1771,7 @@ fn sha256_file_capability_with_prefix(
     relative: &Path,
     prefix_limit: usize,
 ) -> Result<(String, Vec<u8>)> {
-    let file = workspace.open(relative).with_context(|| {
+    let file = open_file_nofollow(workspace, relative).with_context(|| {
         format!(
             "Ouverture capability-based impossible : {}",
             relative.display()
@@ -3278,10 +3275,8 @@ mod tests {
     fn nofollow_file_open_rejects_final_symlink_component() {
         use std::os::unix::fs::symlink;
 
-        let root = std::env::temp_dir().join(format!(
-            "mtg-auditor-nofollow-final-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-nofollow-final-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("target.txt"), b"safe").unwrap();
         symlink(root.join("target.txt"), root.join("link.txt")).unwrap();
