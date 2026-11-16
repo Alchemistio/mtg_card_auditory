@@ -13,7 +13,7 @@ Les pourcentages ci-dessous sont des estimations de maturité fonctionnelle, pas
 | Analyse des formats, ZIP et MSE | 66 % | Reconnaissance MSE, dépendances/références, budgets et plusieurs corruptions ZIP testées. Les tailles incohérentes testées, le nom UTF-8 atypique et la troncature physique des données locales sont validés sur Unix et Windows ; restent les autres tailles/flags/offsets, encodages non UTF-8, chemins ambigus, limites et cas adversariaux. |
 | Métadonnées raster, SVG, polices et notices | 58 % | Métadonnées raster de base en place ; extraction de l'orientation EXIF via le décodeur et exposition dans le rapport HTML ajoutées au code, avec fixture JPEG EXIF, validation CI en attente. SVG borné sans exécution, viewBox et dimensions racine validées et affichées dans le rapport HTML ; polices identifiées. Restent dimensions extrêmes/limites de décodage raster, couverture CSS SVG et aperçu sandboxé, formats de polices complémentaires et collecte de notices avec provenance sans interprétation juridique. |
 | Rapports, comparaison et synthèses MSE | 50 % | Le rapport HTML expose les noms complets, versions de package et noms de jeu MSE ; les tests vérifient leur affichage et l'échappement des valeurs non fiables. Résumé des empreintes calculées/non calculées, ventilation par motif de refus et avertissement d'indexation partielle validés sur Unix/Windows. Restent filtres et staging séparé de LIBRARY. |
-| Galerie et revue humaine | 16 % | Planche contact raster paginée initiale, avec application de l'orientation EXIF lors de l'aperçu ; validation CI en attente. Restent galerie hors ligne, navigation/filtres, ouverture sûre, annotations, décisions persistantes et suggestions de similarité sans suppression automatique. |
+| Galerie et revue humaine | 16 % | Planche contact raster paginée initiale, avec application de l'orientation EXIF lors de l'aperçu ; premier test CI a révélé une hypothèse de coordonnées pixel trop stricte, remplacée par une vérification du rapport portrait/paysage ; validation CI de la correction en attente. Restent galerie hors ligne, navigation/filtres, ouverture sûre, annotations, décisions persistantes et suggestions de similarité sans suppression automatique. |
 | Performance, expérience d'analyse et estimation | 23 % | Progression en octets, annulation et ETA indicative calculée depuis la vitesse moyenne observée en place et validées sur Unix/Windows ; restent mesures sur corpus synthétiques, calibration de l'estimation et contrôle de la réactivité UI. |
 | Packaging et publication | 35 % | CI Windows construit et publie un artefact x64. Reste vérifier l'autonomie sur Windows propre, versionnement, notes de version, GitHub Release reproductible et étude de signature. |
 
@@ -68,7 +68,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 ### P2 — Revue et rapports
 
 8. **Galerie hors ligne et revue humaine persistante** — amorcée.
-   - Réalisé : planche contact raster paginée, lecture unique dans un tampon borné, vérification SHA-256 et application de l'orientation EXIF lorsque disponible ; test JPEG orientation 6 ajouté, validation CI en attente.
+   - Réalisé : planche contact raster paginée, lecture unique dans un tampon borné, vérification SHA-256 et application de l'orientation EXIF lorsque disponible ; test JPEG orientation 6 ajouté ; première CI a rejeté une assertion de coordonnées absolues dépendante de la taille de miniature, désormais remplacée par une vérification de l'orientation géométrique ; validation CI en attente.
    - Acceptation restante : navigation paginée interactive, filtres, ouverture locale sûre, annotations et décisions persistées séparément des sources ; aucune ressource active exécutée.
 
 9. **Rapports de comparaison et synthèses MSE** — partiellement réalisé.
@@ -174,7 +174,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [ ] Collecte du contenu des notices, licences et provenance avec preuves.
 
 ## Phase 4 — Revue visuelle
-- [~] Planche de contact raster paginée avec index ; orientation EXIF appliquée au rendu quand elle est fournie par le décodeur, test JPEG ajouté, validation CI en attente.
+- [~] Planche de contact raster paginée avec index ; orientation EXIF appliquée au rendu quand elle est fournie par le décodeur ; test JPEG vérifiant le rapport de dimensions, validation CI de la correction en attente.
 - [ ] Galerie visuelle HTML avec navigation, filtres et comparaison.
 - [ ] Planche contact avancée avec libellés, annotations et sélection.
 - [ ] Candidats visuels similaires (les doublons binaires exacts sont déjà identifiés).

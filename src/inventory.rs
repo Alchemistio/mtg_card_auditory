@@ -5059,8 +5059,26 @@ mod tests {
 
         let sheet = image::open(&sheet_path).unwrap().to_rgba8();
         let background = image::Rgba([245, 246, 248, 255]);
-        assert_ne!(*sheet.get_pixel(109, 90), background);
-        assert_eq!(*sheet.get_pixel(110, 89), background);
+        let mut bounds = (u32::MAX, u32::MAX, 0_u32, 0_u32);
+        for y in 10..170 {
+            for x in 10..210 {
+                if *sheet.get_pixel(x, y) != background {
+                    bounds.0 = bounds.0.min(x);
+                    bounds.1 = bounds.1.min(y);
+                    bounds.2 = bounds.2.max(x);
+                    bounds.3 = bounds.3.max(y);
+                }
+            }
+        }
+        assert!(bounds.0 != u32::MAX, "contact sheet image was not rendered");
+        let rendered_width = bounds.2 - bounds.0;
+        let rendered_height = bounds.3 - bounds.1;
+        assert!(
+            rendered_height > rendered_width,
+            "EXIF Rotate90 should render a portrait thumbnail, got {}x{}",
+            rendered_width,
+            rendered_height
+        );
 
         std::fs::remove_dir_all(base).unwrap();
     }
