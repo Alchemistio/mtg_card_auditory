@@ -2577,7 +2577,7 @@ pub fn export_contact_sheet(
         // Lire une seule fois dans un tampon plafonné : le hash, les dimensions et
         // les pixels portent ainsi exactement sur les mêmes octets, même si le chemin
         // source est remplacé après l'ouverture du handle.
-        let source_file = match open_file_nofollow(workspace, &relative) {
+        let source_file = match open_file_nofollow(&workspace, &relative) {
             Ok(file) => file,
             Err(_) => {
                 index_text.push_str(&format!(
