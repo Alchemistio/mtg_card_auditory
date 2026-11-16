@@ -4426,6 +4426,85 @@ mod tests {
     }
 
     #[test]
+    fn reports_truncated_mse_zip_local_payload_without_hashing_resource() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-truncated-local-data-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file(
+                "set",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        let resource_name = b"cards/truncated.bin";
+        let payload = b"local-payload-that-will-be-truncated";
+        writer
+            .start_file(
+                "cards/truncated.bin",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(payload).unwrap();
+        writer.finish().unwrap();
+
+        let mut bytes = std::fs::read(&archive_path).unwrap();
+        let name_offset = bytes
+            .windows(resource_name.len())
+            .position(|window| window == resource_name)
+            .expect("local resource filename");
+        let local_header = name_offset - 30;
+        let name_length =
+            u16::from_le_bytes([bytes[local_header + 26], bytes[local_header + 27]]) as usize;
+        let extra_length =
+            u16::from_le_bytes([bytes[local_header + 28], bytes[local_header + 29]]) as usize;
+        assert_eq!(name_length, resource_name.len());
+        let data_start = local_header + 30 + name_length + extra_length;
+        let declared_size = u32::from_le_bytes(
+            bytes[local_header + 18..local_header + 22].try_into().unwrap(),
+        ) as usize;
+        assert_eq!(declared_size, payload.len());
+        let removed_bytes = 4;
+        let truncate_at = data_start + declared_size - removed_bytes;
+        bytes.drain(truncate_at..truncate_at + removed_bytes);
+        let eocd = bytes
+            .windows(4)
+            .rposition(|window| window == b"PK\x05\x06")
+            .expect("ZIP end-of-central-directory record");
+        let central_offset =
+            u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap());
+        bytes[eocd + 16..eocd + 20]
+            .copy_from_slice(&(central_offset - removed_bytes as u32).to_le_bytes());
+        std::fs::write(&archive_path, bytes).unwrap();
+
+        let archive = zip::ZipArchive::new(File::open(&archive_path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 2);
+        drop(archive);
+
+        let inventory = scan_directory(&root).unwrap();
+        let package = inventory
+            .assets
+            .iter()
+            .find(|asset| asset.relative_path == "sample.mse-set")
+            .unwrap();
+        assert_eq!(package.mse_resources.len(), 1);
+        assert_eq!(package.mse_resources[0].relative_path, "cards/truncated.bin");
+        assert_eq!(package.mse_resources[0].hash_status, "read-error");
+        assert!(package.mse_resources[0].sha256.is_none());
+        assert!(!root.join("cards/truncated.bin").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn reports_mse_zip_with_invalid_central_directory_offset_without_indexing_resources() {
         use std::io::Write;
 
