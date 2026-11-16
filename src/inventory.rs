@@ -3070,10 +3070,8 @@ mod tests {
 
     #[test]
     fn ignores_invalid_or_extreme_svg_dimensions() {
-        let root = std::env::temp_dir().join(format!(
-            "mtg-auditor-svg-dimensions-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-svg-dimensions-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(
