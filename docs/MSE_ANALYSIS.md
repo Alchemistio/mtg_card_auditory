@@ -78,6 +78,12 @@ L'auditeur doit pouvoir :
 - Conserver les SHA-256 et chemins des ressources ; ne pas dupliquer ni extraire les blobs.
 - Ajouter des fixtures synthétiques et des tests de non-extraction, traversal, ZIP bomb, UTF-8 invalide, en-tête surdimensionné, tabulations invalides, includes et dépendances cycliques.
 
+## Couverture de corruption ZIP vérifiée
+
+Les fixtures de non-régression couvrent désormais plusieurs défaillances distinctes : archive MSE globalement corrompue, CRC de ressource incohérent, flux Deflate altéré, fin de table centrale tronquée et offset de table centrale invalide (`u32::MAX`). Pour les deux défauts de table centrale, le comportement attendu est un avertissement contrôlé et l'absence d'indexation des ressources ; aucune extraction n'est effectuée. Le test d'offset invalide a été validé sur le HEAD `2c19e229a9ba4d9cfed77862b49986d685789ff7`, puis revalidé avec le HEAD documentaire `069c34e6fd9501eb3689820e3b41cb0e2cb11394` : CI Unix run `43828091330` (70 tests réussis, aucun ignoré) et CI Windows run `43828091369` (68 tests réussis, aucun ignoré, build Release x64 et artefact téléversé).
+
+Les cas encore ouverts sont les tailles déclarées incohérentes, les entrées tronquées au niveau de leurs données locales, les noms encodés atypiques et les chemins ambigus. Ils restent à couvrir par des fixtures ciblées ; la couverture existante ne permet pas de les déclarer résolus.
+
 ## Hors périmètre
 
 Le rendu des cartes, l'exécution des scripts MSE, l'installation de packages, la réparation automatique, la modification des sets et la résolution de dépendances sur Internet ne font pas partie de l'audit initial.
