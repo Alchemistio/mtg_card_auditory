@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
-use cap_std::{
-    ambient_authority,
-    fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions},
+use cap_fs_ext::{
+    DirExt, FollowSymlinks, OpenOptions as CapabilityOpenOptions, OpenOptionsFollowExt,
 };
+use cap_std::{ambient_authority, fs::Dir as CapabilityDir};
 use image::{ImageDecoder, ImageReader};
 use quick_xml::{events::Event, Reader};
 use rayon::prelude::*;
@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     io::{BufReader, Read, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     time::UNIX_EPOCH,
 };
@@ -152,6 +152,51 @@ pub struct InventoryComparison {
     pub removed_paths: Vec<String>,
     pub changed_assets: Vec<ChangedAsset>,
     pub unchanged_files: usize,
+}
+
+fn open_file_nofollow(
+    workspace: &CapabilityDir,
+    relative: &Path,
+) -> Result<cap_std::fs::File> {
+    let components = relative
+        .components()
+        .map(|component| match component {
+            Component::Normal(name) => Ok(name.to_os_string()),
+            _ => anyhow::bail!("Chemin relatif non canonique : {}", relative.display()),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let (file_name, parent_components) = components
+        .split_last()
+        .context("Chemin de fichier relatif vide")?;
+
+    let mut parent = workspace.try_clone()?;
+    for component in parent_components {
+        parent = parent.open_dir_nofollow(component).with_context(|| {
+            format!(
+                "Ouverture de répertoire sans suivi impossible : {}",
+                component.to_string_lossy()
+            )
+        })?;
+    }
+
+    let mut options = CapabilityOpenOptions::new();
+    options.read(true);
+    options.follow(FollowSymlinks::No);
+    let file = parent
+        .open_with(Path::new(file_name), &options)
+        .with_context(|| {
+            format!(
+                "Ouverture de fichier sans suivi impossible : {}",
+                relative.display()
+            )
+        })?;
+    if !file.metadata()?.file_type().is_file() {
+        anyhow::bail!(
+            "Source non régulière après ouverture sans suivi : {}",
+            relative.display()
+        );
+    }
+    Ok(file)
 }
 
 fn collect_files_capability(
@@ -358,7 +403,7 @@ fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> Svg
         return (None, None, None, None, None, None);
     }
     const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
-    let file = match workspace.open(relative) {
+    let file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return (
@@ -2535,7 +2580,7 @@ pub fn export_contact_sheet(
         // Lire une seule fois dans un tampon plafonné : le hash, les dimensions et
         // les pixels portent ainsi exactement sur les mêmes octets, même si le chemin
         // source est remplacé après l'ouverture du handle.
-        let source_file = match workspace.open(&relative) {
+        let source_file = match open_file_nofollow(workspace, &relative) {
             Ok(file) => file,
             Err(_) => {
                 index_text.push_str(&format!(
@@ -3202,6 +3247,79 @@ mod tests {
         assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
         let content = std::fs::read(&destination).unwrap();
         assert!(content == b"first" || content == b"second");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nofollow_file_open_rejects_symlinked_parent_components() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-nofollow-parent-{}",
+            std::process::id()
+        ));
+        let real = root.join("real");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("sample.txt"), b"safe").unwrap();
+        symlink(&real, root.join("alias")).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let error = open_file_nofollow(&workspace, Path::new("alias/sample.txt"))
+            .err()
+            .expect("symlinked parent component must be rejected");
+        assert!(error.to_string().contains("sans suivi"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nofollow_file_open_rejects_final_symlink_component() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-nofollow-final-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("target.txt"), b"safe").unwrap();
+        symlink(root.join("target.txt"), root.join("link.txt")).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let error = open_file_nofollow(&workspace, Path::new("link.txt"))
+            .err()
+            .expect("final symlink component must be rejected");
+        assert!(error.to_string().contains("sans suivi"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn nofollow_file_open_rejects_final_symlink_when_supported() {
+        use std::os::windows::fs::symlink_file;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-nofollow-final-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("target.txt");
+        let link = root.join("link.txt");
+        std::fs::write(&target, b"safe").unwrap();
+        if let Err(error) = symlink_file(&target, &link) {
+            eprintln!("SKIP: création de lien symbolique Windows refusée: {error}");
+            std::fs::remove_dir_all(root).unwrap();
+            return;
+        }
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let error = open_file_nofollow(&workspace, Path::new("link.txt"))
+            .err()
+            .expect("final symlink component must be rejected");
+        assert!(error.to_string().contains("sans suivi"));
+        drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
 
