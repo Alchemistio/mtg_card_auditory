@@ -4471,7 +4471,9 @@ mod tests {
         assert_eq!(name_length, resource_name.len());
         let data_start = local_header + 30 + name_length + extra_length;
         let declared_size = u32::from_le_bytes(
-            bytes[local_header + 18..local_header + 22].try_into().unwrap(),
+            bytes[local_header + 18..local_header + 22]
+                .try_into()
+                .unwrap(),
         ) as usize;
         assert_eq!(declared_size, payload.len());
         let removed_bytes = 4;
@@ -4481,8 +4483,7 @@ mod tests {
             .windows(4)
             .rposition(|window| window == b"PK\x05\x06")
             .expect("ZIP end-of-central-directory record");
-        let central_offset =
-            u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap());
+        let central_offset = u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap());
         bytes[eocd + 16..eocd + 20]
             .copy_from_slice(&(central_offset - removed_bytes as u32).to_le_bytes());
         std::fs::write(&archive_path, bytes).unwrap();
@@ -4498,7 +4499,10 @@ mod tests {
             .find(|asset| asset.relative_path == "sample.mse-set")
             .unwrap();
         assert_eq!(package.mse_resources.len(), 1);
-        assert_eq!(package.mse_resources[0].relative_path, "cards/truncated.bin");
+        assert_eq!(
+            package.mse_resources[0].relative_path,
+            "cards/truncated.bin"
+        );
         assert_eq!(package.mse_resources[0].hash_status, "read-error");
         assert!(package.mse_resources[0].sha256.is_none());
         assert!(!root.join("cards/truncated.bin").exists());
