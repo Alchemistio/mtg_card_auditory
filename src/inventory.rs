@@ -2826,7 +2826,11 @@ mod html_report_tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(package.join("cards")).unwrap();
         std::fs::create_dir_all(&game).unwrap();
-        std::fs::write(source.join("sized.svg"), r#"<svg width="24px" height="12px"/>"#).unwrap();
+        std::fs::write(
+            source.join("sized.svg"),
+            r#"<svg width="24px" height="12px"/>"#,
+        )
+        .unwrap();
         std::fs::write(package.join("set"),
             b"mse version: 0.3.4\nshort name: <script>alert(1)</script>\nfull name: <b>Complete Set</b>\nversion: 2.1.0\ngame: Magic\ndepends on: magic.mse-game 1.0.0\n").unwrap();
         std::fs::write(package.join("cards/example.png"), b"resource bytes").unwrap();
