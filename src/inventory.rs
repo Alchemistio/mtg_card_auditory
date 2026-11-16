@@ -2753,6 +2753,7 @@ mod html_report_tests {
         assert!(html.contains("Package MSE : set"));
         assert!(html.contains("Nom complet : &lt;b&gt;Complete Set&lt;/b&gt;"));
         assert!(html.contains("Version du package : 2.1.0"));
+        assert!(html.contains("Nom du jeu : Magic"));
         assert!(html.contains("Dépendances :"));
         assert!(html.contains("Ressources internes indexées : 1"));
         assert!(html.contains("SHA-256"));
