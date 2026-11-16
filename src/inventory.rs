@@ -4408,6 +4408,124 @@ mod tests {
     }
 
     #[test]
+    fn marks_mse_zip_resource_with_actual_size_larger_than_declared_as_size_mismatch() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-size-understated-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let payload = b"actual-resource-payload";
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("set", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer
+            .start_file(
+                "cards/understated.bin",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(payload).unwrap();
+        writer.finish().unwrap();
+
+        // La table centrale annonce un octet de moins que les données réellement présentes.
+        let mut bytes = std::fs::read(&archive_path).unwrap();
+        let filename = b"cards/understated.bin";
+        let filename_offset = bytes
+            .windows(filename.len())
+            .rposition(|window| window == filename)
+            .expect("nom de ressource dans la table centrale");
+        let central_header = filename_offset - 46;
+        assert_eq!(&bytes[central_header..central_header + 4], b"PK\x01\x02");
+        bytes[central_header + 24..central_header + 28]
+            .copy_from_slice(&((payload.len() - 1) as u32).to_le_bytes());
+        std::fs::write(&archive_path, bytes).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut scan_budget = 1024;
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 1024,
+                max_total_hash_bytes: 1024,
+            },
+            &mut scan_budget,
+            &AtomicBool::new(false),
+        );
+
+        assert!(!truncated);
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].relative_path, "cards/understated.bin");
+        assert_eq!(resources[0].hash_status, "size-mismatch");
+        assert!(resources[0].sha256.is_none());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn preserves_and_hashes_mse_zip_resource_with_unusual_utf8_name() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-unicode-name-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let resource_name = "cards/café-🃏.bin";
+        let payload = b"unicode resource payload";
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("set", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        writer
+            .start_file(
+                resource_name,
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(payload).unwrap();
+        writer.finish().unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut scan_budget = 1024;
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 1024,
+                max_total_hash_bytes: 1024,
+            },
+            &mut scan_budget,
+            &AtomicBool::new(false),
+        );
+
+        assert!(!truncated);
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].relative_path, resource_name);
+        assert_eq!(resources[0].hash_status, "hashed");
+        assert!(resources[0].sha256.is_some());
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn reports_mse_zip_package_missing_its_main_file() {
         use std::io::Write;
         let root =
