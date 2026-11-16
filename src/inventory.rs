@@ -4288,7 +4288,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_mse_zip_with_inconsistent_central_directory_size_without_indexing_resources() {
+    fn reports_mse_zip_with_invalid_central_directory_offset_without_indexing_resources() {
         use std::io::Write;
 
         let root = std::env::temp_dir().join(format!(
@@ -4315,7 +4315,7 @@ mod tests {
             .windows(4)
             .rposition(|window| window == b"PK\x05\x06")
             .expect("ZIP end-of-central-directory record");
-        bytes[eocd + 12..eocd + 16].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[eocd + 16..eocd + 20].copy_from_slice(&u32::MAX.to_le_bytes());
         std::fs::write(&archive_path, bytes).unwrap();
 
         let inventory = scan_directory(&root).unwrap();
