@@ -2741,9 +2741,7 @@ fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
     if !asset.mse_resources.is_empty() || asset.mse_resources_truncated {
         append_mse_resource_summary_html(html, &asset.mse_resources);
         if asset.mse_resources_truncated {
-            html.push_str(
-                "<div class=\"warning\">Indexation des ressources incomplète.</div>",
-            );
+            html.push_str("<div class=\"warning\">Indexation des ressources incomplète.</div>");
         }
         html.push_str("<details><summary>Ressources internes indexées : ");
         html.push_str(&asset.mse_resources.len().to_string());
@@ -2897,6 +2895,7 @@ mod html_report_tests {
         assert!(html.contains("SVG hauteur : 12px"));
         assert!(html.contains("Dépendances :"));
         assert!(html.contains("Ressources internes indexées : 1"));
+        assert!(html.contains("1 calculées ; 0 non calculées"));
         assert!(html.contains("SHA-256"));
         assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
         assert!(!html.contains("<script>alert(1)</script>"));
