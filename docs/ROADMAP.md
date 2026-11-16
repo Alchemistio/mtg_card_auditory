@@ -1,5 +1,27 @@
 # Feuille de route
 
+## Tableau de pilotage par domaine
+
+Les pourcentages ci-dessous sont des estimations de maturité fonctionnelle, pas des mesures de lignes de code ni des garanties de qualité. Ils doivent être réévalués à chaque reprise à partir du code, des critères d'acceptation et des preuves CI du HEAD courant. Les tâches détaillées et leurs critères restent ceux des sections P0 à P3 et des phases ci-dessous.
+
+| Domaine | Avancement estimé | État réel et prochain travail |
+|---|---:|---|
+| Fondation, architecture et workflow | 90 % | Base Rust, architecture, index documentaire et workflow autonome en place. Reste à garder les documents synchronisés, consolider les critères de livraison et fermer les derniers risques transversaux. |
+| Connectivité GitHub et intégrité des sources distantes | 90 % | Résolution SHA, exploration, cache vérifié, provenance, reprise et téléchargements bornés en place. Reste la reprise au niveau des octets, conditionnée à un support Range/ETag fiable, et les validations finales de bout en bout. |
+| Inventaire local et exports | 85 % | Parcours capability-based, SHA-256, comparaison et exports JSON/CSV/HTML en place. Reste l'estimation de durée, les cas concurrents/répertoires et quelques contrôles d'intégrité. |
+| Sécurité des fichiers et concurrence (TOCTOU) | 60 % | Protections capability-based, non-suivi des liens symboliques sur les chemins testés, contrôles de métadonnées avant/après et tampon unique des planches. Reste le contrôle exact ouverture/metadata, mutations préservant taille/mtime, handle unique ou snapshot, remplacement de racines/sous-répertoires et races de destinations, avec preuves Windows/Unix explicites. |
+| Analyse des formats, ZIP et MSE | 65 % | Reconnaissance MSE, dépendances/références, budgets et plusieurs corruptions ZIP testées. Les deux sens de taille incohérente et un nom UTF-8 atypique sont maintenant validés ; restent données locales tronquées, tailles/flags/offsets supplémentaires, encodages non UTF-8, chemins ambigus, limites et autres cas adversariaux. |
+| Métadonnées raster, SVG, polices et notices | 55 % | Métadonnées de base en place ; SVG borné sans exécution et polices identifiées. Reste orientation/limites/décodage raster, dimensions et couverture CSS SVG, aperçu sandboxé, formats de polices complémentaires et collecte de notices avec provenance sans interprétation juridique. |
+| Rapports, comparaison et synthèses MSE | 45 % | Exports initiaux et comparaison JSON/HTML en place. Reste synthèse MSE complète, dépendances/références/ressources/raisons de troncature, filtres et staging séparé de LIBRARY. |
+| Galerie et revue humaine | 15 % | Planche contact raster paginée initiale. Reste galerie hors ligne, navigation/filtres, ouverture sûre, annotations, décisions persistantes et suggestions de similarité sans suppression automatique. |
+| Performance, expérience d'analyse et estimation | 20 % | Progression en octets et annulation disponibles. Reste mesures sur corpus synthétiques, estimation de durée recalculée et contrôle de la réactivité UI. |
+| Packaging et publication | 35 % | CI Windows construit et publie un artefact x64. Reste vérifier l'autonomie sur Windows propre, versionnement, notes de version, GitHub Release reproductible et étude de signature. |
+
+**Avancement global indicatif : 45 %.** Il reste volontairement prudent : plusieurs domaines sont amorcés mais n'ont pas encore passé leurs critères d'acceptation de bout en bout.
+
+### Règle de balayage transversal
+Avant de terminer chaque cycle de développement, examiner systématiquement chacun des domaines ci-dessus et répondre dans le suivi de travail : (1) existe-t-il une tâche concrète et autonome qui peut avancer maintenant ? (2) dépend-elle du code ou d'une CI en cours ? (3) quel test/critère permettra de la valider ? Si une tâche indépendante peut être avancée sans dégrader la cohérence du commit ni annuler une CI, la réaliser ; sinon, préparer l'analyse ou le test et l'inscrire comme prochaine action avec son blocage précis. Ne pas forcer des modifications artificielles dans tous les domaines à chaque cycle.
+
 ## File d'exécution priorisée et critères d'acceptation
 
 Cette file complète les phases ci-dessus : elle transforme les chantiers partiels en tâches vérifiables. L'ordre peut évoluer si un audit révèle un risque plus prioritaire.
@@ -31,7 +53,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
    - Validé sur le HEAD `2c19e229a9ba4d9cfed77862b49986d685789ff7` : fixture MSE ZIP avec offset de table centrale invalide (`u32::MAX`) ; avertissement contrôlé, aucune ressource indexée ni extraite. CI Unix run `43805292965` : formatage, Clippy et 70 tests réussis ; CI Windows run `43805292966` : formatage, Clippy, 68 tests réussis, build Release x64 et upload de l'exécutable réussis. Aucun test ignoré dans les résultats des suites.
    - Validé sur le HEAD `069c34e6fd9501eb3689820e3b41cb0e2cb11394` (commit documentaire) : CI Unix run `43828091330` a exécuté formatage, Clippy et 70 tests (70 réussis, 0 échoué, 0 ignoré) ; CI Windows run `43828091369` a exécuté formatage, Clippy et 68 tests (68 réussis, 0 échoué, 0 ignoré), puis build Release x64 et upload de `mtg-asset-auditor-windows-x64` (artefact ID `14207382470`, 5 312 059 octets).
    - Validé sur le HEAD `818e4f4e43b66f118d012c296488badbc85f1625` : fixture ZIP MSE dont la taille décompressée déclarée dans la table centrale dépasse d'un octet la taille réelle ; la ressource est marquée `size-mismatch` sans SHA-256. CI Unix run `43831180611` : formatage, Clippy et 71 tests réussis (0 échec, 0 ignoré). CI Windows run `43831180639` : formatage, Clippy et 69 tests réussis (0 échec, 0 ignoré), build Release x64 et upload de l'artefact `mtg-asset-auditor-windows-x64` réussis (artefact `14207669916`).
-   - En cours : compléter les deux sens de l'incohérence de taille déclarée (taille centrale inférieure d'un octet au contenu réel) et vérifier la conservation/hachage d'un nom de ressource UTF-8 atypique (`café-🃏`). Validation CI en attente sur le HEAD qui ajoute ces deux tests.
+   - Validé sur le HEAD `1385b136395618c6d1a785bf418fada68872b416` : taille décompressée centrale inférieure d'un octet au contenu réel (`size-mismatch`, sans SHA-256) et conservation/hachage d'un nom UTF-8 atypique (`cards/café-🃏.bin`). CI Unix run `43833656545` : formatage, Clippy et 73 tests réussis (0 échec, 0 ignoré). CI Windows run `43833656301` : formatage, Clippy, 71 tests réussis (0 échec, 0 ignoré), build Release x64 et upload de l'artefact `14209592138` réussis.
    - Reste à couvrir : entrée tronquée au niveau des données locales, incohérences des autres champs de taille, encodages ZIP non UTF-8, chemins ambigus et autres anomalies de table centrale.
    - Acceptation : erreurs contrôlées, aucune panique, aucune extraction, budgets respectés avant chaque lecture, annulation propagée et ressources non hachées marquées explicitement.
 

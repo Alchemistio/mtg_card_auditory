@@ -99,3 +99,20 @@ Si une CI est toujours active mais qu'aucune autre tâche indépendante n'est r�
 ## Protection du périmètre
 
 Le projet d'audit reste autonome. Aucun changement au Remodeler principal n'est permis dans ce workflow. Les pourcentages d'avancement sont des estimations et ne remplacent jamais les preuves de tests ou de livraison.
+
+
+## Balayage obligatoire de tous les domaines avant clôture d'un cycle
+
+La feuille de route est désormais pilotée par domaine, en plus de la file P0–P3. Cette règle s'ajoute au cycle existant et ne le remplace pas.
+
+Avant de déclarer un cycle de code terminé ou de s'arrêter parce que la CI est en cours :
+
+1. Relire le « Tableau de pilotage par domaine » de `docs/ROADMAP.md`.
+2. Passer en revue **chaque domaine**, y compris ceux qui ne sont pas le sujet du commit courant : fondation/workflow, GitHub/sources distantes, inventaire/exports, sécurité/concurrence, formats/MSE, métadonnées raster/SVG/polices/notices, rapports, galerie/revue humaine, performance/expérience, packaging/publication.
+3. Pour chacun, vérifier le code et les critères pertinents, puis consigner l'une des décisions suivantes : `AVANCER` (tâche indépendante réalisable maintenant), `PRÉPARER` (analyse/test possible mais push ou validation bloqué par une CI active ou une dépendance), `BLOQUÉ` (raison externe ou décision utilisateur indispensable), ou `RIEN À FAIRE` (critères déjà satisfaits pour ce domaine).
+4. Si une tâche peut être faite sans introduire un changement incohérent, la faire avancer. Garder les commits ciblés : le balayage transversal n'autorise pas à mélanger des fonctionnalités sans lien dans un même commit.
+5. Ne pas pousser une nouvelle modification qui risque d'annuler un workflow encore actif. Dans ce cas, faire les audits, lectures, conception et préparation de tests possibles, puis reprendre la livraison après la fin du run.
+6. Actualiser les pourcentages de maturité uniquement avec justification concrète ; ne jamais les augmenter simplement parce qu'un commit a été poussé. Conserver la distinction entre travail codé, testé localement et validé par CI.
+7. Ajouter au rapport de reprise une courte synthèse du balayage : domaines avancés, domaines préparés, domaines bloqués et raisons.
+
+Le balayage est une obligation d'examen et de priorisation, pas une obligation de modifier artificiellement chaque domaine à chaque cycle.
