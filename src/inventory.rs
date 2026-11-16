@@ -4260,7 +4260,7 @@ mod tests {
         writer
             .start_file("set", zip::write::SimpleFileOptions::default())
             .unwrap();
-        writer.write_all(b"mse version: 0.3.4\\n").unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
         writer
             .start_file("cards/image.bin", zip::write::SimpleFileOptions::default())
             .unwrap();
@@ -4313,7 +4313,7 @@ mod tests {
         let mut bytes = std::fs::read(&archive_path).unwrap();
         let eocd = bytes
             .windows(4)
-            .rposition(|window| window == b"PK\\x05\\x06")
+            .rposition(|window| window == b"PK\x05\x06")
             .expect("ZIP end-of-central-directory record");
         bytes[eocd + 12..eocd + 16].copy_from_slice(&u32::MAX.to_le_bytes());
         std::fs::write(&archive_path, bytes).unwrap();
