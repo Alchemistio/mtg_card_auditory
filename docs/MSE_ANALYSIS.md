@@ -87,3 +87,5 @@ Les cas encore ouverts sont les tailles déclarées incohérentes, les entrées 
 ## Hors périmètre
 
 Le rendu des cartes, l'exécution des scripts MSE, l'installation de packages, la réparation automatique, la modification des sets et la résolution de dépendances sur Internet ne font pas partie de l'audit initial.
+
+Une fixture complémentaire altère uniquement la taille décompressée déclarée dans l'entrée centrale ZIP (valeur supérieure d'un octet au contenu réel). Le scan marque explicitement la ressource `size-mismatch` et omet son SHA-256. Validation sur le HEAD `818e4f4e43b66f118d012c296488badbc85f1625` : CI Unix run `43831180611` (formatage, Clippy, 71 tests réussis, 0 ignoré) et Windows run `43831180639` (formatage, Clippy, 69 tests réussis, 0 ignoré, build Release x64 et upload de l'artefact `14207669916`). Les autres tailles incohérentes et les données locales tronquées restent à tester.
