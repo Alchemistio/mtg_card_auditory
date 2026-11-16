@@ -49,6 +49,8 @@ pub struct AssetRecord {
     #[serde(default)]
     pub raster_has_alpha: Option<bool>,
     #[serde(default)]
+    pub raster_orientation: Option<String>,
+    #[serde(default)]
     pub svg_viewbox: Option<String>,
     #[serde(default)]
     pub svg_width: Option<String>,
@@ -223,6 +225,7 @@ struct RasterMetadata {
     height: Option<u32>,
     color_type: Option<String>,
     has_alpha: Option<bool>,
+    orientation: Option<String>,
     warning: Option<String>,
 }
 
@@ -245,7 +248,7 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
         }
     };
     let format = reader.format().map(|value| format!("{value:?}"));
-    let decoder = match reader.into_decoder() {
+    let mut decoder = match reader.into_decoder() {
         Ok(decoder) => decoder,
         Err(error) => {
             return RasterMetadata {
@@ -255,6 +258,13 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
             }
         }
     };
+    let (orientation, warning) = match decoder.orientation() {
+        Ok(value) => (Some(format!("{value:?}")), None),
+        Err(error) => (
+            None,
+            Some(format!("Orientation image illisible : {}", error)),
+        ),
+    };
     let (width, height) = decoder.dimensions();
     let color_type = decoder.color_type();
     RasterMetadata {
@@ -263,7 +273,8 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
         height: Some(height),
         color_type: Some(format!("{color_type:?}")),
         has_alpha: Some(color_type.has_alpha()),
-        warning: None,
+        orientation,
+        warning,
     }
 }
 
@@ -1774,6 +1785,7 @@ fn analyze_file(
     let raster_height = raster.height;
     let raster_color_type = raster.color_type;
     let raster_has_alpha = raster.has_alpha;
+    let raster_orientation = raster.orientation;
     let (svg_viewbox, svg_width, svg_height, svg_has_external_refs, svg_xml_valid, svg_warning) =
         svg_metadata(workspace, relative, detected_family);
     let (font_family, font_subfamily, font_warning) =
@@ -1861,6 +1873,7 @@ fn analyze_file(
         raster_height,
         raster_color_type,
         raster_has_alpha,
+        raster_orientation,
         svg_viewbox,
         svg_width,
         svg_height,
@@ -2813,6 +2826,9 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         if let Some(has_alpha) = asset.raster_has_alpha {
             html.push_str(if has_alpha { "Alpha " } else { "Sans alpha " });
         }
+        if let Some(orientation) = &asset.raster_orientation {
+            html.push_str(&format!("Orientation : {} ", escape_html(orientation)));
+        }
         if let Some(width) = &asset.svg_width {
             html.push_str(&format!("SVG largeur : {} ", escape_html(width)));
         }
@@ -2853,6 +2869,69 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         })?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod raster_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn extracts_jpeg_exif_orientation_without_decoding_pixels() {
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-raster-orientation-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode(&[255, 0, 0], 1, 1, image::ExtendedColorType::Rgb8)
+            .unwrap();
+
+        let mut exif = b"Exif\0\0".to_vec();
+        exif.extend_from_slice(b"II");
+        exif.extend_from_slice(&42_u16.to_le_bytes());
+        exif.extend_from_slice(&8_u32.to_le_bytes());
+        exif.extend_from_slice(&1_u16.to_le_bytes());
+        exif.extend_from_slice(&0x0112_u16.to_le_bytes());
+        exif.extend_from_slice(&3_u16.to_le_bytes());
+        exif.extend_from_slice(&1_u32.to_le_bytes());
+        exif.extend_from_slice(&6_u16.to_le_bytes());
+        exif.extend_from_slice(&0_u16.to_le_bytes());
+        exif.extend_from_slice(&0_u32.to_le_bytes());
+
+        let segment_length = u16::try_from(exif.len() + 2).unwrap();
+        let mut with_exif = jpeg[..2].to_vec();
+        with_exif.extend_from_slice(&[0xff, 0xe1]);
+        with_exif.extend_from_slice(&segment_length.to_be_bytes());
+        with_exif.extend_from_slice(&exif);
+        with_exif.extend_from_slice(&jpeg[2..]);
+        std::fs::write(root.join("oriented.jpg"), with_exif).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = raster_metadata(&workspace, Path::new("oriented.jpg"), "raster");
+        assert_eq!(metadata.orientation.as_deref(), Some("Rotate90"));
+        assert_eq!(metadata.width, Some(1));
+        assert_eq!(metadata.height, Some(1));
+        drop(workspace);
+
+        let inventory = scan_directory(&root).unwrap();
+        let asset = inventory
+            .assets
+            .iter()
+            .find(|asset| asset.file_name == "oriented.jpg")
+            .unwrap();
+        assert_eq!(asset.raster_orientation.as_deref(), Some("Rotate90"));
+
+        let report_path = root.with_extension("report.html");
+        export_html(&inventory, &report_path).unwrap();
+        let report = std::fs::read_to_string(&report_path).unwrap();
+        assert!(report.contains("Orientation : Rotate90"));
+
+        std::fs::remove_file(report_path).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -4869,6 +4948,7 @@ mod tests {
         let inventory: InventoryDocument = serde_json::from_str(legacy).unwrap();
         assert_eq!(inventory.duplicate_files, 0);
         assert_eq!(inventory.assets[0].raster_width, None);
+        assert_eq!(inventory.assets[0].raster_orientation, None);
         assert_eq!(inventory.assets[0].duplicate_of, None);
         assert_eq!(
             inventory.assets[0].mse_dependencies[0].resolution_status,
