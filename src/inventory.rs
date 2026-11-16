@@ -2601,7 +2601,10 @@ fn append_mse_reference_html(
 }
 
 fn append_mse_resource_summary_html(html: &mut String, resources: &[MseResourceRecord]) {
-    let hashed = resources.iter().filter(|resource| resource.sha256.is_some()).count();
+    let hashed = resources
+        .iter()
+        .filter(|resource| resource.sha256.is_some())
+        .count();
     let unhashed = resources.len().saturating_sub(hashed);
     html.push_str("<div><b>Empreintes :</b> ");
     html.push_str(&hashed.to_string());
@@ -2635,6 +2638,7 @@ fn append_mse_resource_summary_html(html: &mut String, resources: &[MseResourceR
     }
     html.push_str("</div>");
 }
+
 fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
     let Some(package_type) = asset.mse_package_type.as_deref() else {
         return;
@@ -2736,6 +2740,11 @@ fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
     }
     if !asset.mse_resources.is_empty() || asset.mse_resources_truncated {
         append_mse_resource_summary_html(html, &asset.mse_resources);
+        if asset.mse_resources_truncated {
+            html.push_str(
+                "<div class=\"warning\">Indexation des ressources incomplète.</div>",
+            );
+        }
         html.push_str("<details><summary>Ressources internes indexées : ");
         html.push_str(&asset.mse_resources.len().to_string());
         html.push_str("</summary><ul>");
@@ -3115,6 +3124,7 @@ mod tests {
         assert!(html.contains("read-error : 1"));
         assert!(html.contains("suspicious-path : 1"));
     }
+
     #[test]
     fn detects_svg_viewbox_and_external_references_without_rendering() {
         let root =
