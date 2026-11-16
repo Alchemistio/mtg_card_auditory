@@ -2600,6 +2600,41 @@ fn append_mse_reference_html(
     html.push_str("</div>");
 }
 
+fn append_mse_resource_summary_html(html: &mut String, resources: &[MseResourceRecord]) {
+    let hashed = resources.iter().filter(|resource| resource.sha256.is_some()).count();
+    let unhashed = resources.len().saturating_sub(hashed);
+    html.push_str("<div><b>Empreintes :</b> ");
+    html.push_str(&hashed.to_string());
+    html.push_str(" calculées ; ");
+    html.push_str(&unhashed.to_string());
+    html.push_str(" non calculées");
+    if unhashed > 0 {
+        html.push_str("<ul>");
+        for status in [
+            "suspicious-path",
+            "suspicious-ratio",
+            "size-limit",
+            "total-budget",
+            "scan-budget",
+            "read-error",
+            "size-mismatch",
+        ] {
+            let count = resources
+                .iter()
+                .filter(|resource| resource.sha256.is_none() && resource.hash_status == status)
+                .count();
+            if count > 0 {
+                html.push_str("<li>");
+                html.push_str(&escape_html(status));
+                html.push_str(" : ");
+                html.push_str(&count.to_string());
+                html.push_str("</li>");
+            }
+        }
+        html.push_str("</ul>");
+    }
+    html.push_str("</div>");
+}
 fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
     let Some(package_type) = asset.mse_package_type.as_deref() else {
         return;
@@ -2700,6 +2735,7 @@ fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
         html.push_str("</ul></div>");
     }
     if !asset.mse_resources.is_empty() || asset.mse_resources_truncated {
+        append_mse_resource_summary_html(html, &asset.mse_resources);
         html.push_str("<details><summary>Ressources internes indexées : ");
         html.push_str(&asset.mse_resources.len().to_string());
         html.push_str("</summary><ul>");
@@ -3051,6 +3087,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn summarizes_mse_resource_hash_statuses_in_html() {
+        let resources = vec![
+            MseResourceRecord {
+                relative_path: "cards/hashed.bin".to_string(),
+                size_bytes: 10,
+                sha256: Some("abc".to_string()),
+                hash_status: "hashed".to_string(),
+            },
+            MseResourceRecord {
+                relative_path: "cards/broken.bin".to_string(),
+                size_bytes: 12,
+                sha256: None,
+                hash_status: "read-error".to_string(),
+            },
+            MseResourceRecord {
+                relative_path: "cards/unsafe.bin".to_string(),
+                size_bytes: 14,
+                sha256: None,
+                hash_status: "suspicious-path".to_string(),
+            },
+        ];
+        let mut html = String::new();
+        append_mse_resource_summary_html(&mut html, &resources);
+        assert!(html.contains("1 calculées ; 2 non calculées"));
+        assert!(html.contains("read-error : 1"));
+        assert!(html.contains("suspicious-path : 1"));
+    }
     #[test]
     fn detects_svg_viewbox_and_external_references_without_rendering() {
         let root =
