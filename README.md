@@ -32,7 +32,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - Anciens inventaires JSON v1 lisibles malgré l'ajout de nouveaux champs optionnels.
 - Doublons binaires exacts repérés par SHA-256 et référencés au premier chemin ; aucun fichier n'est supprimé.
 - Comparaison avec un ancien inventaire JSON : chemins ajoutés, supprimés, modifiés et inchangés ; export JSON de comparaison.
-- Repérage des fichiers LICENSE/LICENCE/COPYING/NOTICE/README/AUTHORS/CREDITS pour revue ultérieure ; aucun type de licence n'est déduit.
+- Repérage des fichiers LICENSE/LICENCE/COPYING/NOTICE/README/AUTHORS/CREDITS et extrait UTF-8 plafonné à 4 Kio, capturé dans le même flux que le SHA-256 et échappé dans le rapport ; aucun type de licence ni statut juridique n'est déduit.
 - Raster : format détecté, dimensions, type de canaux, présence d'alpha et orientation EXIF (JPEG, WebP, TIFF lorsque disponible) depuis le décodeur, sans décodage des pixels.
 - SVG : contrôle XML, lecture du viewBox et détection indicative de références externes ; aucun SVG n'est rendu ou exécuté.
 - Polices : extraction initiale de la famille et sous-famille lorsque le format est pris en charge.

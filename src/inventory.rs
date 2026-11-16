@@ -18,6 +18,7 @@ use std::{
 
 pub const INVENTORY_SCHEMA_VERSION: u32 = 1;
 const MAX_MSE_ZIP_HASH_BYTES_PER_SCAN: u64 = 512 * 1024 * 1024;
+const MAX_NOTICE_EXCERPT_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MseResourceRecord {
@@ -108,6 +109,10 @@ pub struct AssetRecord {
     pub analysis_warning: Option<String>,
     #[serde(default)]
     pub notice_kind: Option<String>,
+    #[serde(default)]
+    pub notice_excerpt: Option<String>,
+    #[serde(default)]
+    pub notice_excerpt_truncated: bool,
     #[serde(default)]
     pub duplicate_of: Option<String>,
     pub review_status: String,
@@ -1719,15 +1724,21 @@ fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMe
     metadata
 }
 
-fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
+fn sha256_file_capability_with_prefix(
+    workspace: &CapabilityDir,
+    relative: &Path,
+    prefix_limit: usize,
+) -> Result<(String, Vec<u8>)> {
     let file = workspace.open(relative).with_context(|| {
         format!(
             "Ouverture capability-based impossible : {}",
             relative.display()
         )
     })?;
+    let prefix_limit = prefix_limit.min(MAX_NOTICE_EXCERPT_BYTES);
     let mut reader = BufReader::with_capacity(1024 * 1024, file);
     let mut hasher = Sha256::new();
+    let mut prefix = Vec::with_capacity(prefix_limit);
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
         let read = reader.read(&mut buffer)?;
@@ -1735,8 +1746,33 @@ fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<
             break;
         }
         hasher.update(&buffer[..read]);
+        let prefix_read = prefix_limit.saturating_sub(prefix.len()).min(read);
+        prefix.extend_from_slice(&buffer[..prefix_read]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok((format!("{:x}", hasher.finalize()), prefix))
+}
+
+fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
+    sha256_file_capability_with_prefix(workspace, relative, 0).map(|(hash, _)| hash)
+}
+
+fn notice_excerpt_from_prefix(prefix: &[u8]) -> Option<String> {
+    let text = match std::str::from_utf8(prefix) {
+        Ok(text) => text,
+        Err(error) if error.error_len().is_none() => {
+            std::str::from_utf8(&prefix[..error.valid_up_to()]).ok()?
+        }
+        Err(_) => return None,
+    };
+    let mut excerpt = String::with_capacity(text.len());
+    for character in text.chars() {
+        if character.is_control() && !matches!(character, '\n' | '\r' | '\t') {
+            excerpt.push('�');
+        } else {
+            excerpt.push(character);
+        }
+    }
+    Some(excerpt)
 }
 
 fn file_metadata_is_stable(before: &cap_std::fs::Metadata, after: &cap_std::fs::Metadata) -> bool {
@@ -1772,7 +1808,21 @@ fn analyze_file(
         .to_string_lossy()
         .to_ascii_lowercase();
     let size_bytes = metadata.len();
-    let sha256 = sha256_file_capability(workspace, relative)?;
+    let notice_kind = classify_notice(&file_name);
+    let (sha256, notice_prefix) = sha256_file_capability_with_prefix(
+        workspace,
+        relative,
+        if notice_kind.is_some() {
+            MAX_NOTICE_EXCERPT_BYTES
+        } else {
+            0
+        },
+    )?;
+    let notice_excerpt = notice_kind
+        .as_ref()
+        .and_then(|_| notice_excerpt_from_prefix(&notice_prefix));
+    let notice_excerpt_truncated =
+        notice_kind.is_some() && size_bytes > notice_prefix.len() as u64;
     let modified_unix_seconds = metadata
         .modified()
         .ok()
@@ -1812,7 +1862,6 @@ fn analyze_file(
         .or(svg_warning)
         .or(font_warning)
         .or(archive_warning);
-    let notice_kind = classify_notice(&file_name);
     let mse_package_type = mse_package_type(&extension)
         .or_else(|| {
             if is_folder_package_main {
@@ -1903,6 +1952,8 @@ fn analyze_file(
         mse_resources_truncated: false,
         analysis_warning,
         notice_kind,
+        notice_excerpt,
+        notice_excerpt_truncated,
         duplicate_of: None,
         review_status: "needs-review".to_string(),
     })
@@ -2823,6 +2874,17 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         html.push_str("</td><td><code>");
         html.push_str(&escape_html(&asset.sha256));
         html.push_str("</code></td><td>");
+        if let Some(excerpt) = &asset.notice_excerpt {
+            html.push_str("<details><summary>Extrait de notice (non interprété)");
+            if asset.notice_excerpt_truncated {
+                html.push_str(" — limité à 4 Kio");
+            }
+            html.push_str("</summary><pre>");
+            html.push_str(&escape_html(excerpt));
+            html.push_str("</pre></details>");
+        } else if asset.notice_kind.is_some() {
+            html.push_str("<div>Extrait non disponible (contenu non UTF-8).</div>");
+        }
         if let (Some(width), Some(height)) = (asset.raster_width, asset.raster_height) {
             html.push_str(&format!("Raster : {}×{} ", width, height));
         }
@@ -2959,6 +3021,14 @@ mod html_report_tests {
             r#"<svg width="24px" height="12px"/>"#,
         )
         .unwrap();
+        let license_bytes = b"Example notice <script>alert(1)</script>\n";
+        std::fs::write(source.join("LICENSE.txt"), license_bytes).unwrap();
+        std::fs::write(
+            source.join("NOTICE.txt"),
+            vec![b'N'; MAX_NOTICE_EXCERPT_BYTES + 32],
+        )
+        .unwrap();
+        std::fs::write(source.join("NOTICE-BINARY.txt"), [0xff, 0xfe]).unwrap();
         std::fs::write(package.join("set"),
             b"mse version: 0.3.4\nshort name: <script>alert(1)</script>\nfull name: <b>Complete Set</b>\nversion: 2.1.0\ngame: Magic\ndepends on: magic.mse-game 1.0.0\n").unwrap();
         std::fs::write(package.join("cards/example.png"), b"resource bytes").unwrap();
@@ -2981,6 +3051,41 @@ mod html_report_tests {
         assert!(html.contains("Dépendances :"));
         assert!(html.contains("Ressources internes indexées : 1"));
         assert!(html.contains("1 calculées ; 0 non calculées"));
+        let license = inventory
+            .assets
+            .iter()
+            .find(|asset| asset.file_name == "LICENSE.txt")
+            .unwrap();
+        assert_eq!(
+            license.notice_excerpt.as_deref(),
+            Some("Example notice <script>alert(1)</script>\n")
+        );
+        assert_eq!(
+            license.sha256,
+            format!("{:x}", Sha256::digest(license_bytes))
+        );
+        assert!(!license.notice_excerpt_truncated);
+        let notice = inventory
+            .assets
+            .iter()
+            .find(|asset| asset.file_name == "NOTICE.txt")
+            .unwrap();
+        assert_eq!(
+            notice.notice_excerpt.as_ref().map(String::len),
+            Some(MAX_NOTICE_EXCERPT_BYTES)
+        );
+        assert!(notice.notice_excerpt_truncated);
+        let binary_notice = inventory
+            .assets
+            .iter()
+            .find(|asset| asset.file_name == "NOTICE-BINARY.txt")
+            .unwrap();
+        assert_eq!(binary_notice.notice_excerpt, None);
+        assert!(html.contains("Extrait de notice (non interprété)"));
+        assert!(html.contains("limité à 4 Kio"));
+        assert!(html.contains("Extrait non disponible (contenu non UTF-8)."));
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
         assert!(html.contains("SHA-256"));
         assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
         assert!(!html.contains("<script>alert(1)</script>"));
@@ -4955,6 +5060,8 @@ mod tests {
         assert_eq!(inventory.duplicate_files, 0);
         assert_eq!(inventory.assets[0].raster_width, None);
         assert_eq!(inventory.assets[0].raster_orientation, None);
+        assert_eq!(inventory.assets[0].notice_excerpt, None);
+        assert!(!inventory.assets[0].notice_excerpt_truncated);
         assert_eq!(inventory.assets[0].duplicate_of, None);
         assert_eq!(
             inventory.assets[0].mse_dependencies[0].resolution_status,
