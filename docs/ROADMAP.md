@@ -63,7 +63,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
    - Acceptation : fixtures malveillantes synthétiques, temps/mémoire bornés et aucun script/ressource externe exécuté.
 
 7. **Préciser les formats de polices et les notices** — partiellement réalisé.
-   - Réalisé : classification des fichiers de notice et extrait UTF-8 plafonné à 4 Kio capturé dans le même flux que le SHA-256 ; octets non UTF-8 non affichés, caractères de contrôle neutralisés, échappement HTML et marqueur de troncature. Tests ajoutés, validation CI en attente.
+   - Réalisé : classification des fichiers de notice et extrait UTF-8 plafonné à 4 Kio capturé dans le même flux que le SHA-256 ; octets non UTF-8 non affichés, caractères de contrôle neutralisés, échappement HTML et marqueur de troncature. Tests ajoutés ; la première CI a relevé uniquement un retour à la ligne rustfmt, corrigé dans le commit de reprise ; validation CI finale en attente.
    - Acceptation restante : couverture des formats de polices, provenance documentaire enrichie et cas de fichiers invalides/volumineux ; aucune licence ni statut juridique ne doit être inféré.
 
 ### P2 — Revue et rapports

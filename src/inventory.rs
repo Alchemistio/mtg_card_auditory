@@ -1821,8 +1821,7 @@ fn analyze_file(
     let notice_excerpt = notice_kind
         .as_ref()
         .and_then(|_| notice_excerpt_from_prefix(&notice_prefix));
-    let notice_excerpt_truncated =
-        notice_kind.is_some() && size_bytes > notice_prefix.len() as u64;
+    let notice_excerpt_truncated = notice_kind.is_some() && size_bytes > notice_prefix.len() as u64;
     let modified_unix_seconds = metadata
         .modified()
         .ok()
