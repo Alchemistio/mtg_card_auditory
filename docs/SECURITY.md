@@ -18,6 +18,10 @@
 
 - Une fixture ZIP MSE déclare dans la table centrale une taille décompressée supérieure d'un octet à la taille réelle ; l'analyse marque la ressource `size-mismatch` et ne calcule aucun SHA-256. Validation du HEAD `818e4f4e43b66f118d012c296488badbc85f1625` : CI Unix run `43831180611` (71/71 tests, formatage et Clippy) ; CI Windows run `43831180639` (69/69 tests, formatage, Clippy, build Release x64 et upload de l'artefact `14207669916`). Aucun test ignoré dans les deux suites.
 
+## Audit des dépendances de confinement
+
+Au 16 novembre 2026, le lockfile fixe `cap-std` et `cap-primitives` en version `4.0.3`. Cette version corrige l'avis GHSA-hp8f-xmx4-4qrg / RUSTSEC-2026-0482, qui concerne les versions `<= 4.0.2` et décrit un contournement de confinement par résolution de chemins/symlinks se terminant par `/`. Ne pas rétrograder ces dépendances ; recontrôler les deux versions résolues dans `Cargo.lock` lors de toute mise à jour. Cette correction de dépendance ne supprime pas les courses TOCTOU applicatives documentées ci-dessous.
+
 ## Chemins et liens
 - Les URL de dépôt sont analysées avec un parseur URL dédié : HTTPS uniquement, hôte exactement `github.com`, absence d'identifiants/port/query/fragment, et chemin limité à `owner/repository`.
 - Les noms owner/repository sont limités aux caractères autorisés par le parseur ; les sous-chemins arbitraires sont rejetés.
