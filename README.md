@@ -39,7 +39,7 @@ Application desktop Windows native en Rust pour inventorier et auditer des resso
 - ZIP : lecture de la table centrale, comptage des entrées, taille décompressée déclarée, chemins suspects et ratios anormaux ; aucun décompactage ; archives de plus de 512 Mio ignorées.
 - MSE : reconnaissance des packages ZIP et dossiers `.mse-set`, `.mse-game` et `.mse-style`, lecture bornée à 1 Mio des champs d'en-tête, extraction et résolution locale des dépendances/références de jeu et feuille de style, vérification des versions minimales reconnues, détection des cycles et indexation des ressources sous budgets ; les directives `include file:` ne sont jamais suivies et aucune dépendance n'est installée.
 - Exports JSON et CSV UTF-8, rapport HTML autonome sans JavaScript.
-- Planches raster PNG de 16 images par page, avec fichier texte d'index ; le SHA-256 source est revérifié avant génération.
+- Planches raster PNG de 16 images par page, avec fichier texte d'index ; le SHA-256 source est revérifié avant génération et l'orientation EXIF est appliquée à l'aperçu lorsqu'elle est disponible.
 - Vue locale filtrable ; jusqu'à 500 lignes affichées à la fois, exports complets.
 - Confinement capability-based (`cap-std`) des opérations GitHub, des exports et des lectures locales sensibles : cache, téléchargements, journaux, manifestes, JSON/CSV/HTML, planches PNG, index, réanalyse des images et lecture des inventaires de comparaison utilisent des handles de répertoire et des créations exclusives.
 

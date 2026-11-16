@@ -2539,10 +2539,16 @@ pub fn export_contact_sheet(
             ));
             continue;
         }
-        let decoded = ImageReader::new(std::io::Cursor::new(&bytes))
-            .with_guessed_format()
-            .map_err(anyhow::Error::from)
-            .and_then(|reader| reader.decode().map_err(anyhow::Error::from));
+        let decoded = (|| -> Result<image::DynamicImage> {
+            let reader = ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format()?;
+            let mut decoder = reader.into_decoder()?;
+            let orientation = decoder
+                .orientation()
+                .unwrap_or(image::metadata::Orientation::NoTransforms);
+            let mut image = image::DynamicImage::from_decoder(decoder)?;
+            image.apply_orientation(orientation);
+            Ok(image)
+        })();
         let image = match decoded {
             Ok(image) => image.thumbnail(200, 160).to_rgba8(),
             Err(_) => {
@@ -5004,6 +5010,58 @@ mod tests {
         assert_eq!(rendered, 1);
         assert!(sheet_path.exists());
         assert!(output.join("sheet.txt").exists());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn contact_sheet_applies_jpeg_exif_orientation() {
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-sheet-orientation-{}",
+            std::process::id()
+        ));
+        let source = base.join("source");
+        let output = base.join("output");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&output).unwrap();
+
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode(
+                &[255, 0, 0, 0, 0, 255],
+                2,
+                1,
+                image::ExtendedColorType::Rgb8,
+            )
+            .unwrap();
+        let mut exif = b"Exif\0\0".to_vec();
+        exif.extend_from_slice(b"II");
+        exif.extend_from_slice(&42_u16.to_le_bytes());
+        exif.extend_from_slice(&8_u32.to_le_bytes());
+        exif.extend_from_slice(&1_u16.to_le_bytes());
+        exif.extend_from_slice(&0x0112_u16.to_le_bytes());
+        exif.extend_from_slice(&3_u16.to_le_bytes());
+        exif.extend_from_slice(&1_u32.to_le_bytes());
+        exif.extend_from_slice(&6_u16.to_le_bytes());
+        exif.extend_from_slice(&0_u16.to_le_bytes());
+        exif.extend_from_slice(&0_u32.to_le_bytes());
+        let segment_length = u16::try_from(exif.len() + 2).unwrap();
+        let mut with_exif = jpeg[..2].to_vec();
+        with_exif.extend_from_slice(&[0xff, 0xe1]);
+        with_exif.extend_from_slice(&segment_length.to_be_bytes());
+        with_exif.extend_from_slice(&exif);
+        with_exif.extend_from_slice(&jpeg[2..]);
+        std::fs::write(source.join("oriented.jpg"), with_exif).unwrap();
+
+        let document = scan_directory(&source).unwrap();
+        let sheet_path = output.join("sheet.png");
+        assert_eq!(export_contact_sheet(&document, 0, &sheet_path).unwrap(), 1);
+
+        let sheet = image::open(&sheet_path).unwrap().to_rgba8();
+        let background = image::Rgba([245, 246, 248, 255]);
+        assert_ne!(*sheet.get_pixel(109, 90), background);
+        assert_eq!(*sheet.get_pixel(110, 89), background);
+
         std::fs::remove_dir_all(base).unwrap();
     }
 
