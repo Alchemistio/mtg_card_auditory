@@ -2541,6 +2541,21 @@ fn append_mse_metadata_html(html: &mut String, asset: &AssetRecord) {
         html.push_str(&escape_html(name));
         html.push_str("</div>");
     }
+    if let Some(name) = &asset.mse_full_name {
+        html.push_str("<div>Nom complet : ");
+        html.push_str(&escape_html(name));
+        html.push_str("</div>");
+    }
+    if let Some(version) = &asset.mse_package_version {
+        html.push_str("<div>Version du package : ");
+        html.push_str(&escape_html(version));
+        html.push_str("</div>");
+    }
+    if let Some(name) = &asset.mse_name {
+        html.push_str("<div>Nom du jeu : ");
+        html.push_str(&escape_html(name));
+        html.push_str("</div>");
+    }
     if let Some(game) = &asset.mse_game {
         append_mse_reference_html(
             html,
@@ -2723,7 +2738,7 @@ mod html_report_tests {
         std::fs::create_dir_all(package.join("cards")).unwrap();
         std::fs::create_dir_all(&game).unwrap();
         std::fs::write(package.join("set"),
-            b"mse version: 0.3.4\nshort name: <script>alert(1)</script>\ngame: Magic\ndepends on: magic.mse-game 1.0.0\n").unwrap();
+            b"mse version: 0.3.4\nshort name: <script>alert(1)</script>\nfull name: <b>Complete Set</b>\nversion: 2.1.0\ngame: Magic\ndepends on: magic.mse-game 1.0.0\n").unwrap();
         std::fs::write(package.join("cards/example.png"), b"resource bytes").unwrap();
         std::fs::write(
             game.join("game"),
@@ -2736,6 +2751,8 @@ mod html_report_tests {
         export_html(&inventory, &destination).unwrap();
         let html = std::fs::read_to_string(&destination).unwrap();
         assert!(html.contains("Package MSE : set"));
+        assert!(html.contains("Nom complet : &lt;b&gt;Complete Set&lt;/b&gt;"));
+        assert!(html.contains("Version du package : 2.1.0"));
         assert!(html.contains("Dépendances :"));
         assert!(html.contains("Ressources internes indexées : 1"));
         assert!(html.contains("SHA-256"));
