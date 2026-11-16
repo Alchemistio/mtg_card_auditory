@@ -14,7 +14,7 @@ Les pourcentages ci-dessous sont des estimations de maturité fonctionnelle, pas
 | Métadonnées raster, SVG, polices et notices | 55 % | Métadonnées de base en place ; SVG borné sans exécution, viewBox et dimensions racine intégrées ; polices identifiées. Reste orientation/limites/décodage raster, couverture CSS SVG et aperçu sandboxé, formats de polices complémentaires et collecte de notices avec provenance sans interprétation juridique. |
 | Rapports, comparaison et synthèses MSE | 48 % | Le rapport HTML expose les noms complets, versions de package et noms de jeu MSE ; les tests vérifient leur affichage et l'échappement des valeurs non fiables. Reste synthèse des ressources ignorées/raisons de troncature, filtres et staging séparé de LIBRARY. |
 | Galerie et revue humaine | 15 % | Planche contact raster paginée initiale. Reste galerie hors ligne, navigation/filtres, ouverture sûre, annotations, décisions persistantes et suggestions de similarité sans suppression automatique. |
-| Performance, expérience d'analyse et estimation | 20 % | Progression en octets et annulation disponibles. Reste mesures sur corpus synthétiques, estimation de durée recalculée et contrôle de la réactivité UI. |
+| Performance, expérience d'analyse et estimation | 20 % | Progression en octets, annulation et ETA indicative calculée depuis la vitesse moyenne observée (affichée après un échantillon minimal) en place ; restent mesures sur corpus synthétiques, calibration de l'estimation et contrôle de la réactivité UI. |
 | Packaging et publication | 35 % | CI Windows construit et publie un artefact x64. Reste vérifier l'autonomie sur Windows propre, versionnement, notes de version, GitHub Release reproductible et étude de signature. |
 
 **Avancement global indicatif : 45 %.** Il reste volontairement prudent : plusieurs domaines sont amorcés mais n'ont pas encore passé leurs critères d'acceptation de bout en bout.
@@ -156,7 +156,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Vue filtrable des résultats locaux dans l'interface (500 premières lignes affichées, exports complets).
 - [x] Annulation coopérative du scan local depuis l'interface, vérifiée à chaque entrée de répertoire et entrée énumérée, puis pendant l'analyse.
 - [x] Progression locale en octets, agrégée à partir des tailles des fichiers et mise à jour par lots de 100 fichiers.
-- [ ] Estimation du temps restant.
+- [~] Estimation du temps restant : ETA indicative à partir de la vitesse moyenne observée, masquée avant 2 secondes d'échantillonnage ou lorsque le calcul n'est pas fiable ; tests unitaires ajoutés, validation CI en attente.
 
 ## Phase 3 — Analyse des formats
 - [~] Raster : format, dimensions, canaux et alpha ; orientation, limites, décodage contrôlé et miniatures à faire.

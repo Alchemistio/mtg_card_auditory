@@ -28,9 +28,32 @@ use std::{
         mpsc::{self, Receiver, TryRecvError},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+
+    #[test]
+    fn remaining_time_requires_a_stable_nonzero_sample() {
+        assert_eq!(estimate_remaining(0, 100, Duration::from_secs(5)), None);
+        assert_eq!(estimate_remaining(50, 100, Duration::from_secs(1)), None);
+        assert_eq!(
+            estimate_remaining(50, 100, Duration::from_secs(10)),
+            Some(Duration::from_secs(10))
+        );
+        assert_eq!(estimate_remaining(100, 100, Duration::from_secs(10)), None);
+        assert_eq!(estimate_remaining(101, 100, Duration::from_secs(10)), None);
+    }
+
+    #[test]
+    fn remaining_time_format_is_compact() {
+        assert_eq!(format_eta(Duration::from_secs(42)), "42 s");
+        assert_eq!(format_eta(Duration::from_secs(125)), "2 min 05 s");
+        assert_eq!(format_eta(Duration::from_secs(3_725)), "1 h 02 min");
+    }
+}
 #[derive(Default)]
 struct AuditorApp {
     repository_url: String,
@@ -54,6 +77,7 @@ struct AuditorApp {
     comparison: Option<inventory::InventoryComparison>,
     scan_receiver: Option<Receiver<ScanMessage>>,
     scan_cancel: Option<Arc<AtomicBool>>,
+    scan_started_at: Option<Instant>,
     github_receiver: Option<Receiver<std::result::Result<models::RepositoryTree, String>>>,
     download_receiver: Option<Receiver<DownloadMessage>>,
     download_cancel: Option<Arc<AtomicBool>>,
@@ -63,6 +87,31 @@ struct AuditorApp {
     busy: bool,
 }
 
+fn estimate_remaining(done: u64, total: u64, elapsed: Duration) -> Option<Duration> {
+    if done == 0 || done >= total || elapsed < Duration::from_secs(2) {
+        return None;
+    }
+    let bytes_per_second = done as f64 / elapsed.as_secs_f64();
+    if !bytes_per_second.is_finite() || bytes_per_second <= 0.0 {
+        return None;
+    }
+    let seconds = total.saturating_sub(done) as f64 / bytes_per_second;
+    if !seconds.is_finite() || seconds < 0.0 || seconds >= u64::MAX as f64 {
+        return None;
+    }
+    Some(Duration::from_secs_f64(seconds))
+}
+
+fn format_eta(remaining: Duration) -> String {
+    let seconds = remaining.as_secs();
+    if seconds >= 3_600 {
+        format!("{} h {:02} min", seconds / 3_600, (seconds % 3_600) / 60)
+    } else if seconds >= 60 {
+        format!("{} min {:02} s", seconds / 60, seconds % 60)
+    } else {
+        format!("{} s", seconds)
+    }
+}
 impl AuditorApp {
     fn load_github_token(&mut self) {
         let result = keyring::Entry::new("mtg-asset-auditor", "github-token")
@@ -174,6 +223,7 @@ impl AuditorApp {
         let worker_cancelled = Arc::clone(&cancelled);
         self.scan_receiver = Some(receiver);
         self.scan_cancel = Some(cancelled);
+        self.scan_started_at = Some(Instant::now());
         self.busy = true;
         self.status = "Inventaire local parallèle et calcul SHA-256 en arrière-plan…".into();
         std::thread::spawn(move || {
@@ -821,11 +871,23 @@ impl eframe::App for AuditorApp {
         for message in scan_messages {
             match message {
                 ScanMessage::Progress(done, total) => {
-                    self.status = format!("Analyse en cours : {} / {} octets…", done, total);
+                    let eta = self
+                        .scan_started_at
+                        .and_then(|started| estimate_remaining(done, total, started.elapsed()));
+                    self.status = match eta {
+                        Some(remaining) => format!(
+                            "Analyse en cours : {} / {} octets… Temps restant estimé : {}.",
+                            done,
+                            total,
+                            format_eta(remaining)
+                        ),
+                        None => format!("Analyse en cours : {} / {} octets…", done, total),
+                    };
                 }
                 ScanMessage::Finished(result) => {
                     self.scan_receiver = None;
                     self.scan_cancel = None;
+                    self.scan_started_at = None;
                     self.busy = false;
                     match result {
                         Ok(document) => {
