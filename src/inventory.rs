@@ -51,6 +51,10 @@ pub struct AssetRecord {
     #[serde(default)]
     pub svg_viewbox: Option<String>,
     #[serde(default)]
+    pub svg_width: Option<String>,
+    #[serde(default)]
+    pub svg_height: Option<String>,
+    #[serde(default)]
     pub svg_has_external_refs: Option<bool>,
     #[serde(default)]
     pub svg_xml_valid: Option<bool>,
@@ -287,19 +291,41 @@ fn read_prefix<R: Read>(reader: R, maximum_bytes: u64) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn parse_svg_dimension(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 64 {
+        return None;
+    }
+    let split = value
+        .find(|character: char| !(character.is_ascii_digit() || matches!(character, '+' | '-' | '.' | 'e' | 'E')))
+        .unwrap_or(value.len());
+    let (number, unit) = value.split_at(split);
+    let amount = number.parse::<f64>().ok()?;
+    if !amount.is_finite() || amount <= 0.0 || amount > 1_000_000_000.0 {
+        return None;
+    }
+    let unit = unit.to_ascii_lowercase();
+    if !matches!(unit.as_str(), "" | "px" | "in" | "cm" | "mm" | "pt" | "pc" | "em" | "ex" | "ch" | "rem" | "%" | "vw" | "vh" | "vmin" | "vmax") {
+        return None;
+    }
+    Some(value.to_string())
+}
+
 fn svg_metadata(
     workspace: &CapabilityDir,
     relative: &Path,
     family: &str,
-) -> (Option<String>, Option<bool>, Option<bool>, Option<String>) {
+) -> (Option<String>, Option<String>, Option<String>, Option<bool>, Option<bool>, Option<String>) {
     if family != "svg" {
-        return (None, None, None, None);
+        return (None, None, None, None, None, None);
     }
     const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
     let file = match workspace.open(relative) {
         Ok(file) => file,
         Err(error) => {
             return (
+                None,
+                None,
                 None,
                 None,
                 Some(false),
@@ -327,6 +353,8 @@ fn svg_metadata(
             return (
                 None,
                 None,
+                None,
+                None,
                 Some(false),
                 Some(format!("SVG non UTF-8 : {}", error)),
             )
@@ -335,6 +363,8 @@ fn svg_metadata(
     let mut reader = Reader::from_str(&source);
     reader.config_mut().trim_text(true);
     let mut viewbox = None;
+    let mut width = None;
+    let mut height = None;
     let mut external_refs = false;
     let mut found_svg_root = false;
     let mut event_count = 0_usize;
@@ -345,6 +375,8 @@ fn svg_metadata(
         if event_count > 100_000 {
             return (
                 viewbox,
+                width,
+                height,
                 Some(external_refs),
                 Some(false),
                 Some("SVG refusé : nombre maximal d'événements XML dépassé.".to_string()),
@@ -355,6 +387,8 @@ fn svg_metadata(
             if depth > 256 {
                 return (
                     viewbox,
+                    width,
+                    height,
                     Some(external_refs),
                     Some(false),
                     Some("SVG refusé : profondeur XML maximale dépassée.".to_string()),
@@ -403,6 +437,12 @@ fn svg_metadata(
                             )
                         }
                     };
+                    if depth == 1 && key == b"width" && width.is_none() {
+                        width = parse_svg_dimension(&value);
+                    }
+                    if depth == 1 && key == b"height" && height.is_none() {
+                        height = parse_svg_dimension(&value);
+                    }
                     if key == b"viewBox" && viewbox.is_none() {
                         viewbox = Some(value.clone());
                     }
@@ -422,6 +462,8 @@ fn svg_metadata(
             Err(error) => {
                 return (
                     viewbox,
+                    width,
+                    height,
                     Some(external_refs),
                     Some(false),
                     Some(format!("XML SVG invalide : {}", error)),
@@ -440,7 +482,7 @@ fn svg_metadata(
     if contains_external_css_reference(&source) {
         external_refs = true;
     }
-    (viewbox, Some(external_refs), Some(true), None)
+    (viewbox, width, height, Some(external_refs), Some(true), None)
 }
 
 fn font_metadata(
@@ -1693,7 +1735,7 @@ fn analyze_file(
     let raster_height = raster.height;
     let raster_color_type = raster.color_type;
     let raster_has_alpha = raster.has_alpha;
-    let (svg_viewbox, svg_has_external_refs, svg_xml_valid, svg_warning) =
+    let (svg_viewbox, svg_width, svg_height, svg_has_external_refs, svg_xml_valid, svg_warning) =
         svg_metadata(workspace, relative, detected_family);
     let (font_family, font_subfamily, font_warning) =
         font_metadata(workspace, relative, detected_family);
@@ -1781,6 +1823,8 @@ fn analyze_file(
         raster_color_type,
         raster_has_alpha,
         svg_viewbox,
+        svg_width,
+        svg_height,
         svg_has_external_refs,
         svg_xml_valid,
         font_family,
@@ -2687,6 +2731,12 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
         if let Some(has_alpha) = asset.raster_has_alpha {
             html.push_str(if has_alpha { "Alpha " } else { "Sans alpha " });
         }
+        if let Some(width) = &asset.svg_width {
+            html.push_str(&format!("SVG largeur : {} ", escape_html(width)));
+        }
+        if let Some(height) = &asset.svg_height {
+            html.push_str(&format!("SVG hauteur : {} ", escape_html(height)));
+        }
         if let Some(viewbox) = &asset.svg_viewbox {
             html.push_str(&format!("viewBox : {} ", escape_html(viewbox)));
         }
@@ -2962,11 +3012,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let svg = root.join("test.svg");
-        std::fs::write(&svg, r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 20"><image href="https://example.invalid/image.png"/></svg>"#).unwrap();
+        std::fs::write(&svg, r#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="2.5cm" viewBox="0 0 10 20"><image href="https://example.invalid/image.png"/></svg>"#).unwrap();
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (viewbox, external, valid, warning) =
+        let (viewbox, width, height, external, valid, warning) =
             svg_metadata(&workspace, Path::new("test.svg"), "svg");
         assert_eq!(viewbox.as_deref(), Some("0 0 10 20"));
+        assert_eq!(width.as_deref(), Some("100%"));
+        assert_eq!(height.as_deref(), Some("2.5cm"));
         assert_eq!(external, Some(true));
         assert_eq!(valid, Some(true));
         assert!(warning.is_none());
