@@ -3320,6 +3320,31 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn nofollow_file_open_rejects_symlinked_parent_when_supported() {
+        use std::os::windows::fs::symlink_dir;
+
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-nofollow-parent-{}", std::process::id()));
+        let real = root.join("real");
+        let alias = root.join("alias");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("sample.txt"), b"safe").unwrap();
+        if let Err(error) = symlink_dir(&real, &alias) {
+            eprintln!("SKIP: création de lien symbolique de répertoire Windows refusée: {error}");
+            std::fs::remove_dir_all(root).unwrap();
+            return;
+        }
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let error = open_file_nofollow(&workspace, Path::new("alias/sample.txt"))
+            .expect_err("symlinked parent component must be rejected");
+        assert!(error.to_string().contains("sans suivi"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn nofollow_file_open_rejects_final_symlink_when_supported() {
         use std::os::windows::fs::symlink_file;
 
