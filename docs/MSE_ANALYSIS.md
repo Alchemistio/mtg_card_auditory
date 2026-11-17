@@ -96,3 +96,8 @@ Validation des fixtures de taille et d'encodage sur le HEAD `1385b136395618c6d1a
 ## Validation des chemins ZIP dupliqués
 
 Validé sur HEAD `9eb6aef0ed9d739e7f64e25dbd341926f44a9c8a` : une fixture ZIP valide contient deux entrées ayant le même chemin interne. Le lecteur ZIP ne les expose que comme deux entrées uniques (dont le fichier principal), alors que le nombre brut de la table centrale EOCD est trois. Le scanner détecte cette discordance et marque les ressources visibles `ambiguous-path`, sans conserver de SHA-256 ni extraire de fichier. CI Unix run `44094150470` (90/90 tests, aucun ignoré) et Windows run `44094150510` (87/87 tests, aucun ignoré), formatage et Clippy réussis ; build Release x64 et artefact `14334060248` (5 363 890 octets).
+
+
+## Fichier principal MSE et entrées ZIP masquées
+
+Le compte brut EOCD/ZIP64 est maintenant vérifié avant l'interprétation du fichier principal. Si le lecteur ZIP expose moins d'entrées que la table centrale n'en déclare, le statut du fichier principal devient indéterminé, son en-tête n'est pas interprété et un avertissement explicite est produit. Le test des chemins de ressources dupliqués vérifie aussi que le fichier principal n'est pas lu dans cette situation. Les autres incohérences de tailles, flags et offsets restent à couvrir.

@@ -1363,6 +1363,9 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
             None,
         );
     }
+    // Le lecteur ZIP peut masquer des entrées centrales dupliquées.
+    // Vérifier le compte brut avant de faire confiance au fichier principal.
+    let central_entry_count = zip_central_directory_entry_count(file);
     if let Err(error) = file.seek(SeekFrom::Start(0)) {
         return ZipMetadata::new(
             None,
@@ -1397,6 +1400,8 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
             None,
         );
     }
+    let central_directory_has_hidden_entries =
+        central_entry_count.is_some_and(|count| count != entry_count as u64);
     let mut uncompressed_bytes = 0_u64;
     let mut suspicious_paths = 0_usize;
     let mut suspicious_ratio = false;
@@ -1443,7 +1448,11 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
     }
     let mut mse_header = None;
     let mut mse_header_warning = None;
-    if mse_main_file_present == Some(true) {
+    if central_directory_has_hidden_entries {
+        mse_main_file_present = None;
+        mse_header_warning = Some("Table centrale ZIP ambiguë : le nombre brut d'entrées diffère de celui exposé par le lecteur ; fichier principal non interprété.".to_string());
+    }
+    if mse_main_file_present == Some(true) && !central_directory_has_hidden_entries {
         if let Some(main_name) = expected_main {
             const MAX_MSE_HEADER_BYTES: u64 = 1024 * 1024;
             match archive.by_name(main_name) {
@@ -4525,6 +4534,10 @@ mod tests {
         std::fs::write(&archive_path, archive_bytes).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = zip_metadata(&workspace, Path::new("sample.mse-set"), "mse-set");
+        assert_eq!(metadata.mse_main_file_present, None);
+        assert!(metadata.mse_header.is_none());
+        assert!(metadata.warning.as_deref().is_some_and(|warning| warning.contains("Table centrale ZIP ambiguë")));
         let mut scan_budget = 1024;
         let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
             &workspace,
