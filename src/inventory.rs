@@ -3165,7 +3165,7 @@ mod raster_metadata_tests {
         with_exif.extend_from_slice(&segment_length.to_be_bytes());
         with_exif.extend_from_slice(&exif);
         with_exif.extend_from_slice(&jpeg[2..]);
-        std::fs::write(root.join("oriented.jpg"), with_exif).unwrap();
+        std::fs::write(root.join("oriented.jpg"), &with_exif).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let mut file = open_file_nofollow(&workspace, Path::new("oriented.jpg")).unwrap();
