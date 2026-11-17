@@ -2988,10 +2988,8 @@ mod raster_metadata_tests {
     fn raster_metadata_rejects_final_symlink() {
         use std::os::unix::fs::symlink;
 
-        let root = std::env::temp_dir().join(format!(
-            "mtg-auditor-raster-symlink-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-raster-symlink-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("target.jpg"), b"not an image").unwrap();
