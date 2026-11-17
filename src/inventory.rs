@@ -1080,6 +1080,7 @@ fn mse_zip_resources_with_limits_and_cancel(
     }
 
     let mut resources = Vec::new();
+    let mut seen_paths = HashMap::<String, usize>::new();
     let mut hashed_bytes = 0_u64;
     let mut truncated = false;
     for index in 0..archive.len() {
@@ -1107,6 +1108,20 @@ fn mse_zip_resources_with_limits_and_cancel(
             break;
         }
         let size = entry.size();
+        if let Some(previous_index) = seen_paths.get(&name).copied() {
+            if let Some(previous) = resources.get_mut(previous_index) {
+                previous.sha256 = None;
+                previous.hash_status = "ambiguous-path".to_string();
+            }
+            resources.push(MseResourceRecord {
+                relative_path: name,
+                size_bytes: size,
+                sha256: None,
+                hash_status: "ambiguous-path".to_string(),
+            });
+            truncated = true;
+            continue;
+        }
         let suspicious_path = entry.enclosed_name().is_none()
             || name.contains('\\')
             || name.contains(':')
@@ -1185,21 +1200,25 @@ fn mse_zip_resources_with_limits_and_cancel(
                 "size-mismatch"
             } else {
                 hashed_bytes = hashed_bytes.saturating_add(bytes_read);
+                let record_index = resources.len();
                 resources.push(MseResourceRecord {
-                    relative_path: name,
+                    relative_path: name.clone(),
                     size_bytes: size,
                     sha256: Some(format!("{:x}", hasher.finalize())),
                     hash_status: "hashed".to_string(),
                 });
+                seen_paths.insert(name, record_index);
                 continue;
             }
         };
+        let record_index = resources.len();
         resources.push(MseResourceRecord {
-            relative_path: name,
+            relative_path: name.clone(),
             size_bytes: size,
             sha256: None,
             hash_status: hash_status.to_string(),
         });
+        seen_paths.insert(name, record_index);
     }
     (resources, truncated)
 }
@@ -2945,6 +2964,7 @@ fn append_mse_resource_summary_html(html: &mut String, resources: &[MseResourceR
         html.push_str("<ul>");
         for status in [
             "suspicious-path",
+            "ambiguous-path",
             "suspicious-ratio",
             "size-limit",
             "total-budget",
@@ -4310,6 +4330,59 @@ mod tests {
         assert!(resources.is_empty());
         assert!(truncated);
         assert_eq!(scan_budget, 1024);
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn marks_duplicate_mse_zip_resource_paths_as_ambiguous_without_hashing() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-duplicate-path-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("sample.mse-set");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("set", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"mse version: 0.3.4\n").unwrap();
+        for content in [b"first resource".as_slice(), b"second resource".as_slice()] {
+            writer
+                .start_file(
+                    "cards/duplicate.bin",
+                    zip::write::SimpleFileOptions::default(),
+                )
+                .unwrap();
+            writer.write_all(content).unwrap();
+        }
+        writer.finish().unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut scan_budget = 1024;
+        let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
+            &workspace,
+            Path::new("sample.mse-set"),
+            "set",
+            MseZipResourceLimits {
+                max_resources: 10,
+                max_resource_bytes: 1024,
+                max_total_hash_bytes: 1024,
+            },
+            &mut scan_budget,
+            &AtomicBool::new(false),
+        );
+        assert!(truncated);
+        assert_eq!(resources.len(), 2);
+        assert!(resources.iter().all(|resource| {
+            resource.relative_path == "cards/duplicate.bin"
+                && resource.hash_status == "ambiguous-path"
+                && resource.sha256.is_none()
+        }));
+        assert!(!root.join("cards/duplicate.bin").exists());
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
