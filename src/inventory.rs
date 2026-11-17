@@ -2035,7 +2035,10 @@ fn analyze_file(
     // Re-hacher le même handle après les analyseurs : une mutation de contenu
     // conservant taille et horodatage ne doit pas valider un inventaire incohérent.
     verify_reader_sha256_unchanged(&mut source_file, &sha256).with_context(|| {
-        format!("Vérification finale du contenu impossible : {}", relative.display())
+        format!(
+            "Vérification finale du contenu impossible : {}",
+            relative.display()
+        )
     })?;
 
     // Tous les analyseurs d'un asset réutilisent le même handle ouvert sans suivi.
@@ -3137,7 +3140,11 @@ mod raster_metadata_tests {
             .unwrap();
         let current_metadata = workspace.symlink_metadata(Path::new("sample.bin")).unwrap();
         assert_eq!(opened_metadata.len(), current_metadata.len());
-        assert_eq!(opened_metadata.modified().unwrap(), current_metadata.modified().unwrap());
+        assert_eq!(
+            opened_metadata.modified().unwrap(),
+            current_metadata.modified().unwrap()
+        );
+        assert!(file_metadata_is_stable(&opened_metadata, &current_metadata));
 
         let error = verify_reader_sha256_unchanged(&mut file, &initial_sha256)
             .expect_err("same-size content mutation must invalidate the analysis");
