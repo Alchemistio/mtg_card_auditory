@@ -3116,6 +3116,7 @@ mod raster_metadata_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn detects_same_size_content_mutation_even_when_mtime_is_restored() {
         let root = std::env::temp_dir().join(format!(
@@ -3145,6 +3146,38 @@ mod raster_metadata_tests {
             current_metadata.modified().unwrap()
         );
         assert!(file_metadata_is_stable(&opened_metadata, &current_metadata));
+
+        let error = verify_reader_sha256_unchanged(&mut file, &initial_sha256)
+            .expect_err("same-size content mutation must invalidate the analysis");
+        assert!(error.to_string().contains("SHA-256 différent"));
+
+        drop(file);
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn detects_same_size_content_mutation_on_windows() {
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-content-mutation-windows-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("sample.bin");
+        std::fs::write(&path, b"original").unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut file = open_file_nofollow(&workspace, Path::new("sample.bin")).unwrap();
+        let (initial_sha256, _) = sha256_reader_with_prefix(&mut file, 0).unwrap();
+        let opened_metadata = file.metadata().unwrap();
+
+        // Windows peut refuser SetFileTime tant que le handle de lecture est ouvert.
+        // La longueur reste identique ; le test vérifie la détection par le contenu.
+        std::fs::write(&path, b"modified").unwrap();
+        let current_metadata = workspace.symlink_metadata(Path::new("sample.bin")).unwrap();
+        assert_eq!(opened_metadata.len(), current_metadata.len());
 
         let error = verify_reader_sha256_unchanged(&mut file, &initial_sha256)
             .expect_err("same-size content mutation must invalidate the analysis");
