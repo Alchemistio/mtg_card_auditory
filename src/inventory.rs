@@ -4535,9 +4535,11 @@ mod tests {
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let metadata = zip_metadata(&workspace, Path::new("sample.mse-set"), "mse-set");
-        assert_eq!(metadata.mse_main_file_present, None);
-        assert!(metadata.mse_header.is_none());
-        assert!(metadata
+        // La corruption CRC touche uniquement la ressource : le fichier principal
+        // reste présent et son en-tête demeure interprétable.
+        assert_eq!(metadata.mse_main_file_present, Some(true));
+        assert!(metadata.mse_header.is_some());
+        assert!(!metadata
             .warning
             .as_deref()
             .is_some_and(|warning| warning.contains("Table centrale ZIP ambiguë")));

@@ -101,3 +101,8 @@ Validé sur HEAD `9eb6aef0ed9d739e7f64e25dbd341926f44a9c8a` : une fixture ZIP va
 ## Fichier principal MSE et entrées ZIP masquées
 
 Le compte brut EOCD/ZIP64 est maintenant vérifié avant l'interprétation du fichier principal. Si le lecteur ZIP expose moins d'entrées que la table centrale n'en déclare, le statut du fichier principal devient indéterminé, son en-tête n'est pas interprété et un avertissement explicite est produit. Le test des chemins de ressources dupliqués vérifie aussi que le fichier principal n'est pas lu dans cette situation. Les autres incohérences de tailles, flags et offsets restent à couvrir.
+
+
+## Distinction corruption de ressource et ambiguïté de table centrale
+
+Une corruption CRC limitée aux octets d'une ressource n'implique pas que la table centrale ZIP soit ambiguë. Si le nombre brut d'entrées EOCD/ZIP64 correspond au nombre exposé par le lecteur, le fichier principal MSE reste interprétable ; la ressource corrompue est ensuite marquée `read-error` lors de sa lecture et n'obtient aucun SHA-256. Le statut du fichier principal devient indéterminé uniquement lorsque le compte brut et le compte exposé divergent (cas d'entrées centrales masquées).
