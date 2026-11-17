@@ -280,8 +280,7 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
     if family != "raster" {
         return RasterMetadata::default();
     }
-    let reader = match workspace
-        .open(relative)
+    let reader = match open_file_nofollow(workspace, relative)
         .map(BufReader::new)
         .map(ImageReader::new)
         .and_then(|reader| reader.with_guessed_format())
@@ -2983,6 +2982,34 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
 #[cfg(test)]
 mod raster_metadata_tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn raster_metadata_rejects_final_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-raster-symlink-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("target.jpg"), b"not an image").unwrap();
+        symlink(root.join("target.jpg"), root.join("alias.jpg")).unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let metadata = raster_metadata(&workspace, Path::new("alias.jpg"), "raster");
+        assert!(
+            metadata
+                .warning
+                .as_deref()
+                .is_some_and(|warning| warning.contains("sans suivi")),
+            "raster metadata must reject a final symlink: {:?}",
+            metadata.warning
+        );
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn extracts_jpeg_exif_orientation_without_decoding_pixels() {
