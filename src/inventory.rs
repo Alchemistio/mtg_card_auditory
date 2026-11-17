@@ -156,7 +156,10 @@ pub struct InventoryComparison {
 
 fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
     if !path.is_absolute() {
-        anyhow::bail!("Le chemin de répertoire doit être absolu : {}", path.display());
+        anyhow::bail!(
+            "Le chemin de répertoire doit être absolu : {}",
+            path.display()
+        );
     }
 
     let mut root = PathBuf::new();
@@ -176,8 +179,13 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
         anyhow::bail!("Racine du chemin absolu introuvable : {}", path.display());
     }
 
-    let mut directory = CapabilityDir::open_ambient_dir(&root, ambient_authority())
-        .with_context(|| format!("Ouverture de la racine du chemin impossible : {}", root.display()))?;
+    let mut directory =
+        CapabilityDir::open_ambient_dir(&root, ambient_authority()).with_context(|| {
+            format!(
+                "Ouverture de la racine du chemin impossible : {}",
+                root.display()
+            )
+        })?;
     let mut traversed = root;
     for name in components {
         traversed.push(&name);
@@ -2750,18 +2758,17 @@ pub fn export_contact_sheet(
                 PathBuf::from(&asset.relative_path),
             )
         };
-        let workspace =
-            match open_absolute_directory_nofollow(Path::new(source_root)) {
-                Ok(workspace) => workspace,
-                Err(_) => {
-                    index_text.push_str(&format!(
-                        "{:02}\tSOURCE ABSENTE OU INACCESSIBLE\t{}\n",
-                        slot + 1,
-                        asset.relative_path
-                    ));
-                    continue;
-                }
-            };
+        let workspace = match open_absolute_directory_nofollow(Path::new(source_root)) {
+            Ok(workspace) => workspace,
+            Err(_) => {
+                index_text.push_str(&format!(
+                    "{:02}\tSOURCE ABSENTE OU INACCESSIBLE\t{}\n",
+                    slot + 1,
+                    asset.relative_path
+                ));
+                continue;
+            }
+        };
         if workspace
             .symlink_metadata(&relative)
             .map(|metadata| metadata.file_type().is_symlink())

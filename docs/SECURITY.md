@@ -85,3 +85,8 @@ Chaque sous-répertoire est désormais ouvert depuis le handle capability-based 
 ## Validation de l'ouverture récursive sans suivi
 
 Validé sur HEAD `2084c365776bf4545120da438ecee70262a2109e` : CI Unix run `44090432550` (88/88 tests, aucun ignoré) et Windows run `44090432520` (85/85 tests, aucun ignoré), formatage et Clippy réussis ; build Release x64 et artefact Windows `14331761845` (5 358 116 octets). Le test Windows de remplacement de sous-répertoire par lien symbolique a été exécuté sans `SKIP`.
+
+
+## Ouverture des chemins absolus de sources et de destinations
+
+Les chemins absolus de sources locales et les parents de destinations d'export sont désormais ouverts depuis la racine du volume, puis parcourus composant par composant avec `open_dir_nofollow`. Cela évite qu'un composant intermédiaire ou final remplacé par un lien symbolique soit suivi entre la canonicalisation et l'ouverture du handle. Les tests Unix et Windows vérifient le refus d'un composant symbolique ; la validation CI de cette tranche est en cours.
