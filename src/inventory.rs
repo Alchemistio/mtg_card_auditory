@@ -491,6 +491,7 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
     let mut height = None;
     let mut external_refs = false;
     let mut found_svg_root = false;
+    let mut root_element_seen = false;
     let mut event_count = 0_usize;
     let mut depth = 0_usize;
     loop {
@@ -524,6 +525,19 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
             Ok(Event::Empty(_)) => depth == 0,
             _ => false,
         };
+        if is_root_element {
+            if root_element_seen {
+                return (
+                    viewbox,
+                    width,
+                    height,
+                    Some(external_refs),
+                    Some(false),
+                    Some("SVG refusé : plusieurs éléments racine XML.".to_string()),
+                );
+            }
+            root_element_seen = true;
+        }
         match event {
             Ok(Event::Start(element)) | Ok(Event::Empty(element)) => {
                 if is_root_element && element.name().as_ref() == b"svg" {
@@ -3731,6 +3745,31 @@ mod tests {
         assert_eq!(height, None);
         assert_eq!(valid, Some(false));
         assert!(warning.unwrap().contains("racine SVG absent"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_multiple_top_level_svg_document_elements() {
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-svg-multiple-roots-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("multiple.svg"),
+            r#"<html/><svg width="99" height="77"/>"#,
+        )
+        .unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, width, height, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("multiple.svg"), "svg");
+        assert_eq!(width, None);
+        assert_eq!(height, None);
+        assert_eq!(valid, Some(false));
+        assert!(warning.is_some());
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
