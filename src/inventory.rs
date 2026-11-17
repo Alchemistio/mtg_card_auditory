@@ -4537,7 +4537,10 @@ mod tests {
         let metadata = zip_metadata(&workspace, Path::new("sample.mse-set"), "mse-set");
         assert_eq!(metadata.mse_main_file_present, None);
         assert!(metadata.mse_header.is_none());
-        assert!(metadata.warning.as_deref().is_some_and(|warning| warning.contains("Table centrale ZIP ambiguë")));
+        assert!(metadata
+            .warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("Table centrale ZIP ambiguë")));
         let mut scan_budget = 1024;
         let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
             &workspace,
