@@ -3263,8 +3263,7 @@ mod tests {
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let error = open_file_nofollow(&workspace, Path::new("alias/sample.txt"))
-            .err()
-            .expect("symlinked parent component must be rejected");
+            .expect_err("symlinked parent component must be rejected");
         assert!(error.to_string().contains("sans suivi"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
@@ -3283,8 +3282,7 @@ mod tests {
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let error = open_file_nofollow(&workspace, Path::new("link.txt"))
-            .err()
-            .expect("final symlink component must be rejected");
+            .expect_err("final symlink component must be rejected");
         assert!(error.to_string().contains("sans suivi"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
@@ -3309,8 +3307,7 @@ mod tests {
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let error = open_file_nofollow(&workspace, Path::new("link.txt"))
-            .err()
-            .expect("final symlink component must be rejected");
+            .expect_err("final symlink component must be rejected");
         assert!(error.to_string().contains("sans suivi"));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
