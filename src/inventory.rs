@@ -292,16 +292,16 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
     raster_metadata_from_file(&mut file, family)
 }
 
-fn raster_metadata_from_file(
-    file: &mut cap_std::fs::File,
-    family: &str,
-) -> RasterMetadata {
+fn raster_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> RasterMetadata {
     if family != "raster" {
         return RasterMetadata::default();
     }
     if let Err(error) = file.seek(SeekFrom::Start(0)) {
         return RasterMetadata {
-            warning: Some(format!("Positionnement du lecteur image impossible : {}", error)),
+            warning: Some(format!(
+                "Positionnement du lecteur image impossible : {}",
+                error
+            )),
             ..RasterMetadata::default()
         };
     }
@@ -447,7 +447,10 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
             None,
             None,
             None,
-            Some(format!("Positionnement du lecteur SVG impossible : {}", error)),
+            Some(format!(
+                "Positionnement du lecteur SVG impossible : {}",
+                error
+            )),
         );
     }
     let bytes = match read_limited(&mut *file, MAX_SVG_BYTES) {
@@ -669,7 +672,10 @@ fn font_metadata_from_file(
         return (
             None,
             None,
-            Some(format!("Positionnement du lecteur de police impossible : {}", error)),
+            Some(format!(
+                "Positionnement du lecteur de police impossible : {}",
+                error
+            )),
         );
     }
     let data = match read_limited(&mut *file, MAX_FONT_BYTES) {
@@ -1131,10 +1137,7 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
     zip_metadata_from_file(&mut file, extension)
 }
 
-fn zip_metadata_from_file(
-    file: &mut cap_std::fs::File,
-    extension: &str,
-) -> ZipMetadata {
+fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipMetadata {
     let expected_main = mse_package_type(extension);
     if extension != "zip" && expected_main.is_none() {
         if extension == "7z" || extension == "rar" {
@@ -1174,7 +1177,10 @@ fn zip_metadata_from_file(
             None,
             None,
             None,
-            Some(format!("Positionnement du lecteur ZIP impossible : {}", error)),
+            Some(format!(
+                "Positionnement du lecteur ZIP impossible : {}",
+                error
+            )),
             None,
         );
     }
@@ -1782,7 +1788,10 @@ fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMe
                 None,
                 None,
                 None,
-                Some(format!("Ouverture du fichier principal MSE impossible : {}", error)),
+                Some(format!(
+                    "Ouverture du fichier principal MSE impossible : {}",
+                    error
+                )),
                 Some(true),
             )
         }
@@ -1812,7 +1821,10 @@ fn mse_folder_main_metadata_from_file(file: &mut cap_std::fs::File) -> ZipMetada
             None,
             None,
             None,
-            Some(format!("Positionnement du lecteur MSE impossible : {}", error)),
+            Some(format!(
+                "Positionnement du lecteur MSE impossible : {}",
+                error
+            )),
             Some(true),
         );
     }
