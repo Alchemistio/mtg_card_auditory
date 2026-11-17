@@ -1059,6 +1059,70 @@ struct MseZipResourceLimits {
     max_total_hash_bytes: u64,
 }
 
+fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
+    const MAX_EOCD_SEARCH_BYTES: u64 = 22 + u16::MAX as u64;
+    let file_len = file.seek(SeekFrom::End(0)).ok()?;
+    let tail_len = file_len.min(MAX_EOCD_SEARCH_BYTES) as usize;
+    if tail_len < 22 {
+        return None;
+    }
+    file.seek(SeekFrom::End(-(tail_len as i64))).ok()?;
+    let mut tail = vec![0_u8; tail_len];
+    file.read_exact(&mut tail).ok()?;
+    let eocd = (0..=tail.len() - 22)
+        .rev()
+        .find(|offset| &tail[*offset..*offset + 4] == b"PK\x05\x06")?;
+    let comment_len = u16::from_le_bytes(tail[eocd + 20..eocd + 22].try_into().ok()?) as usize;
+    if eocd + 22 + comment_len != tail.len() {
+        return None;
+    }
+    let disk_number = u16::from_le_bytes(tail[eocd + 4..eocd + 6].try_into().ok()?);
+    let central_disk = u16::from_le_bytes(tail[eocd + 6..eocd + 8].try_into().ok()?);
+    let entries_on_disk = u16::from_le_bytes(tail[eocd + 8..eocd + 10].try_into().ok()?);
+    let total_entries = u16::from_le_bytes(tail[eocd + 10..eocd + 12].try_into().ok()?);
+    if disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries {
+        return None;
+    }
+    if total_entries != u16::MAX {
+        file.seek(SeekFrom::Start(0)).ok()?;
+        return Some(total_entries as u64);
+    }
+
+    // ZIP64 locator (20 bytes) immediately precedes the classic EOCD.
+    let locator = eocd.checked_sub(20)?;
+    if &tail[locator..locator + 4] != b"PK\x06\x07" {
+        return None;
+    }
+    let zip64_disk = u32::from_le_bytes(tail[locator + 4..locator + 8].try_into().ok()?);
+    let zip64_offset = u64::from_le_bytes(tail[locator + 8..locator + 16].try_into().ok()?);
+    let total_disks = u32::from_le_bytes(tail[locator + 16..locator + 20].try_into().ok()?);
+    if zip64_disk != 0 || total_disks != 1 {
+        return None;
+    }
+    file.seek(SeekFrom::Start(zip64_offset)).ok()?;
+    let mut zip64_eocd = [0_u8; 56];
+    file.read_exact(&mut zip64_eocd).ok()?;
+    if &zip64_eocd[..4] != b"PK\x06\x06" {
+        return None;
+    }
+    let zip64_disk_number =
+        u32::from_le_bytes(zip64_eocd[16..20].try_into().ok()?);
+    let zip64_central_disk =
+        u32::from_le_bytes(zip64_eocd[20..24].try_into().ok()?);
+    let zip64_entries_on_disk =
+        u64::from_le_bytes(zip64_eocd[24..32].try_into().ok()?);
+    let zip64_total_entries =
+        u64::from_le_bytes(zip64_eocd[32..40].try_into().ok()?);
+    if zip64_disk_number != 0
+        || zip64_central_disk != 0
+        || zip64_entries_on_disk != zip64_total_entries
+    {
+        return None;
+    }
+    file.seek(SeekFrom::Start(0)).ok()?;
+    Some(zip64_total_entries)
+}
+
 fn mse_zip_resources_with_limits_and_cancel(
     workspace: &CapabilityDir,
     relative: &Path,
@@ -1071,6 +1135,10 @@ fn mse_zip_resources_with_limits_and_cancel(
         Ok(file) => file,
         Err(_) => return (Vec::new(), true),
     };
+    let central_entry_count = zip_central_directory_entry_count(&mut file);
+    if file.seek(SeekFrom::Start(0)).is_err() {
+        return (Vec::new(), true);
+    }
     let mut archive = match zip::ZipArchive::new(file) {
         Ok(archive) => archive,
         Err(_) => return (Vec::new(), true),
@@ -1081,8 +1149,10 @@ fn mse_zip_resources_with_limits_and_cancel(
 
     let mut resources = Vec::<MseResourceRecord>::new();
     let mut seen_paths = HashMap::<String, usize>::new();
+    let central_directory_has_hidden_entries =
+        central_entry_count.is_some_and(|count| count != archive.len() as u64);
     let mut hashed_bytes = 0_u64;
-    let mut truncated = false;
+    let mut truncated = central_directory_has_hidden_entries;
     for index in 0..archive.len() {
         if cancelled.load(Ordering::Relaxed) {
             truncated = true;
@@ -1108,6 +1178,15 @@ fn mse_zip_resources_with_limits_and_cancel(
             break;
         }
         let size = entry.size();
+        if central_directory_has_hidden_entries {
+            resources.push(MseResourceRecord {
+                relative_path: name,
+                size_bytes: size,
+                sha256: None,
+                hash_status: "ambiguous-path".to_string(),
+            });
+            continue;
+        }
         if let Some(previous_index) = seen_paths.get(&name).copied() {
             if let Some(previous) = resources.get_mut(previous_index) {
                 previous.sha256 = None;
@@ -4377,10 +4456,12 @@ mod tests {
         }
         std::fs::write(&archive_path, archive_bytes).unwrap();
         let archive = zip::ZipArchive::new(File::open(&archive_path).unwrap()).unwrap();
-        assert_eq!(archive.len(), 3);
+        assert_eq!(archive.len(), 2);
         drop(archive);
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut archive_file = open_file_nofollow(&workspace, Path::new("sample.mse-set")).unwrap();
+        assert_eq!(zip_central_directory_entry_count(&mut archive_file), Some(3));
         let mut scan_budget = 1024;
         let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
             &workspace,
@@ -4395,7 +4476,7 @@ mod tests {
             &AtomicBool::new(false),
         );
         assert!(truncated);
-        assert_eq!(resources.len(), 2);
+        assert_eq!(resources.len(), 1);
         assert!(resources.iter().all(|resource| {
             resource.relative_path == "cards/first.bin"
                 && resource.hash_status == "ambiguous-path"
