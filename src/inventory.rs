@@ -586,7 +586,7 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
                     {
                         height = parse_svg_dimension(&value);
                     }
-                    if key == b"viewBox" && viewbox.is_none() {
+                    if is_root_element && key == b"viewBox" && viewbox.is_none() {
                         viewbox = Some(value.clone());
                     }
                     if key.ends_with(b"href") && is_external_reference(&value) {
@@ -3724,8 +3724,9 @@ mod tests {
         .unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let (_, width, height, _, valid, warning) =
+        let (viewbox, width, height, _, valid, warning) =
             svg_metadata(&workspace, Path::new("nested.svg"), "svg");
+        assert_eq!(viewbox, None);
         assert_eq!(width, None);
         assert_eq!(height, None);
         assert_eq!(valid, Some(false));
