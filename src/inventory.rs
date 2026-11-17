@@ -3323,8 +3323,10 @@ mod tests {
     fn nofollow_file_open_rejects_symlinked_parent_when_supported() {
         use std::os::windows::fs::symlink_dir;
 
-        let root =
-            std::env::temp_dir().join(format!("mtg-auditor-nofollow-parent-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-nofollow-parent-{}",
+            std::process::id()
+        ));
         let real = root.join("real");
         let alias = root.join("alias");
         std::fs::create_dir_all(&real).unwrap();
