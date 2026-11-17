@@ -280,11 +280,16 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
     if family != "raster" {
         return RasterMetadata::default();
     }
-    let reader = match open_file_nofollow(workspace, relative)
-        .map(BufReader::new)
-        .map(ImageReader::new)
-        .and_then(|reader| reader.with_guessed_format())
-    {
+    let file = match open_file_nofollow(workspace, relative) {
+        Ok(file) => file,
+        Err(error) => {
+            return RasterMetadata {
+                warning: Some(format!("Détection du format image impossible : {}", error)),
+                ..RasterMetadata::default()
+            }
+        }
+    };
+    let reader = match ImageReader::new(BufReader::new(file)).with_guessed_format() {
         Ok(reader) => reader,
         Err(error) => {
             return RasterMetadata {
