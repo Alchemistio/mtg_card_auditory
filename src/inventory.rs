@@ -196,9 +196,22 @@ fn open_file_nofollow(workspace: &CapabilityDir, relative: &Path) -> Result<cap_
     Ok(file)
 }
 
-fn collect_files_capability(
-    workspace: &CapabilityDir,
-    directory: &Path,
+fn open_child_directory_nofollow(
+    parent: &CapabilityDir,
+    name: &std::ffi::OsStr,
+    relative: &Path,
+) -> Result<CapabilityDir> {
+    parent.open_dir_nofollow(name).with_context(|| {
+        format!(
+            "Ouverture de sous-répertoire sans suivi impossible : {}",
+            relative.display()
+        )
+    })
+}
+
+fn collect_files_from_open_directory(
+    directory_handle: &CapabilityDir,
+    relative_directory: &Path,
     depth: usize,
     paths: &mut Vec<PathBuf>,
     cancelled: &AtomicBool,
@@ -209,10 +222,10 @@ fn collect_files_capability(
     if depth >= 128 {
         return Ok(());
     }
-    for entry in workspace.read_dir(directory).with_context(|| {
+    for entry in directory_handle.read_dir(".").with_context(|| {
         format!(
             "Énumération capability-based impossible : {}",
-            directory.display()
+            relative_directory.display()
         )
     })? {
         if cancelled.load(Ordering::Relaxed) {
@@ -223,15 +236,40 @@ fn collect_files_capability(
         if name.to_string_lossy().starts_with('.') {
             continue;
         }
-        let relative = directory.join(&name);
+        let relative = relative_directory.join(&name);
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
-            collect_files_capability(workspace, &relative, depth + 1, paths, cancelled)?;
+            // L'entrée peut être remplacée après file_type(). Ouvrir depuis le
+            // handle parent, sans suivi, puis énumérer le handle enfant épinglé.
+            let child = open_child_directory_nofollow(directory_handle, &name, &relative)?;
+            collect_files_from_open_directory(&child, &relative, depth + 1, paths, cancelled)?;
         } else if file_type.is_file() {
             paths.push(relative);
         }
     }
     Ok(())
+}
+
+fn collect_files_capability(
+    workspace: &CapabilityDir,
+    directory: &Path,
+    depth: usize,
+    paths: &mut Vec<PathBuf>,
+    cancelled: &AtomicBool,
+) -> Result<()> {
+    let directory_handle = if directory == Path::new(".") {
+        workspace.try_clone()?
+    } else {
+        let mut current = workspace.try_clone()?;
+        for component in directory.components() {
+            match component {
+                Component::Normal(name) => current = open_child_directory_nofollow(&current, name, directory)?,
+                _ => anyhow::bail!("Chemin de répertoire non canonique : {}", directory.display()),
+            }
+        }
+        current
+    };
+    collect_files_from_open_directory(&directory_handle, directory, depth, paths, cancelled)
 }
 
 fn classify_notice(file_name: &str) -> Option<String> {
@@ -3622,6 +3660,60 @@ mod tests {
         assert_eq!(inventory.files_scanned, 0);
         assert!(inventory.assets.is_empty());
         assert_eq!(std::fs::read(&target).unwrap(), b"outside");
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_scan_rejects_directory_replaced_by_symlink_before_recursion() {
+        use std::os::unix::fs::symlink;
+        let base = std::env::temp_dir().join(format!("mtg-auditor-directory-symlink-race-{}", std::process::id()));
+        let root = base.join("root");
+        let outside = base.join("outside");
+        let child_path = root.join("child");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&child_path).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let secret = outside.join("secret.txt");
+        std::fs::write(&secret, b"outside secret").unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        // Simule une entrée observée comme répertoire puis remplacée avant ouverture.
+        std::fs::remove_dir(&child_path).unwrap();
+        symlink(&outside, &child_path).unwrap();
+        let error = open_child_directory_nofollow(&workspace, std::ffi::OsStr::new("child"), Path::new("child"))
+            .expect_err("a replaced directory symlink must not be followed");
+        assert!(error.to_string().contains("sans suivi"));
+        assert_eq!(std::fs::read(&secret).unwrap(), b"outside secret");
+        drop(workspace);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn local_scan_rejects_directory_replaced_by_symlink_when_supported() {
+        use std::os::windows::fs::symlink_dir;
+        let base = std::env::temp_dir().join(format!("mtg-auditor-directory-symlink-race-{}", std::process::id()));
+        let root = base.join("root");
+        let outside = base.join("outside");
+        let child_path = root.join("child");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&child_path).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let secret = outside.join("secret.txt");
+        std::fs::write(&secret, b"outside secret").unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        std::fs::remove_dir(&child_path).unwrap();
+        if let Err(error) = symlink_dir(&outside, &child_path) {
+            eprintln!("SKIP: création de lien symbolique de répertoire Windows refusée: {error}");
+            drop(workspace);
+            std::fs::remove_dir_all(base).unwrap();
+            return;
+        }
+        let error = open_child_directory_nofollow(&workspace, std::ffi::OsStr::new("child"), Path::new("child"))
+            .expect_err("a replaced directory symlink must not be followed");
+        assert!(error.to_string().contains("sans suivi"));
+        assert_eq!(std::fs::read(&secret).unwrap(), b"outside secret");
+        drop(workspace);
         std::fs::remove_dir_all(base).unwrap();
     }
 
