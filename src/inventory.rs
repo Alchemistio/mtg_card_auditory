@@ -1870,6 +1870,17 @@ fn sha256_reader_with_prefix(
     Ok((format!("{:x}", hasher.finalize()), prefix))
 }
 
+fn verify_reader_sha256_unchanged(
+    file: &mut cap_std::fs::File,
+    expected_sha256: &str,
+) -> Result<()> {
+    let (actual_sha256, _) = sha256_reader_with_prefix(file, 0)?;
+    if actual_sha256 != expected_sha256 {
+        anyhow::bail!("Contenu du fichier modifié pendant l'analyse (SHA-256 différent).");
+    }
+    Ok(())
+}
+
 fn sha256_file_capability(workspace: &CapabilityDir, relative: &Path) -> Result<String> {
     sha256_file_capability_with_prefix(workspace, relative, 0).map(|(hash, _)| hash)
 }
@@ -2020,6 +2031,12 @@ fn analyze_file(
     let mse_dependencies = mse_header
         .as_ref()
         .map_or_else(Vec::new, |header| header.dependencies.clone());
+
+    // Re-hacher le même handle après les analyseurs : une mutation de contenu
+    // conservant taille et horodatage ne doit pas valider un inventaire incohérent.
+    verify_reader_sha256_unchanged(&mut source_file, &sha256).with_context(|| {
+        format!("Vérification finale du contenu impossible : {}", relative.display())
+    })?;
 
     // Tous les analyseurs d'un asset réutilisent le même handle ouvert sans suivi.
     // Contrôler le handle et le chemin après les lectures pour détecter les changements
@@ -3092,6 +3109,41 @@ mod raster_metadata_tests {
             "raster metadata must reject a final symlink: {:?}",
             metadata.warning
         );
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detects_same_size_content_mutation_even_when_mtime_is_restored() {
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-content-mutation-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("sample.bin");
+        std::fs::write(&path, b"original").unwrap();
+        let original_modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let mut file = open_file_nofollow(&workspace, Path::new("sample.bin")).unwrap();
+        let (initial_sha256, _) = sha256_reader_with_prefix(&mut file, 0).unwrap();
+        let opened_metadata = file.metadata().unwrap();
+
+        std::fs::write(&path, b"modified").unwrap();
+        std::fs::File::open(&path)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(original_modified))
+            .unwrap();
+        let current_metadata = workspace.symlink_metadata(Path::new("sample.bin")).unwrap();
+        assert_eq!(opened_metadata.len(), current_metadata.len());
+        assert_eq!(opened_metadata.modified().unwrap(), current_metadata.modified().unwrap());
+
+        let error = verify_reader_sha256_unchanged(&mut file, &initial_sha256)
+            .expect_err("same-size content mutation must invalidate the analysis");
+        assert!(error.to_string().contains("SHA-256 différent"));
+
+        drop(file);
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
