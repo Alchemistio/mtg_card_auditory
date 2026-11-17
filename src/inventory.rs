@@ -519,9 +519,14 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
                 );
             }
         }
+        let is_root_element = match &event {
+            Ok(Event::Start(_)) => depth == 1,
+            Ok(Event::Empty(_)) => depth == 0,
+            _ => false,
+        };
         match event {
             Ok(Event::Start(element)) | Ok(Event::Empty(element)) => {
-                if element.name().as_ref() == b"svg" {
+                if is_root_element && element.name().as_ref() == b"svg" {
                     found_svg_root = true;
                 }
                 let mut attribute_count = 0_usize;
@@ -567,10 +572,18 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
                             )
                         }
                     };
-                    if element.name().as_ref() == b"svg" && key == b"width" && width.is_none() {
+                    if is_root_element
+                        && element.name().as_ref() == b"svg"
+                        && key == b"width"
+                        && width.is_none()
+                    {
                         width = parse_svg_dimension(&value);
                     }
-                    if element.name().as_ref() == b"svg" && key == b"height" && height.is_none() {
+                    if is_root_element
+                        && element.name().as_ref() == b"svg"
+                        && key == b"height"
+                        && height.is_none()
+                    {
                         height = parse_svg_dimension(&value);
                     }
                     if key == b"viewBox" && viewbox.is_none() {
@@ -3698,6 +3711,29 @@ mod tests {
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
     }
+    #[test]
+    fn rejects_nested_svg_when_document_root_is_not_svg() {
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-svg-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("nested.svg"),
+            r#"<html><svg width="99" height="77"/></html>"#,
+        )
+        .unwrap();
+
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let (_, width, height, _, valid, warning) =
+            svg_metadata(&workspace, Path::new("nested.svg"), "svg");
+        assert_eq!(width, None);
+        assert_eq!(height, None);
+        assert_eq!(valid, Some(false));
+        assert!(warning.unwrap().contains("racine SVG absent"));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn detects_quoted_css_and_relative_svg_references() {
         let root = std::env::temp_dir().join(format!("mtg-auditor-svg-css-{}", std::process::id()));
