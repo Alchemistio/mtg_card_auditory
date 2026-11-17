@@ -263,8 +263,13 @@ fn collect_files_capability(
         let mut current = workspace.try_clone()?;
         for component in directory.components() {
             match component {
-                Component::Normal(name) => current = open_child_directory_nofollow(&current, name, directory)?,
-                _ => anyhow::bail!("Chemin de répertoire non canonique : {}", directory.display()),
+                Component::Normal(name) => {
+                    current = open_child_directory_nofollow(&current, name, directory)?
+                }
+                _ => anyhow::bail!(
+                    "Chemin de répertoire non canonique : {}",
+                    directory.display()
+                ),
             }
         }
         current
@@ -3667,7 +3672,10 @@ mod tests {
     #[test]
     fn local_scan_rejects_directory_replaced_by_symlink_before_recursion() {
         use std::os::unix::fs::symlink;
-        let base = std::env::temp_dir().join(format!("mtg-auditor-directory-symlink-race-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-directory-symlink-race-{}",
+            std::process::id()
+        ));
         let root = base.join("root");
         let outside = base.join("outside");
         let child_path = root.join("child");
@@ -3680,8 +3688,12 @@ mod tests {
         // Simule une entrée observée comme répertoire puis remplacée avant ouverture.
         std::fs::remove_dir(&child_path).unwrap();
         symlink(&outside, &child_path).unwrap();
-        let error = open_child_directory_nofollow(&workspace, std::ffi::OsStr::new("child"), Path::new("child"))
-            .expect_err("a replaced directory symlink must not be followed");
+        let error = open_child_directory_nofollow(
+            &workspace,
+            std::ffi::OsStr::new("child"),
+            Path::new("child"),
+        )
+        .expect_err("a replaced directory symlink must not be followed");
         assert!(error.to_string().contains("sans suivi"));
         assert_eq!(std::fs::read(&secret).unwrap(), b"outside secret");
         drop(workspace);
