@@ -4350,16 +4350,41 @@ mod tests {
             .start_file("set", zip::write::SimpleFileOptions::default())
             .unwrap();
         writer.write_all(b"mse version: 0.3.4\n").unwrap();
-        for content in [b"first resource".as_slice(), b"second resource".as_slice()] {
-            writer
-                .start_file(
-                    "cards/duplicate.bin",
-                    zip::write::SimpleFileOptions::default(),
-                )
-                .unwrap();
-            writer.write_all(content).unwrap();
-        }
+        writer
+            .start_file(
+                "cards/first.bin",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        writer.write_all(b"first resource").unwrap();
+        writer
+            .start_file(
+                "cards/other.bin",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        writer.write_all(b"second resource").unwrap();
         writer.finish().unwrap();
+
+        // Le writer ZIP refuse les noms dupliqués ; modifier les deux occurrences
+        // (en-tête local et table centrale) produit une fixture ZIP valide mais ambiguë.
+        let mut archive_bytes = std::fs::read(&archive_path).unwrap();
+        let original_name = b"cards/other.bin";
+        let duplicate_name = b"cards/first.bin";
+        assert_eq!(original_name.len(), duplicate_name.len());
+        let offsets: Vec<usize> = archive_bytes
+            .windows(original_name.len())
+            .enumerate()
+            .filter_map(|(offset, window)| (window == original_name).then_some(offset))
+            .collect();
+        assert_eq!(offsets.len(), 2);
+        for offset in offsets {
+            archive_bytes[offset..offset + duplicate_name.len()].copy_from_slice(duplicate_name);
+        }
+        std::fs::write(&archive_path, archive_bytes).unwrap();
+        let archive = zip::ZipArchive::new(File::open(&archive_path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 3);
+        drop(archive);
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let mut scan_budget = 1024;
@@ -4378,7 +4403,7 @@ mod tests {
         assert!(truncated);
         assert_eq!(resources.len(), 2);
         assert!(resources.iter().all(|resource| {
-            resource.relative_path == "cards/duplicate.bin"
+            resource.relative_path == "cards/first.bin"
                 && resource.hash_status == "ambiguous-path"
                 && resource.sha256.is_none()
         }));
