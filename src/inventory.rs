@@ -276,7 +276,7 @@ struct RasterMetadata {
     warning: Option<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> RasterMetadata {
     if family != "raster" {
         return RasterMetadata::default();
