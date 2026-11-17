@@ -1079,7 +1079,7 @@ fn mse_zip_resources_with_limits_and_cancel(
         return (Vec::new(), true);
     }
 
-    let mut resources = Vec::new();
+    let mut resources = Vec::<MseResourceRecord>::new();
     let mut seen_paths = HashMap::<String, usize>::new();
     let mut hashed_bytes = 0_u64;
     let mut truncated = false;
