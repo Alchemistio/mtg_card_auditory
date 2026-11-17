@@ -1105,14 +1105,10 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
     if &zip64_eocd[..4] != b"PK\x06\x06" {
         return None;
     }
-    let zip64_disk_number =
-        u32::from_le_bytes(zip64_eocd[16..20].try_into().ok()?);
-    let zip64_central_disk =
-        u32::from_le_bytes(zip64_eocd[20..24].try_into().ok()?);
-    let zip64_entries_on_disk =
-        u64::from_le_bytes(zip64_eocd[24..32].try_into().ok()?);
-    let zip64_total_entries =
-        u64::from_le_bytes(zip64_eocd[32..40].try_into().ok()?);
+    let zip64_disk_number = u32::from_le_bytes(zip64_eocd[16..20].try_into().ok()?);
+    let zip64_central_disk = u32::from_le_bytes(zip64_eocd[20..24].try_into().ok()?);
+    let zip64_entries_on_disk = u64::from_le_bytes(zip64_eocd[24..32].try_into().ok()?);
+    let zip64_total_entries = u64::from_le_bytes(zip64_eocd[32..40].try_into().ok()?);
     if zip64_disk_number != 0
         || zip64_central_disk != 0
         || zip64_entries_on_disk != zip64_total_entries
@@ -4461,7 +4457,10 @@ mod tests {
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let mut archive_file = open_file_nofollow(&workspace, Path::new("sample.mse-set")).unwrap();
-        assert_eq!(zip_central_directory_entry_count(&mut archive_file), Some(3));
+        assert_eq!(
+            zip_central_directory_entry_count(&mut archive_file),
+            Some(3)
+        );
         let mut scan_budget = 1024;
         let (resources, truncated) = mse_zip_resources_with_limits_and_cancel(
             &workspace,
