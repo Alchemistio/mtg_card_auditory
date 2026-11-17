@@ -276,6 +276,7 @@ struct RasterMetadata {
     warning: Option<String>,
 }
 
+#[cfg(test)]
 fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> RasterMetadata {
     if family != "raster" {
         return RasterMetadata::default();
@@ -415,6 +416,7 @@ fn parse_svg_dimension(value: &str) -> Option<String> {
     }
     Some(value.to_string())
 }
+#[cfg(test)]
 fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> SvgMetadata {
     if family != "svg" {
         return (None, None, None, None, None, None);
@@ -620,27 +622,6 @@ fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMeta
         Some(true),
         None,
     )
-}
-
-fn font_metadata(
-    workspace: &CapabilityDir,
-    relative: &Path,
-    family: &str,
-) -> (Option<String>, Option<String>, Option<String>) {
-    if family != "font" {
-        return (None, None, None);
-    }
-    let mut file = match open_file_nofollow(workspace, relative) {
-        Ok(file) => file,
-        Err(error) => {
-            return (
-                None,
-                None,
-                Some(format!("Ouverture de police impossible : {}", error)),
-            )
-        }
-    };
-    font_metadata_from_file(&mut file, family)
 }
 
 fn font_metadata_from_file(
@@ -1108,6 +1089,7 @@ fn mse_zip_resources_with_limits_and_cancel(
     (resources, truncated)
 }
 
+#[cfg(test)]
 fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> ZipMetadata {
     let expected_main = mse_package_type(extension);
     if extension != "zip" && expected_main.is_none() {
@@ -1778,25 +1760,6 @@ fn mse_folder_package_extension(relative: &Path) -> Option<String> {
         .to_str()?
         .to_ascii_lowercase();
     mse_package_type(&extension).map(|_| extension)
-}
-
-fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMetadata {
-    let mut file = match open_file_nofollow(workspace, relative) {
-        Ok(file) => file,
-        Err(error) => {
-            return ZipMetadata::new(
-                None,
-                None,
-                None,
-                Some(format!(
-                    "Ouverture du fichier principal MSE impossible : {}",
-                    error
-                )),
-                Some(true),
-            )
-        }
-    };
-    mse_folder_main_metadata_from_file(&mut file)
 }
 
 fn mse_folder_main_metadata_from_file(file: &mut cap_std::fs::File) -> ZipMetadata {
