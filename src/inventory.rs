@@ -4351,17 +4351,11 @@ mod tests {
             .unwrap();
         writer.write_all(b"mse version: 0.3.4\n").unwrap();
         writer
-            .start_file(
-                "cards/first.bin",
-                zip::write::SimpleFileOptions::default(),
-            )
+            .start_file("cards/first.bin", zip::write::SimpleFileOptions::default())
             .unwrap();
         writer.write_all(b"first resource").unwrap();
         writer
-            .start_file(
-                "cards/other.bin",
-                zip::write::SimpleFileOptions::default(),
-            )
+            .start_file("cards/other.bin", zip::write::SimpleFileOptions::default())
             .unwrap();
         writer.write_all(b"second resource").unwrap();
         writer.finish().unwrap();
