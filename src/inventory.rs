@@ -3704,7 +3704,10 @@ mod tests {
     #[test]
     fn local_scan_rejects_directory_replaced_by_symlink_when_supported() {
         use std::os::windows::fs::symlink_dir;
-        let base = std::env::temp_dir().join(format!("mtg-auditor-directory-symlink-race-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-directory-symlink-race-{}",
+            std::process::id()
+        ));
         let root = base.join("root");
         let outside = base.join("outside");
         let child_path = root.join("child");
@@ -3721,8 +3724,12 @@ mod tests {
             std::fs::remove_dir_all(base).unwrap();
             return;
         }
-        let error = open_child_directory_nofollow(&workspace, std::ffi::OsStr::new("child"), Path::new("child"))
-            .expect_err("a replaced directory symlink must not be followed");
+        let error = open_child_directory_nofollow(
+            &workspace,
+            std::ffi::OsStr::new("child"),
+            Path::new("child"),
+        )
+        .expect_err("a replaced directory symlink must not be followed");
         assert!(error.to_string().contains("sans suivi"));
         assert_eq!(std::fs::read(&secret).unwrap(), b"outside secret");
         drop(workspace);
