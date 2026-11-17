@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
-    io::{BufReader, Read, Write},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     time::UNIX_EPOCH,
@@ -280,7 +280,7 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
     if family != "raster" {
         return RasterMetadata::default();
     }
-    let file = match open_file_nofollow(workspace, relative) {
+    let mut file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return RasterMetadata {
@@ -289,7 +289,23 @@ fn raster_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> 
             }
         }
     };
-    let reader = match ImageReader::new(BufReader::new(file)).with_guessed_format() {
+    raster_metadata_from_file(&mut file, family)
+}
+
+fn raster_metadata_from_file(
+    file: &mut cap_std::fs::File,
+    family: &str,
+) -> RasterMetadata {
+    if family != "raster" {
+        return RasterMetadata::default();
+    }
+    if let Err(error) = file.seek(SeekFrom::Start(0)) {
+        return RasterMetadata {
+            warning: Some(format!("Positionnement du lecteur image impossible : {}", error)),
+            ..RasterMetadata::default()
+        };
+    }
+    let reader = match ImageReader::new(BufReader::new(&mut *file)).with_guessed_format() {
         Ok(reader) => reader,
         Err(error) => {
             return RasterMetadata {
@@ -403,8 +419,7 @@ fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> Svg
     if family != "svg" {
         return (None, None, None, None, None, None);
     }
-    const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
-    let file = match open_file_nofollow(workspace, relative) {
+    let mut file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return (
@@ -417,7 +432,25 @@ fn svg_metadata(workspace: &CapabilityDir, relative: &Path, family: &str) -> Svg
             )
         }
     };
-    let bytes = match read_limited(file, MAX_SVG_BYTES) {
+    svg_metadata_from_file(&mut file, family)
+}
+
+fn svg_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> SvgMetadata {
+    if family != "svg" {
+        return (None, None, None, None, None, None);
+    }
+    const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
+    if let Err(error) = file.seek(SeekFrom::Start(0)) {
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(format!("Positionnement du lecteur SVG impossible : {}", error)),
+        );
+    }
+    let bytes = match read_limited(&mut *file, MAX_SVG_BYTES) {
         Ok(bytes) => bytes,
         Err(error) => {
             return (
@@ -594,25 +627,7 @@ fn font_metadata(
     if family != "font" {
         return (None, None, None);
     }
-    let size = match workspace.metadata(relative) {
-        Ok(metadata) => metadata.len(),
-        Err(error) => {
-            return (
-                None,
-                None,
-                Some(format!("Métadonnées de police indisponibles : {}", error)),
-            )
-        }
-    };
-    if size > 64 * 1024 * 1024 {
-        return (
-            None,
-            None,
-            Some("Police ignorée : taille supérieure à 64 Mio.".to_string()),
-        );
-    }
-    const MAX_FONT_BYTES: u64 = 64 * 1024 * 1024;
-    let file = match open_file_nofollow(workspace, relative) {
+    let mut file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(error) => {
             return (
@@ -622,7 +637,42 @@ fn font_metadata(
             )
         }
     };
-    let data = match read_limited(file, MAX_FONT_BYTES) {
+    font_metadata_from_file(&mut file, family)
+}
+
+fn font_metadata_from_file(
+    file: &mut cap_std::fs::File,
+    family: &str,
+) -> (Option<String>, Option<String>, Option<String>) {
+    if family != "font" {
+        return (None, None, None);
+    }
+    const MAX_FONT_BYTES: u64 = 64 * 1024 * 1024;
+    let size = match file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(error) => {
+            return (
+                None,
+                None,
+                Some(format!("Métadonnées de police indisponibles : {}", error)),
+            )
+        }
+    };
+    if size > MAX_FONT_BYTES {
+        return (
+            None,
+            None,
+            Some("Police ignorée : taille supérieure à 64 Mio.".to_string()),
+        );
+    }
+    if let Err(error) = file.seek(SeekFrom::Start(0)) {
+        return (
+            None,
+            None,
+            Some(format!("Positionnement du lecteur de police impossible : {}", error)),
+        );
+    }
+    let data = match read_limited(&mut *file, MAX_FONT_BYTES) {
         Ok(data) => data,
         Err(error) => {
             return (
@@ -1066,7 +1116,39 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
         }
         return ZipMetadata::default();
     }
-    let archive_size = match workspace.metadata(relative) {
+    let mut file = match open_file_nofollow(workspace, relative) {
+        Ok(file) => file,
+        Err(error) => {
+            return ZipMetadata::new(
+                None,
+                None,
+                None,
+                Some(format!("Ouverture ZIP impossible : {}", error)),
+                None,
+            )
+        }
+    };
+    zip_metadata_from_file(&mut file, extension)
+}
+
+fn zip_metadata_from_file(
+    file: &mut cap_std::fs::File,
+    extension: &str,
+) -> ZipMetadata {
+    let expected_main = mse_package_type(extension);
+    if extension != "zip" && expected_main.is_none() {
+        if extension == "7z" || extension == "rar" {
+            return ZipMetadata::new(
+                None,
+                None,
+                None,
+                Some("Inspection de cette archive non prise en charge pour le moment.".to_string()),
+                None,
+            );
+        }
+        return ZipMetadata::default();
+    }
+    let archive_size = match file.metadata() {
         Ok(metadata) => metadata.len(),
         Err(error) => {
             return ZipMetadata::new(
@@ -1087,19 +1169,16 @@ fn zip_metadata(workspace: &CapabilityDir, relative: &Path, extension: &str) -> 
             None,
         );
     }
-    let file = match open_file_nofollow(workspace, relative) {
-        Ok(file) => file,
-        Err(error) => {
-            return ZipMetadata::new(
-                None,
-                None,
-                None,
-                Some(format!("Ouverture ZIP impossible : {}", error)),
-                None,
-            )
-        }
-    };
-    let mut archive = match zip::ZipArchive::new(file) {
+    if let Err(error) = file.seek(SeekFrom::Start(0)) {
+        return ZipMetadata::new(
+            None,
+            None,
+            None,
+            Some(format!("Positionnement du lecteur ZIP impossible : {}", error)),
+            None,
+        );
+    }
+    let mut archive = match zip::ZipArchive::new(&mut *file) {
         Ok(archive) => archive,
         Err(error) => {
             return ZipMetadata::new(
@@ -1696,8 +1775,24 @@ fn mse_folder_package_extension(relative: &Path) -> Option<String> {
 }
 
 fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMetadata {
+    let mut file = match open_file_nofollow(workspace, relative) {
+        Ok(file) => file,
+        Err(error) => {
+            return ZipMetadata::new(
+                None,
+                None,
+                None,
+                Some(format!("Ouverture du fichier principal MSE impossible : {}", error)),
+                Some(true),
+            )
+        }
+    };
+    mse_folder_main_metadata_from_file(&mut file)
+}
+
+fn mse_folder_main_metadata_from_file(file: &mut cap_std::fs::File) -> ZipMetadata {
     const MAX_MSE_HEADER_BYTES: u64 = 1024 * 1024;
-    let size = match workspace.metadata(relative) {
+    let size = match file.metadata() {
         Ok(metadata) => metadata.len(),
         Err(error) => {
             return ZipMetadata::new(
@@ -1712,24 +1807,18 @@ fn mse_folder_main_metadata(workspace: &CapabilityDir, relative: &Path) -> ZipMe
             )
         }
     };
-    let file = match open_file_nofollow(workspace, relative) {
-        Ok(file) => file,
-        Err(error) => {
-            return ZipMetadata::new(
-                None,
-                None,
-                None,
-                Some(format!(
-                    "Ouverture du fichier principal MSE impossible : {}",
-                    error
-                )),
-                Some(true),
-            )
-        }
-    };
+    if let Err(error) = file.seek(SeekFrom::Start(0)) {
+        return ZipMetadata::new(
+            None,
+            None,
+            None,
+            Some(format!("Positionnement du lecteur MSE impossible : {}", error)),
+            Some(true),
+        );
+    }
     let mut warning = None;
     let mut header = None;
-    match read_prefix(file, MAX_MSE_HEADER_BYTES) {
+    match read_prefix(&mut *file, MAX_MSE_HEADER_BYTES) {
         Ok(mut bytes) => {
             let truncated = size > MAX_MSE_HEADER_BYTES;
             if truncated {
@@ -1775,14 +1864,22 @@ fn sha256_file_capability_with_prefix(
     relative: &Path,
     prefix_limit: usize,
 ) -> Result<(String, Vec<u8>)> {
-    let file = open_file_nofollow(workspace, relative).with_context(|| {
+    let mut file = open_file_nofollow(workspace, relative).with_context(|| {
         format!(
             "Ouverture capability-based impossible : {}",
             relative.display()
         )
     })?;
+    sha256_reader_with_prefix(&mut file, prefix_limit)
+}
+
+fn sha256_reader_with_prefix(
+    file: &mut cap_std::fs::File,
+    prefix_limit: usize,
+) -> Result<(String, Vec<u8>)> {
+    file.seek(SeekFrom::Start(0))?;
     let prefix_limit = prefix_limit.min(MAX_NOTICE_EXCERPT_BYTES);
-    let mut reader = BufReader::with_capacity(1024 * 1024, file);
+    let mut reader = BufReader::with_capacity(1024 * 1024, &mut *file);
     let mut hasher = Sha256::new();
     let mut prefix = Vec::with_capacity(prefix_limit);
     let mut buffer = [0_u8; 1024 * 1024];
@@ -1842,6 +1939,14 @@ fn analyze_file(
             relative.display()
         );
     }
+    let mut source_file = open_file_nofollow(workspace, relative)?;
+    let opened_metadata = source_file.metadata()?;
+    if !file_metadata_is_stable(&metadata, &opened_metadata) {
+        anyhow::bail!(
+            "Source remplacée entre son contrôle et son ouverture : {}",
+            relative.display()
+        );
+    }
     let relative_path = relative.to_string_lossy().replace('\\', "/");
     let file_name = path
         .file_name()
@@ -1853,11 +1958,10 @@ fn analyze_file(
         .unwrap_or_default()
         .to_string_lossy()
         .to_ascii_lowercase();
-    let size_bytes = metadata.len();
+    let size_bytes = opened_metadata.len();
     let notice_kind = classify_notice(&file_name);
-    let (sha256, notice_prefix) = sha256_file_capability_with_prefix(
-        workspace,
-        relative,
+    let (sha256, notice_prefix) = sha256_reader_with_prefix(
+        &mut source_file,
         if notice_kind.is_some() {
             MAX_NOTICE_EXCERPT_BYTES
         } else {
@@ -1868,13 +1972,13 @@ fn analyze_file(
         .as_ref()
         .and_then(|_| notice_excerpt_from_prefix(&notice_prefix));
     let notice_excerpt_truncated = notice_kind.is_some() && size_bytes > notice_prefix.len() as u64;
-    let modified_unix_seconds = metadata
+    let modified_unix_seconds = opened_metadata
         .modified()
         .ok()
         .and_then(|time| time.into_std().duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
     let detected_family = classify_extension(&extension);
-    let raster = raster_metadata(workspace, relative, detected_family);
+    let raster = raster_metadata_from_file(&mut source_file, detected_family);
     let raster_format = raster.format;
     let raster_width = raster.width;
     let raster_height = raster.height;
@@ -1882,17 +1986,17 @@ fn analyze_file(
     let raster_has_alpha = raster.has_alpha;
     let raster_orientation = raster.orientation;
     let (svg_viewbox, svg_width, svg_height, svg_has_external_refs, svg_xml_valid, svg_warning) =
-        svg_metadata(workspace, relative, detected_family);
+        svg_metadata_from_file(&mut source_file, detected_family);
     let (font_family, font_subfamily, font_warning) =
-        font_metadata(workspace, relative, detected_family);
-    let mut package_metadata = zip_metadata(workspace, relative, &extension);
+        font_metadata_from_file(&mut source_file, detected_family);
+    let mut package_metadata = zip_metadata_from_file(&mut source_file, &extension);
     let folder_package_extension = mse_folder_package_extension(relative);
     let folder_main_type = folder_package_extension
         .as_deref()
         .and_then(mse_package_type);
     let is_folder_package_main = folder_main_type.is_some_and(|main_name| file_name == main_name);
     if is_folder_package_main {
-        package_metadata = mse_folder_main_metadata(workspace, relative);
+        package_metadata = mse_folder_main_metadata_from_file(&mut source_file);
     }
     let ZipMetadata {
         entry_count: archive_entry_count,
@@ -1942,13 +2046,16 @@ fn analyze_file(
         .as_ref()
         .map_or_else(Vec::new, |header| header.dependencies.clone());
 
-    // Les analyseurs ouvrent actuellement le fichier séparément. Refuser le scan si
-    // ses métadonnées changent pendant ces lectures plutôt que publier un hash et des
-    // métadonnées qui pourraient provenir de versions différentes.
+    // Tous les analyseurs d'un asset réutilisent le même handle ouvert sans suivi.
+    // Contrôler le handle et le chemin après les lectures pour détecter les changements
+    // persistants observables sans prétendre figer les écritures concurrentes.
+    let final_handle_metadata = source_file.metadata()?;
     let final_metadata = workspace.symlink_metadata(relative)?;
-    if !file_metadata_is_stable(&metadata, &final_metadata) {
+    if !file_metadata_is_stable(&opened_metadata, &final_handle_metadata)
+        || !file_metadata_is_stable(&opened_metadata, &final_metadata)
+    {
         anyhow::bail!(
-            "Fichier modifié pendant l'analyse ; résultat invalidé : {}",
+            "Fichier modifié ou remplacé pendant l'analyse ; résultat invalidé : {}",
             relative.display()
         );
     }
@@ -3049,10 +3156,14 @@ mod raster_metadata_tests {
         std::fs::write(root.join("oriented.jpg"), with_exif).unwrap();
 
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
-        let metadata = raster_metadata(&workspace, Path::new("oriented.jpg"), "raster");
+        let mut file = open_file_nofollow(&workspace, Path::new("oriented.jpg")).unwrap();
+        let (sha256, _) = sha256_reader_with_prefix(&mut file, 0).unwrap();
+        assert_eq!(sha256, format!("{:x}", Sha256::digest(&with_exif)));
+        let metadata = raster_metadata_from_file(&mut file, "raster");
         assert_eq!(metadata.orientation.as_deref(), Some("Rotate90"));
         assert_eq!(metadata.width, Some(1));
         assert_eq!(metadata.height, Some(1));
+        drop(file);
         drop(workspace);
 
         let inventory = scan_directory(&root).unwrap();
