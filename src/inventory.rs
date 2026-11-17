@@ -1127,7 +1127,7 @@ fn mse_zip_resources_with_limits_and_cancel(
     scan_budget: &mut u64,
     cancelled: &AtomicBool,
 ) -> (Vec<MseResourceRecord>, bool) {
-    let file = match open_file_nofollow(workspace, relative) {
+    let mut file = match open_file_nofollow(workspace, relative) {
         Ok(file) => file,
         Err(_) => return (Vec::new(), true),
     };
