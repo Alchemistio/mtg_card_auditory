@@ -80,3 +80,8 @@ Au 16 novembre 2026, le lockfile fixe `cap-std` et `cap-primitives` en version `
 ## Énumération récursive sans suivi des répertoires
 
 Chaque sous-répertoire est désormais ouvert depuis le handle capability-based de son parent avec `open_dir_nofollow`. La récursion énumère ensuite le handle enfant déjà ouvert, plutôt que de résoudre à nouveau un chemin relatif depuis la racine. Si une entrée observée comme répertoire est remplacée par un lien symbolique avant son ouverture, le scan échoue explicitement et ne suit pas la cible. Les tests Unix couvrent ce remplacement ; le test Windows correspondant signale explicitement `SKIP` si la création de liens symboliques est interdite par le runner. La sélection et l'ouverture initiale de la racine, ainsi que les courses de destinations d'export, restent des limites distinctes à traiter.
+
+
+## Validation de l'ouverture récursive sans suivi
+
+Validé sur HEAD `2084c365776bf4545120da438ecee70262a2109e` : CI Unix run `44090432550` (88/88 tests, aucun ignoré) et Windows run `44090432520` (85/85 tests, aucun ignoré), formatage et Clippy réussis ; build Release x64 et artefact Windows `14331761845` (5 358 116 octets). Le test Windows de remplacement de sous-répertoire par lien symbolique a été exécuté sans `SKIP`.

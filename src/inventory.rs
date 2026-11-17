@@ -154,6 +154,43 @@ pub struct InventoryComparison {
     pub unchanged_files: usize,
 }
 
+fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
+    if !path.is_absolute() {
+        anyhow::bail!("Le chemin de répertoire doit être absolu : {}", path.display());
+    }
+
+    let mut root = PathBuf::new();
+    let mut components = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => root.push(prefix.as_os_str()),
+            Component::RootDir => root.push(component.as_os_str()),
+            Component::Normal(name) => components.push(name.to_os_string()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                anyhow::bail!("Chemin de répertoire non canonique : {}", path.display())
+            }
+        }
+    }
+    if root.as_os_str().is_empty() {
+        anyhow::bail!("Racine du chemin absolu introuvable : {}", path.display());
+    }
+
+    let mut directory = CapabilityDir::open_ambient_dir(&root, ambient_authority())
+        .with_context(|| format!("Ouverture de la racine du chemin impossible : {}", root.display()))?;
+    let mut traversed = root;
+    for name in components {
+        traversed.push(&name);
+        directory = directory.open_dir_nofollow(&name).with_context(|| {
+            format!(
+                "Ouverture de répertoire sans suivi impossible : {}",
+                traversed.display()
+            )
+        })?;
+    }
+    Ok(directory)
+}
+
 fn open_file_nofollow(workspace: &CapabilityDir, relative: &Path) -> Result<cap_std::fs::File> {
     let components = relative
         .components()
@@ -2222,8 +2259,8 @@ where
         anyhow::bail!("La source sélectionnée n'est pas un dossier.");
     }
 
-    let workspace = CapabilityDir::open_ambient_dir(&canonical_root, ambient_authority())
-        .context("Ouverture capability-based de la source impossible")?;
+    let workspace = open_absolute_directory_nofollow(&canonical_root)
+        .context("Ouverture capability-based sans suivi de la source impossible")?;
 
     let mut relative_paths = Vec::<PathBuf>::new();
     collect_files_capability(
@@ -2372,8 +2409,8 @@ where
             if cancelled.load(Ordering::Relaxed) {
                 anyhow::bail!("Scan annulé par l'utilisateur.");
             }
-            let workspace = CapabilityDir::open_ambient_dir(root, ambient_authority())
-                .context("Ouverture capability-based de la source impossible")?;
+            let workspace = open_absolute_directory_nofollow(root)
+                .context("Ouverture capability-based sans suivi de la source impossible")?;
             let mut relative_paths = Vec::new();
             collect_files_capability(
                 &workspace,
@@ -2525,9 +2562,8 @@ fn with_new_output_file<T>(
     let canonical_parent = parent
         .canonicalize()
         .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
-    let directory =
-        CapabilityDir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
-            .context("Ouverture capability du dossier de destination impossible")?;
+    let directory = open_absolute_directory_nofollow(&canonical_parent)
+        .context("Ouverture capability sans suivi du dossier de destination impossible")?;
     let mut options = CapabilityOpenOptions::new();
     options.write(true).create_new(true);
     let mut file = directory.open_with(name, &options).with_context(|| {
@@ -2715,7 +2751,7 @@ pub fn export_contact_sheet(
             )
         };
         let workspace =
-            match CapabilityDir::open_ambient_dir(Path::new(source_root), ambient_authority()) {
+            match open_absolute_directory_nofollow(Path::new(source_root)) {
                 Ok(workspace) => workspace,
                 Err(_) => {
                     index_text.push_str(&format!(
@@ -3523,6 +3559,50 @@ mod tests {
         let content = std::fs::read(&destination).unwrap();
         assert!(content == b"first" || content == b"second");
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn absolute_directory_open_rejects_symlinked_path_component() {
+        use std::os::unix::fs::symlink;
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-absolute-dir-nofollow-{}",
+            std::process::id()
+        ));
+        let real = base.join("real");
+        let alias = base.join("alias");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&real).unwrap();
+        symlink(&real, &alias).unwrap();
+
+        let error = open_absolute_directory_nofollow(&alias)
+            .expect_err("absolute path traversal must reject a symlink component");
+        assert!(error.to_string().contains("sans suivi"));
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn absolute_directory_open_rejects_symlinked_path_component_when_supported() {
+        use std::os::windows::fs::symlink_dir;
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-absolute-dir-nofollow-{}",
+            std::process::id()
+        ));
+        let real = base.join("real");
+        let alias = base.join("alias");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&real).unwrap();
+        if let Err(error) = symlink_dir(&real, &alias) {
+            eprintln!("SKIP: création de lien symbolique de répertoire Windows refusée: {error}");
+            std::fs::remove_dir_all(base).unwrap();
+            return;
+        }
+
+        let error = open_absolute_directory_nofollow(&alias)
+            .expect_err("absolute path traversal must reject a symlink component");
+        assert!(error.to_string().contains("sans suivi"));
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[cfg(unix)]
