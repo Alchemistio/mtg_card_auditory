@@ -3702,7 +3702,7 @@ mod zip_central_directory_validation_tests {
         let mut bytes = single_entry_zip();
         let central_header = bytes
             .windows(4)
-            .position(|window| window == b"PK\\x01\\x02")
+            .position(|window| window == b"PK\x01\x02")
             .expect("central directory header");
         let name_len =
             u16::from_le_bytes([bytes[central_header + 28], bytes[central_header + 29]]) as usize;
@@ -3714,18 +3714,15 @@ mod zip_central_directory_validation_tests {
                 .try_into()
                 .unwrap(),
         );
-        bytes[central_header + 42..central_header + 46]
-            .copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[central_header + 42..central_header + 46].copy_from_slice(&u32::MAX.to_le_bytes());
         let extra_position = central_header + 46 + name_len;
         let mut zip64_extra = vec![0x01, 0x00, 0x08, 0x00];
         zip64_extra.extend_from_slice(&u64::from(local_offset).to_le_bytes());
         bytes.splice(extra_position..extra_position, zip64_extra);
         bytes[central_header + 30..central_header + 32].copy_from_slice(&12_u16.to_le_bytes());
         let eocd = eocd_offset(&bytes);
-        let directory_size =
-            u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
-        bytes[eocd + 12..eocd + 16]
-            .copy_from_slice(&(directory_size + 12).to_le_bytes());
+        let directory_size = u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
+        bytes[eocd + 12..eocd + 16].copy_from_slice(&(directory_size + 12).to_le_bytes());
 
         assert_eq!(
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
@@ -3738,7 +3735,7 @@ mod zip_central_directory_validation_tests {
         let mut bytes = single_entry_zip();
         let central_header = bytes
             .windows(4)
-            .position(|window| window == b"PK\\x01\\x02")
+            .position(|window| window == b"PK\x01\x02")
             .expect("central directory header");
         bytes[central_header + 42..central_header + 46]
             .copy_from_slice(&u32::MAX.to_le_bytes());
