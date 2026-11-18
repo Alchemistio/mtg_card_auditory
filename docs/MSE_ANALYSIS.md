@@ -124,3 +124,10 @@ Restent à tester : combinaisons de flags, tailles et offsets incohérents, vari
 Quatre cas adversariaux supplémentaires sont validés au niveau du compteur brut ZIP : signature d'en-tête central altérée, entrée centrale déclarant un disque non nul, taille centrale annoncée trop courte d'un octet et nombre d'entrées EOCD supérieur au nombre d'en-têtes réellement présents. Le résultat attendu est le rejet structurel (`None`) ; le scanner MSE ne doit donc pas considérer ce compte comme une preuve de cohérence.
 
 Validation sur HEAD `8e3b2ed5ff278e1e77b8b3c74ffac8deac420d76` : CI Unix run `44331127526` et Windows run `44331127504` réussies. Les workflows ont passé formatage, Clippy et tests ; Windows a aussi passé le build Release x64 et l'upload de l'exécutable. Les flags ZIP, les discordances entre en-têtes locaux et centraux, les encodages non UTF-8, les chemins ambigus non dupliqués et les cas SFX/ZIP64 demeurent à couvrir.
+
+
+## Rejet des flags de chiffrement ZIP — 18 novembre 2026
+
+La validation de chaque en-tête central refuse désormais trois indicateurs du general purpose bit flag : chiffrement traditionnel (`0x0001`), chiffrement fort (`0x0040`) et en-têtes masqués (`0x2000`). Le compteur brut de table centrale retourne une structure invalide si l'un de ces bits est activé ; le statut MSE ne doit alors pas être interprété à partir de cette archive. Aucun déchiffrement ni extraction n'est tenté.
+
+Le test `rejects_encrypted_zip_central_directory_entries` vérifie séparément les trois indicateurs sur une archive de fixture. Validation sur HEAD `3e62239ce521d38acd0c842c8562366e7a0bbf89` : CI Unix run `44335421823` et Windows run `44335420030` réussies ; formatage, Clippy et tests ont passé sur les deux plateformes, puis build Release x64 et upload de l'exécutable ont passé sur Windows. Les contrôles des en-têtes locaux, des offsets ZIP64/SFX et des noms non UTF-8 restent ouverts.
