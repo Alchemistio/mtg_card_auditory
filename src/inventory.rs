@@ -3622,6 +3622,30 @@ mod zip_central_directory_validation_tests {
     }
 
     #[test]
+    fn accepts_sfx_zip_with_prefixed_stub_and_multiple_entries() {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("first.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"first payload").unwrap();
+        writer
+            .start_file("second.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"second payload").unwrap();
+        let zip_bytes = writer.finish().unwrap().into_inner();
+
+        // Simuler un exécutable auto-extractible : les offsets ZIP classiques
+        // restent relatifs au début de l'archive ZIP, après le stub.
+        let mut bytes = b"MZ\x90\0SFX-STUB\0\x01\x02".to_vec();
+        bytes.extend_from_slice(&zip_bytes);
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            Some(2)
+        );
+    }
+
+    #[test]
     fn rejects_zip_with_central_directory_size_one_byte_too_small() {
         let mut bytes = single_entry_zip();
         let eocd = eocd_offset(&bytes);
