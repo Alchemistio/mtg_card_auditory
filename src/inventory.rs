@@ -3564,7 +3564,6 @@ mod zip_central_directory_validation_tests {
             None
         );
     }
-
 }
 
 #[cfg(test)]
