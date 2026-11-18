@@ -3631,6 +3631,43 @@ mod tests {
     use super::*;
     use std::{fs::File, path::PathBuf};
 
+    #[cfg(unix)]
+    #[test]
+    fn detects_directory_replacement_while_handle_remains_open() {
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-dir-identity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("child")).unwrap();
+        let parent = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let opened = parent.open_dir_nofollow("child").unwrap();
+
+        std::fs::rename(root.join("child"), root.join("original")).unwrap();
+        std::fs::create_dir(root.join("child")).unwrap();
+
+        let current = parent.symlink_metadata("child").unwrap();
+        let pinned = opened.dir_metadata().unwrap();
+        assert!(!directory_metadata_is_stable(&current, &pinned));
+
+        drop(opened);
+        drop(parent);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn absolute_directory_open_rejects_symlink_component() {
+        use std::os::unix::fs::symlink;
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-absolute-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("real")).unwrap();
+        symlink(root.join("real"), root.join("alias")).unwrap();
+
+        assert!(open_absolute_directory_nofollow(&root.join("alias")).is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn capability_export_refuses_overwrite_and_removes_partial_output() {
         let root =

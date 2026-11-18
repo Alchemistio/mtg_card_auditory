@@ -219,3 +219,11 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - **Sécurité/concurrence :** la CI du correctif MSE/CRC est verte sur Unix et Windows. Nouveau chantier : cap-fs-ext 4.0.3 expose MetadataExt::{dev, ino} sur Unix et Windows (volume serial + file index sur Windows). La comparaison d'identité physique des fichiers est implémentée avec un test de remplacement de même taille et mtime restauré ; validation CI en attente. Le contrôle d'identité des répertoires et les courses sur parents de destination restent à traiter séparément.
 - **ZIP/MSE :** correction CRC validée sur les deux plateformes ; ambiguïté de table centrale reste distincte d'une corruption de données de ressource.
 - **Métadonnées, rapports, galerie, performance, packaging et connectivité :** aucun changement autonome sûr n'est intégré dans ce cycle ; les critères et prochains travaux restent ceux des domaines ci-dessus.
+
+
+### Sécurité des répertoires — 18 novembre 2026
+
+- [x] Comparer l'identité physique des répertoires avant ouverture, sur le handle ouvert et après ouverture (volume/device + file ID/inode), dans l'ouverture absolue et l'ouverture des sous-répertoires.
+- [x] Revalider le lien nom/handle après l'énumération récursive d'un sous-répertoire pour détecter son remplacement pendant le scan.
+- [x] Ajouter des tests Unix de remplacement d'un répertoire ordinaire à nom constant et de refus d'un composant symbolique lors de l'ouverture absolue.
+- [ ] Valider formatage, Clippy, tests et build Release sur Windows et Unix ; compléter les tests de remplacement de racine source et de parent d'export. La validation CI du commit précédent ne couvre pas ce nouveau changement.

@@ -95,3 +95,8 @@ Les chemins absolus de sources locales et les parents de destinations d'export s
 ## Identité physique des fichiers — tranche en cours
 
 La comparaison des métadonnées des fichiers inclut désormais l'identifiant de volume/périphérique (dev) et l'identifiant de fichier (ino) fournis par cap_fs_ext::MetadataExt en plus de la taille, du mtime et du type. Sur Unix, il s'agit du couple device/inode ; sur Windows, cap-fs-ext expose le numéro de série du volume et l'index de fichier depuis les métadonnées issues d'un handle. Un test remplace un fichier par un autre de même taille et restaure son mtime pour vérifier que l'identité différente est détectée. Cette tranche est en attente de validation CI Unix/Windows ; les identifiants de fichier Windows exposés par cette API sont de 64 bits, avec la limitation documentée pour ReFS.
+
+
+## Identité physique des répertoires (validation en cours)
+
+L'ouverture d'un répertoire par handle sans suivi compare désormais les métadonnées du nom dans le parent, celles du handle enfant et une seconde lecture du nom après ouverture. Les identifiants comparés sont le device/volume et l'inode/file ID exposés par `cap-fs-ext::MetadataExt`, ainsi que le type répertoire. Le parcours récursif revalide également le lien nom/handle après l'énumération. Cela détecte les remplacements persistants autour de l'ouverture et pendant le parcours ; cela ne constitue pas une preuve d'absence de toute mutation transitoire restaurée entre les vérifications. Tests Unix ajoutés pour un remplacement par un autre répertoire ordinaire et pour le refus d'un composant symbolique dans l'ouverture absolue. **Ces changements attendent encore la CI Windows et Unix ; ne pas les considérer comme validés avant les deux résultats.**
