@@ -196,7 +196,7 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
         })?;
         if !before.file_type().is_dir() {
             anyhow::bail!(
-                "Composant de chemin remplacé ou non répertoire : {}",
+                "Composant de chemin remplacé ou non répertoire sans suivi : {}",
                 traversed.display()
             );
         }
@@ -277,7 +277,7 @@ fn open_child_directory_nofollow(
     })?;
     if !before.file_type().is_dir() {
         anyhow::bail!(
-            "Sous-répertoire remplacé ou non répertoire : {}",
+            "Sous-répertoire remplacé ou non répertoire sans suivi : {}",
             relative.display()
         );
     }
