@@ -207,7 +207,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ### Balayage transversal du cycle — 17 novembre 2026
 
-- **Sécurité/concurrence :** les ouvertures sans suivi sont en place, mais l'identité d'un répertoire ordinaire remplacé au même chemin n'est pas encore garantie. Prochaine tâche : comparer l'identité du handle et celle du chemin avec les identifiants natifs (Unix device/inode, Windows volume/file ID), puis couvrir les remplacements de répertoires et les courses du parent de destination.
+- **Sécurité/concurrence :** l'identité physique des fichiers et répertoires est comparée via device/volume + inode/file ID. L'ouverture récursive revalide le nom contre le handle, le scan simple vérifie la racine en fin de parcours et les exports vérifient leur parent avant/après écriture. La CI Unix et Windows du HEAD `3e42cf7` est verte. Restent les tests Windows de remplacement par répertoire ordinaire et l'analyse de la sélection initiale de racine.
 - **ZIP/MSE :** le lecteur ZIP peut masquer une entrée centrale dupliquée avant l'analyse du fichier principal. Le compte brut EOCD/ZIP64 est maintenant comparé au nombre exposé avant la lecture de l'en-tête ; en cas d'écart, l'en-tête n'est pas interprété et le statut du fichier principal reste indéterminé. Validation CI à relancer après correction d'une assertion de test CRC indépendante.
 - **Métadonnées raster/SVG/polices :** aucune modification indépendante sûre identifiée dans ce cycle sans élargir les budgets/contrats de décodage ; conserver comme prochaine revue dédiée.
 - **Rapports, galerie, performance et packaging :** les chantiers restent indépendants mais exigent respectivement une conception de filtres, une persistance de revue, un corpus de benchmark et un protocole de livraison ; pas de modification artificielle dans ce commit.
@@ -235,4 +235,15 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Vérifier à la fin du scan que le chemin de la racine source désigne toujours le même répertoire que le handle épinglé.
 - [x] Vérifier le parent d'export contre son handle avant écriture et après synchronisation ; supprimer le fichier partiel depuis le handle épinglé en cas de divergence.
 - [x] Ajouter des tests Unix déterministes de remplacement persistant de la racine source et du parent d'export.
-- [ ] Valider cette extension sur CI Unix et Windows ; vérifier ensuite les autres domaines de la roadmap avant de clore le cycle.
+- [x] Validation complète sur HEAD `3e42cf75d586525a45e6449739459f1a823ac5e4` : CI Unix run `44263552864` (formatage, Clippy et tests réussis) et CI Windows run `44263553046` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
+- [x] Le contrôle de cohérence de la racine source et du parent d'export est couvert par deux tests Unix déterministes ; l'export supprime le fichier partiel via le handle épinglé en cas de divergence.
+- [ ] Étendre si possible les tests de remplacement de répertoire aux runners Windows sans dépendre de la création de liens symboliques ; étudier la sélection initiale des racines, qui reste fondée sur des chemins ambiants.
+- [ ] Reprendre le balayage transversal : ZIP/MSE (flags/offsets/encodages), métadonnées raster, rapports/filtres, galerie/revue persistante, benchmarks et packaging autonome.
+
+
+### Validation sécurité/concurrence — 18 novembre 2026 (HEAD `3e42cf7`)
+
+- CI Unix `44263552864` : Format check, Clippy et tests réussis.
+- CI Windows `44263553046` : Format check, Clippy, tests, build Release x64 et upload de l'exécutable réussis.
+- Les contrôles d'identité des répertoires et la vérification de cohérence du chemin avec le handle sont validés sur les deux plateformes pour les étapes exécutées par ces workflows.
+- Limite : les tests de remplacement par répertoire ordinaire de la racine et du parent d'export sont déterministes sur Unix ; cette validation ne prouve pas qu'un scénario équivalent a été exécuté sur Windows. Les substitutions transitoires restaurées entre contrôles restent hors garantie.
