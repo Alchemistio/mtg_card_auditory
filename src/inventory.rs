@@ -506,6 +506,14 @@ fn raster_metadata_from_file(file: &mut cap_std::fs::File, family: &str) -> Rast
     }
 }
 
+fn raster_preview_limits() -> image::Limits {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(30_000_000);
+    limits.max_image_height = Some(30_000_000);
+    limits.max_alloc = Some(256 * 1024 * 1024);
+    limits
+}
+
 fn read_limited<R: Read>(reader: R, maximum_bytes: u64) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     reader
@@ -3358,7 +3366,9 @@ pub fn export_contact_sheet(
             continue;
         }
         let decoded = (|| -> Result<image::DynamicImage> {
-            let reader = ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format()?;
+            let mut reader =
+                ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format()?;
+            reader.limits(raster_preview_limits());
             let mut decoder = reader.into_decoder()?;
             let orientation = decoder
                 .orientation()
@@ -4133,6 +4143,29 @@ mod raster_metadata_tests {
         drop(file);
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn raster_preview_decoder_enforces_strict_dimension_limit() {
+        let mut bmp = vec![0_u8; 54];
+        bmp[..2].copy_from_slice(b"BM");
+        bmp[2..6].copy_from_slice(&54_u32.to_le_bytes());
+        bmp[10..14].copy_from_slice(&54_u32.to_le_bytes());
+        bmp[14..18].copy_from_slice(&40_u32.to_le_bytes());
+        bmp[18..22].copy_from_slice(&30_000_001_u32.to_le_bytes());
+        bmp[22..26].copy_from_slice(&1_u32.to_le_bytes());
+        bmp[26..28].copy_from_slice(&1_u16.to_le_bytes());
+        bmp[28..30].copy_from_slice(&24_u16.to_le_bytes());
+
+        let mut reader = ImageReader::new(std::io::Cursor::new(bmp))
+            .with_guessed_format()
+            .unwrap();
+        reader.limits(raster_preview_limits());
+
+        assert!(
+            reader.into_decoder().is_err(),
+            "preview decoder must reject dimensions above the strict width limit"
+        );
     }
 
     #[test]
