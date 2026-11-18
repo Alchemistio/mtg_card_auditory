@@ -1160,6 +1160,13 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
         if file.read_exact(&mut header).is_err() || &header[..4] != b"PK\x01\x02" {
             return false;
         }
+        // Les ressources chiffrées ne sont pas interprétables par l'auditeur.
+        // Refuser les trois indicateurs ZIP de chiffrement (historique, fort,
+        // en-têtes masqués) avant toute lecture du fichier principal MSE.
+        let general_purpose_flags = u16::from_le_bytes([header[8], header[9]]);
+        if general_purpose_flags & (0x0001 | 0x0040 | 0x2000) != 0 {
+            return false;
+        }
         let name_len = u16::from_le_bytes([header[28], header[29]]) as u64;
         let extra_len = u16::from_le_bytes([header[30], header[31]]) as u64;
         let comment_len = u16::from_le_bytes([header[32], header[33]]) as u64;
@@ -3585,6 +3592,27 @@ mod zip_central_directory_validation_tests {
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
             None
         );
+    }
+
+    #[test]
+    fn rejects_encrypted_zip_central_directory_entries() {
+        for encrypted_flag in [0x0001_u16, 0x0040, 0x2000] {
+            let mut bytes = single_entry_zip();
+            let central_header = bytes
+                .windows(4)
+                .position(|window| window == b"PK\\x01\\x02")
+                .expect("central directory header");
+            let flags =
+                u16::from_le_bytes([bytes[central_header + 8], bytes[central_header + 9]]);
+            bytes[central_header + 8..central_header + 10]
+                .copy_from_slice(&(flags | encrypted_flag).to_le_bytes());
+
+            assert_eq!(
+                zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+                None,
+                "encrypted flag {encrypted_flag:#06x} must be rejected"
+            );
+        }
     }
 
     #[test]
