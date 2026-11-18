@@ -3520,6 +3520,55 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
 }
 
 #[cfg(test)]
+mod zip_central_directory_validation_tests {
+    use std::io::{Cursor, Write};
+
+    #[test]
+    fn rejects_zip_with_corrupted_central_directory_signature() {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("entry.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"payload").unwrap();
+        let mut bytes = writer.finish().unwrap().into_inner();
+
+        let central_header = bytes
+            .windows(4)
+            .position(|window| window == b"PK\x01\x02")
+            .expect("central directory header");
+        bytes[central_header] = b'X';
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_zip_central_directory_entry_on_nonzero_disk() {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("entry.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"payload").unwrap();
+        let mut bytes = writer.finish().unwrap().into_inner();
+
+        let central_header = bytes
+            .windows(4)
+            .position(|window| window == b"PK\x01\x02")
+            .expect("central directory header");
+        bytes[central_header + 34..central_header + 36]
+            .copy_from_slice(&1_u16.to_le_bytes());
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            None
+        );
+    }
+
+}
+
+#[cfg(test)]
 mod raster_metadata_tests {
     use super::*;
 
