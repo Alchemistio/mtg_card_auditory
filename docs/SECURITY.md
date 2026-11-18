@@ -90,3 +90,8 @@ Validé sur HEAD `2084c365776bf4545120da438ecee70262a2109e` : CI Unix run `44090
 ## Ouverture des chemins absolus de sources et de destinations
 
 Les chemins absolus de sources locales et les parents de destinations d'export sont désormais ouverts depuis la racine du volume, puis parcourus composant par composant avec `open_dir_nofollow`. Cela évite qu'un composant intermédiaire ou final remplacé par un lien symbolique soit suivi entre la canonicalisation et l'ouverture du handle. Les tests Unix et Windows vérifient le refus d'un composant symbolique ; Validé sur HEAD `1a22a9562b2d909cf3cc58edfc6d6c519cc3a94f` : CI Unix run `44091331420` (89/89 tests, aucun ignoré) et Windows run `44091331435` (86/86 tests, aucun ignoré), formatage et Clippy réussis ; build Release x64 et artefact `14331308670` (5 361 954 octets). Le test Windows d'ouverture absolue a été exécuté sans `SKIP`.
+
+
+## Identité physique des fichiers — tranche en cours
+
+La comparaison des métadonnées des fichiers inclut désormais l'identifiant de volume/périphérique (dev) et l'identifiant de fichier (ino) fournis par cap_fs_ext::MetadataExt en plus de la taille, du mtime et du type. Sur Unix, il s'agit du couple device/inode ; sur Windows, cap-fs-ext expose le numéro de série du volume et l'index de fichier depuis les métadonnées issues d'un handle. Un test remplace un fichier par un autre de même taille et restaure son mtime pour vérifier que l'identité différente est détectée. Cette tranche est en attente de validation CI Unix/Windows ; les identifiants de fichier Windows exposés par cette API sont de 64 bits, avec la limitation documentée pour ReFS.

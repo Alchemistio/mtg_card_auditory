@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use cap_fs_ext::{
-    DirExt, FollowSymlinks, OpenOptions as CapabilityOpenOptions, OpenOptionsFollowExt,
+    DirExt, FollowSymlinks, MetadataExt, OpenOptions as CapabilityOpenOptions,
+    OpenOptionsFollowExt,
 };
 use cap_std::{ambient_authority, fs::Dir as CapabilityDir};
 use image::{ImageDecoder, ImageReader};
@@ -2123,7 +2124,9 @@ fn notice_excerpt_from_prefix(prefix: &[u8]) -> Option<String> {
 }
 
 fn file_metadata_is_stable(before: &cap_std::fs::Metadata, after: &cap_std::fs::Metadata) -> bool {
-    before.len() == after.len()
+    before.dev() == after.dev()
+        && before.ino() == after.ino()
+        && before.len() == after.len()
         && before.modified().ok() == after.modified().ok()
         && before.file_type().is_file() == after.file_type().is_file()
 }
@@ -4176,6 +4179,37 @@ mod tests {
         let before = workspace.metadata(Path::new("sample.txt")).unwrap();
         std::fs::write(&path, b"after content with a different size").unwrap();
         let after = workspace.metadata(Path::new("sample.txt")).unwrap();
+        assert!(!file_metadata_is_stable(&before, &after));
+        drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detects_same_size_file_replacement_with_restored_mtime() {
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-file-identity-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("sample.bin");
+        let replacement = root.join("replacement.bin");
+        std::fs::write(&path, b"original-bytes").unwrap();
+        let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
+        let before = workspace.metadata(Path::new("sample.bin")).unwrap();
+        let original_modified = before.modified().unwrap();
+
+        std::fs::write(&replacement, b"changed-bytes!").unwrap();
+        std::fs::File::open(&replacement)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(original_modified))
+            .unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::rename(&replacement, &path).unwrap();
+
+        let after = workspace.metadata(Path::new("sample.bin")).unwrap();
+        assert_eq!(before.len(), after.len());
+        assert_eq!(before.modified().unwrap(), after.modified().unwrap());
         assert!(!file_metadata_is_stable(&before, &after));
         drop(workspace);
         std::fs::remove_dir_all(root).unwrap();
