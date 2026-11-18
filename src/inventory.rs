@@ -1177,7 +1177,9 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
             return false;
         }
         if file
-            .seek(SeekFrom::Current((name_len + extra_len + comment_len) as i64))
+            .seek(SeekFrom::Current(
+                (name_len + extra_len + comment_len) as i64,
+            ))
             .is_err()
         {
             return false;
@@ -4769,12 +4771,9 @@ mod tests {
         fake_eocd[..4].copy_from_slice(b"PK\x05\x06");
         fake_eocd[8..10].copy_from_slice(&2_u16.to_le_bytes());
         fake_eocd[10..12].copy_from_slice(&2_u16.to_le_bytes());
-        let central_size =
-            u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
-        let central_offset =
-            u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap());
-        fake_eocd[12..16]
-            .copy_from_slice(&central_size.saturating_add(22).to_le_bytes());
+        let central_size = u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
+        let central_offset = u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap());
+        fake_eocd[12..16].copy_from_slice(&central_size.saturating_add(22).to_le_bytes());
         fake_eocd[16..20].copy_from_slice(&central_offset.to_le_bytes());
         bytes[eocd + 20..eocd + 22].copy_from_slice(&(fake_eocd.len() as u16).to_le_bytes());
         bytes.extend_from_slice(&fake_eocd);
