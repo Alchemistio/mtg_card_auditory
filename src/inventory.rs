@@ -1540,7 +1540,7 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
         );
     }
     let central_directory_has_hidden_entries =
-        central_entry_count.is_some_and(|count| count != entry_count as u64);
+        central_entry_count != Some(entry_count as u64);
     let mut uncompressed_bytes = 0_u64;
     let mut suspicious_paths = 0_usize;
     let mut suspicious_ratio = false;
