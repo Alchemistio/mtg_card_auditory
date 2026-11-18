@@ -326,3 +326,20 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - **Performance :** benchmarks de corpus synthétique et mesure de réactivité UI à établir.
 - **Packaging :** CI Windows construit et publie un exécutable Release x64 ; autonomie sur machine propre, versionnement, release reproductible et signature restent ouverts.
 - **Avancement global :** conserver l'estimation à 46 % ; la validation ZIP64 ferme une tranche ciblée mais ne change pas encore les critères d'achèvement des grands domaines.
+
+
+### Limites du décodage raster en planche contact — 18 novembre 2026
+
+- [x] Conserver les contrôles préalables de taille fichier (100 Mio) et de dimensions/aire (30 Mpx) avant décodage.
+- [x] Configurer explicitement `image::Limits` sur le lecteur utilisé pour le rendu de planche contact : largeur et hauteur maximales à 30 000 000 pixels chacune et budget d'allocation demandé de 256 Mio.
+- [x] Ajouter un test de régression BMP à en-tête valide déclarant une largeur de 30 000 001 pixels ; le décodeur doit rejeter l'image avant allocation des pixels.
+- [x] Validation sur HEAD `b2b8988f3bf3ee50833f35bdc9832d0999c71d5b` : CI Unix run `44391633791` et CI Windows run `44391633781` ont passé formatage, Clippy et tests ; Windows a également passé le build Release et l'upload de l'exécutable.
+- [ ] Ajouter des tests de dimensions extrêmes pour plusieurs codecs réellement activés, notamment hauteur excessive, dimensions nulles, débordements d'aire et formats dont le décodeur ne respecte pas le budget d'allocation.
+- [ ] Ne pas considérer `max_alloc` comme une garantie stricte : la documentation de la crate indique que certains décodeurs peuvent ignorer cette limite. Les contrôles d'entrée du projet et les limites de dimensions restent la première barrière.
+
+### Prochaine tranche — noms ZIP et chemins d'entrée
+
+- [ ] Exploiter les noms bruts d'entrée de la bibliothèque ZIP `2.6.1` pour éviter de confondre les octets stockés et leur interprétation textuelle.
+- [ ] Définir une politique explicite pour les noms UTF-8 invalides, les noms marqués UTF-8 mais invalides, les séparateurs `/` et `\\`, les segments `.` / `..`, les chemins absolus, les préfixes de lecteur et les noms en collision après normalisation.
+- [ ] Détecter les doublons exacts et les collisions après normalisation sans extraire les entrées ; conserver les octets originaux pour les diagnostics.
+- [ ] Ajouter des fixtures adversariales et vérifier que les noms ambigus ne peuvent ni masquer des ressources ni provoquer de divergence entre plateformes.

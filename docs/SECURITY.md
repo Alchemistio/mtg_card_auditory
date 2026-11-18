@@ -168,3 +168,12 @@ Lorsque l'offset local est la valeur sentinelle, l'auditeur lit l'offset 64 bits
 Validation sur HEAD `28bfa8615a304c94a04dcf0214bde60b443a258d` : CI Unix run `44390560588` (formatage, Clippy et tests réussis) et CI Windows run `44390562401` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
 
 Cette validation ne signifie pas que toutes les variantes ZIP64 sont prises en charge. Les valeurs 64 bits élevées, toutes les combinaisons de sentinelles, les incohérences entre tailles étendues locales et centrales, les offsets SFX combinés à ZIP64 et les cas adversariaux supplémentaires restent à tester. Les noms non UTF-8 et les chemins ZIP ambigus restent également hors couverture complète. L'auditeur n'extrait pas les entrées et n'exécute aucun contenu MSE.
+
+
+## Limites du décodage raster de la planche contact — 18 novembre 2026
+
+Le chemin de rendu de planche contact applique maintenant explicitement `image::Limits` au lecteur avant de créer le décodeur : largeur maximale et hauteur maximale demandées de 30 000 000 pixels chacune, et budget d'allocation demandé de 256 Mio. Le projet conserve en amont les contrôles de taille fichier (100 Mio) et d'aire/dimensions (30 Mpx) avant décodage.
+
+Un test de régression construit un en-tête BMP minimal qui déclare une largeur de 30 000 001 pixels et vérifie que la création du décodeur échoue avec ces limites. CI Unix run `44391633791` et CI Windows run `44391633781` ont passé formatage, Clippy et tests ; Windows a aussi passé le build Release et l'upload de l'exécutable sur HEAD `b2b8988f3bf3ee50833f35bdc9832d0999c71d5b`.
+
+**Limite importante :** `max_alloc` est une limite au mieux et certains décodeurs peuvent l'ignorer. Elle ne doit pas être décrite comme une borne mémoire absolue. Les contrôles préalables de taille, de dimensions et d'aire restent nécessaires ; il faut encore tester les codecs réellement activés, les dimensions extrêmes et les chemins de décodage qui pourraient ne pas honorer le budget d'allocation.
