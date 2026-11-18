@@ -1144,14 +1144,63 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
     let Some(directory_start) = directory_end.checked_sub(directory_size) else {
         return false;
     };
-    if directory_size < 46 || directory_offset > directory_start {
+    if directory_size < 46 || entries > directory_size / 46 || directory_offset > directory_start {
         return false;
     }
     if file.seek(SeekFrom::Start(directory_start)).is_err() {
         return false;
     }
-    let mut signature = [0_u8; 4];
-    file.read_exact(&mut signature).is_ok() && &signature == b"PK\x01\x02"
+
+    // Vérifier chaque en-tête central et sa longueur déclarée. Une simple
+    // signature au début ne suffit pas : un faux EOCD dans le commentaire
+    // pourrait sinon englober l'EOCD réel dans la taille déclarée.
+    let mut consumed = 0_u64;
+    for _ in 0..entries {
+        let mut header = [0_u8; 46];
+        if file.read_exact(&mut header).is_err() || &header[..4] != b"PK\x01\x02" {
+            return false;
+        }
+        let name_len = u16::from_le_bytes([header[28], header[29]]) as u64;
+        let extra_len = u16::from_le_bytes([header[30], header[31]]) as u64;
+        let comment_len = u16::from_le_bytes([header[32], header[33]]) as u64;
+        let Some(record_len) = 46_u64
+            .checked_add(name_len)
+            .and_then(|value| value.checked_add(extra_len))
+            .and_then(|value| value.checked_add(comment_len))
+        else {
+            return false;
+        };
+        let Some(next_consumed) = consumed.checked_add(record_len) else {
+            return false;
+        };
+        if next_consumed > directory_size || header[34] != 0 || header[35] != 0 {
+            return false;
+        }
+        if file
+            .seek(SeekFrom::Current((name_len + extra_len + comment_len) as i64))
+            .is_err()
+        {
+            return false;
+        }
+        consumed = next_consumed;
+    }
+
+    if consumed == directory_size {
+        return true;
+    }
+
+    // Le seul suffixe facultatif accepté est l'enregistrement de signature
+    // numérique de la table centrale défini par le format ZIP.
+    let remaining = directory_size - consumed;
+    if remaining < 6 {
+        return false;
+    }
+    let mut signature = [0_u8; 6];
+    if file.read_exact(&mut signature).is_err() || &signature[..4] != b"PK\x05\x05" {
+        return false;
+    }
+    let signature_len = u16::from_le_bytes([signature[4], signature[5]]) as u64;
+    remaining == 6 + signature_len
 }
 
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
