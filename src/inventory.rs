@@ -188,13 +188,27 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
         })?;
     let mut traversed = root;
     for name in components {
+        let before = directory.symlink_metadata(&name).with_context(|| {
+            format!("Métadonnées du répertoire parent impossibles : {}", traversed.display())
+        })?;
+        if !before.file_type().is_dir() {
+            anyhow::bail!("Composant de chemin remplacé ou non répertoire : {}", traversed.display());
+        }
         traversed.push(&name);
-        directory = directory.open_dir_nofollow(&name).with_context(|| {
+        let child = directory.open_dir_nofollow(&name).with_context(|| {
             format!(
                 "Ouverture de répertoire sans suivi impossible : {}",
                 traversed.display()
             )
         })?;
+        let opened = child.dir_metadata()?;
+        let after = directory.symlink_metadata(&name)?;
+        if !directory_metadata_is_stable(&before, &opened)
+            || !directory_metadata_is_stable(&after, &opened)
+        {
+            anyhow::bail!("Répertoire remplacé pendant son ouverture : {}", traversed.display());
+        }
+        directory = child;
     }
     Ok(directory)
 }
@@ -246,12 +260,26 @@ fn open_child_directory_nofollow(
     name: &std::ffi::OsStr,
     relative: &Path,
 ) -> Result<CapabilityDir> {
-    parent.open_dir_nofollow(name).with_context(|| {
+    let before = parent.symlink_metadata(name).with_context(|| {
+        format!("Métadonnées du sous-répertoire impossibles : {}", relative.display())
+    })?;
+    if !before.file_type().is_dir() {
+        anyhow::bail!("Sous-répertoire remplacé ou non répertoire : {}", relative.display());
+    }
+    let child = parent.open_dir_nofollow(name).with_context(|| {
         format!(
             "Ouverture de sous-répertoire sans suivi impossible : {}",
             relative.display()
         )
-    })
+    })?;
+    let opened = child.dir_metadata()?;
+    let after = parent.symlink_metadata(name)?;
+    if !directory_metadata_is_stable(&before, &opened)
+        || !directory_metadata_is_stable(&after, &opened)
+    {
+        anyhow::bail!("Sous-répertoire remplacé pendant son ouverture : {}", relative.display());
+    }
+    Ok(child)
 }
 
 fn collect_files_from_open_directory(
@@ -288,6 +316,11 @@ fn collect_files_from_open_directory(
             // handle parent, sans suivi, puis énumérer le handle enfant épinglé.
             let child = open_child_directory_nofollow(directory_handle, &name, &relative)?;
             collect_files_from_open_directory(&child, &relative, depth + 1, paths, cancelled)?;
+            let current = directory_handle.symlink_metadata(&name)?;
+            let opened = child.dir_metadata()?;
+            if !directory_metadata_is_stable(&current, &opened) {
+                anyhow::bail!("Sous-répertoire remplacé pendant son analyse : {}", relative.display());
+            }
         } else if file_type.is_file() {
             paths.push(relative);
         }
@@ -2120,6 +2153,16 @@ fn notice_excerpt_from_prefix(prefix: &[u8]) -> Option<String> {
         }
     }
     Some(excerpt)
+}
+
+fn directory_metadata_is_stable(
+    before: &cap_std::fs::Metadata,
+    after: &cap_std::fs::Metadata,
+) -> bool {
+    before.file_type().is_dir()
+        && after.file_type().is_dir()
+        && before.dev() == after.dev()
+        && before.ino() == after.ino()
 }
 
 fn file_metadata_is_stable(before: &cap_std::fs::Metadata, after: &cap_std::fs::Metadata) -> bool {
