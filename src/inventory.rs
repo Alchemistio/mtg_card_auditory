@@ -3852,7 +3852,7 @@ mod zip_central_directory_validation_tests {
         );
         bytes[18..22].copy_from_slice(&u32::MAX.to_le_bytes());
         bytes[22..26].copy_from_slice(&u32::MAX.to_le_bytes());
-        bytes[28..30].copy_from_slice(&16_u16.to_le_bytes());
+        bytes[28..30].copy_from_slice(&20_u16.to_le_bytes());
 
         let central_header = bytes
             .windows(4)
@@ -3877,7 +3877,7 @@ mod zip_central_directory_validation_tests {
         bytes.splice(extra_position..extra_position, central_zip64_extra);
         bytes[central_header + 20..central_header + 24].copy_from_slice(&u32::MAX.to_le_bytes());
         bytes[central_header + 24..central_header + 28].copy_from_slice(&u32::MAX.to_le_bytes());
-        bytes[central_header + 30..central_header + 32].copy_from_slice(&16_u16.to_le_bytes());
+        bytes[central_header + 30..central_header + 32].copy_from_slice(&20_u16.to_le_bytes());
 
         let eocd = eocd_offset(&bytes);
         let directory_size = u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
