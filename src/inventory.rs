@@ -222,16 +222,20 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
     Ok(directory)
 }
 
-fn verify_absolute_directory_matches_handle(
-    path: &Path,
-    expected: &CapabilityDir,
-) -> Result<()> {
-    let current = open_absolute_directory_nofollow(path)
-        .with_context(|| format!("Réouverture sans suivi du répertoire impossible : {}", path.display()))?;
+fn verify_absolute_directory_matches_handle(path: &Path, expected: &CapabilityDir) -> Result<()> {
+    let current = open_absolute_directory_nofollow(path).with_context(|| {
+        format!(
+            "Réouverture sans suivi du répertoire impossible : {}",
+            path.display()
+        )
+    })?;
     let expected_metadata = expected.dir_metadata()?;
     let current_metadata = current.dir_metadata()?;
     if !directory_metadata_is_stable(&expected_metadata, &current_metadata) {
-        anyhow::bail!("Répertoire remplacé depuis son ouverture : {}", path.display());
+        anyhow::bail!(
+            "Répertoire remplacé depuis son ouverture : {}",
+            path.display()
+        );
     }
     Ok(())
 }
