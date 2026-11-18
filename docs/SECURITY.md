@@ -157,3 +157,14 @@ Validation sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : CI Unix run `44
 Une fixture préfixe désormais une archive ZIP valide par un stub de type exécutable SFX et contient deux entrées. Le compteur brut retrouve les deux en-têtes locaux malgré le préfixe, puis poursuit correctement la lecture de la table centrale après chaque inspection locale. Ce test couvre conjointement l'ajustement d'offset SFX classique et la restauration du curseur central entre les entrées ; il ne constitue pas une validation exhaustive de toutes les variantes SFX.
 
 Validation sur HEAD `817ab7811315bfec6ec496cc2474a2bb5c3232a1` : CI Unix run `44342345771` (105/105 tests, formatage et Clippy) ; CI Windows run `44342345766` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable). Aucun test ignoré.
+
+
+## Validation ZIP64 par entrée — 18 novembre 2026
+
+Le contrôle des en-têtes centraux prend désormais en charge un sous-ensemble explicite des champs ZIP64 par entrée. Lorsqu'une taille décompressée, une taille compressée ou un offset local est remplacé par la sentinelle 32 bits, l'extra field `0x0001` doit exister une seule fois et sa longueur doit correspondre exactement aux valeurs 64 bits attendues. Les champs extra tronqués, dupliqués ou de longueur incohérente sont rejetés.
+
+Lorsque l'offset local est la valeur sentinelle, l'auditeur lit l'offset 64 bits dans le champ ZIP64 central, après les valeurs de taille qui le précèdent selon les sentinelles présentes. La validation conserve le rapprochement avec l'en-tête local et la vérification que le début des données locales précède la table centrale. La fixture de régression couvre une entrée avec tailles locales et centrales ZIP64 et offsets locaux classiques ; les tests existants couvrent l'offset local ZIP64 placé après les champs de taille, les extras tronqués/dupliqués et l'absence d'extra requis.
+
+Validation sur HEAD `28bfa8615a304c94a04dcf0214bde60b443a258d` : CI Unix run `44390560588` (formatage, Clippy et tests réussis) et CI Windows run `44390562401` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
+
+Cette validation ne signifie pas que toutes les variantes ZIP64 sont prises en charge. Les valeurs 64 bits élevées, toutes les combinaisons de sentinelles, les incohérences entre tailles étendues locales et centrales, les offsets SFX combinés à ZIP64 et les cas adversariaux supplémentaires restent à tester. Les noms non UTF-8 et les chemins ZIP ambigus restent également hors couverture complète. L'auditeur n'extrait pas les entrées et n'exécute aucun contenu MSE.

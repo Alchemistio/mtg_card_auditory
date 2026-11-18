@@ -304,3 +304,25 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - **Performance :** benchmarks sur corpus synthétique et réactivité UI restent à mesurer.
 - **Packaging :** le build Release x64 et l'artefact CI existent ; autonomie sur Windows propre, versionnement, GitHub Release reproductible et signature restent à valider.
 - **Décision :** ne pas modifier ces domaines sans critères/test précis ; poursuivre d'abord les constructions ZIP64 par entrée, qui prolongent directement le contrôle de structure actuellement testé.
+
+
+### Validation ZIP64 par entrée — 18 novembre 2026 (HEAD `28bfa861`)
+
+- [x] Résoudre l'offset d'en-tête local ZIP64 depuis le champ extra central `0x0001`, en sautant les valeurs de taille décompressée et compressée lorsqu'elles sont signalées par les sentinelles 32 bits.
+- [x] Valider la présence d'un champ extra ZIP64 unique et sa longueur exacte lorsque les tailles centrales ou l'offset local utilisent une sentinelle ; rejeter les champs tronqués, dupliqués ou de longueur incohérente.
+- [x] Ajouter une fixture ZIP64 cohérente avec tailles locales et centrales étendues, sentinelles 32 bits et longueurs de champs extra exactes (20 octets au total pour l'en-tête extra et les deux valeurs 64 bits).
+- [x] Validation sur HEAD `28bfa8615a304c94a04dcf0214bde60b443a258d` : CI Unix run `44390560588` (formatage, Clippy et tests réussis) et CI Windows run `44390562401` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
+- [ ] Étendre les fixtures ZIP64 aux combinaisons de sentinelles de tailles et d'offset, aux valeurs 64 bits réellement élevées, aux offsets SFX + ZIP64 et aux incohérences entre valeurs étendues locales/centrales. Le parseur valide actuellement la structure/longueur des champs extra et utilise l'offset local étendu ; il ne faut pas assimiler cela à une validation exhaustive de toutes les valeurs ZIP64.
+- [ ] Poursuivre les noms non UTF-8, les chemins ambigus et les doublons du fichier principal MSE ; aucun chemin ne doit être extrait ni normalisé de façon à masquer une collision.
+
+### Balayage transversal — 18 novembre 2026 (après ZIP64 par entrée)
+
+- **Sécurité/concurrence :** contrôles de racines et parents d'export présents ; les scénarios de remplacement persistent sur Windows et les substitutions transitoires restaurées restent des limites.
+- **ZIP/MSE :** EOCD, bornes centrales, flags de chiffrement, rapprochement local/central, SFX classique et un sous-ensemble ZIP64 par entrée sont couverts. Priorités restantes : matrice ZIP64 complète, noms encodés non UTF-8, chemins ambigus et collisions de nom du fichier principal.
+- **Raster :** inventaire lit les dimensions via le décodeur sans décoder les pixels ; planche contact limite les fichiers à 100 Mio et 30 Mpx avant décodage. Le décodeur de la planche contact n'impose pas encore explicitement ses propres limites `image::Limits`. Ajouter largeur/hauteur/allocation bornées au décodeur et tests dimensions extrêmes.
+- **SVG/polices :** analyse XML bornée et références externes refusées ; CSS complet, sandbox de rendu et formats de polices supplémentaires à concevoir.
+- **Rapports/staging :** filtres, synthèses et espace de staging séparé de LIBRARY à spécifier.
+- **Galerie/revue :** galerie HTML, annotations et décisions persistantes à concevoir.
+- **Performance :** benchmarks de corpus synthétique et mesure de réactivité UI à établir.
+- **Packaging :** CI Windows construit et publie un exécutable Release x64 ; autonomie sur machine propre, versionnement, release reproductible et signature restent ouverts.
+- **Avancement global :** conserver l'estimation à 46 % ; la validation ZIP64 ferme une tranche ciblée mais ne change pas encore les critères d'achèvement des grands domaines.

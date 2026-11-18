@@ -149,3 +149,14 @@ Validation sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : Unix run `44341
 Une régression construit une archive ZIP à deux entrées, puis lui ajoute un stub préfixé de type SFX sans modifier les offsets classiques contenus dans la table centrale. Le compteur brut doit reconnaître deux entrées et valider leurs en-têtes locaux en appliquant l'ajustement d'offset ; le test couvre aussi le maintien du curseur dans la table centrale entre les deux entrées.
 
 Validation sur HEAD `817ab7811315bfec6ec496cc2474a2bb5c3232a1` : Unix run `44342345771` (105/105 tests, formatage et Clippy) et Windows run `44342345766` (tests, formatage, Clippy, build Release x64 et upload de l'exécutable). Les cas SFX plus complexes et les offsets ZIP64 par entrée restent à couvrir.
+
+
+## Validation ZIP64 par entrée — 18 novembre 2026
+
+Le compteur structurel de la table centrale reconnaît maintenant les sentinelles ZIP64 par entrée pour les tailles compressée/décompressée et l'offset local. Pour toute valeur sentinelle, l'extra field `0x0001` doit être unique et contenir exactement les valeurs 64 bits attendues, dans l'ordre défini par les champs sentinelles. Les champs tronqués, dupliqués ou de longueur incorrecte rendent la structure non fiable.
+
+L'offset local est lu dans le champ ZIP64 central après les valeurs de taille éventuelles ; l'en-tête local correspondant reste soumis aux contrôles existants de signature, flags, méthode, nom brut et position avant la table centrale. Une fixture valide transforme une entrée ZIP simple en entrée dont les tailles locales et centrales utilisent les sentinelles 32 bits et des valeurs ZIP64 dans les extras. La fixture a nécessité une longueur déclarée de 20 octets pour chaque extra (4 octets d'identifiant/longueur et 16 octets de données).
+
+Tests et CI validés sur HEAD `28bfa8615a304c94a04dcf0214bde60b443a258d` : Unix run `44390560588` et Windows run `44390562401` ont tous deux passé formatage, Clippy et tests ; Windows a également passé le build Release x64 et l'upload de l'exécutable.
+
+Périmètre restant : fixtures pour valeurs 64 bits dépassant réellement 32 bits, combinaisons de sentinelles, cohérence des valeurs étendues locales/centrales, offsets SFX combinés à ZIP64, noms non UTF-8 et chemins ambigus. Cette tranche ne constitue pas une validation exhaustive du format ZIP64 et ne change pas le principe de non-extraction des ressources.
