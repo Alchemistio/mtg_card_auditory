@@ -117,3 +117,10 @@ Les signatures EOCD présentes dans les commentaires sont traitées comme des ca
 Validation finale sur HEAD `658d06bfcd406210d44d4546cae3ade5a5f81d23` : CI Unix run `44326068359` (formatage, Clippy et tests réussis) et CI Windows run `44326068305` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis). Aucun résultat de cette validation ne justifie d'élargir le périmètre d'interprétation : les ressources restent non extraites et les scripts MSE non exécutés.
 
 Restent à tester : combinaisons de flags, tailles et offsets incohérents, variantes ZIP64/SFX, noms non UTF-8, chemins ambigus non dupliqués et doublons du fichier principal.
+
+
+## Régressions structurelles EOCD et en-têtes centraux — 18 novembre 2026
+
+Quatre cas adversariaux supplémentaires sont validés au niveau du compteur brut ZIP : signature d'en-tête central altérée, entrée centrale déclarant un disque non nul, taille centrale annoncée trop courte d'un octet et nombre d'entrées EOCD supérieur au nombre d'en-têtes réellement présents. Le résultat attendu est le rejet structurel (`None`) ; le scanner MSE ne doit donc pas considérer ce compte comme une preuve de cohérence.
+
+Validation sur HEAD `8e3b2ed5ff278e1e77b8b3c74ffac8deac420d76` : CI Unix run `44331127526` et Windows run `44331127504` réussies. Les workflows ont passé formatage, Clippy et tests ; Windows a aussi passé le build Release x64 et l'upload de l'exécutable. Les flags ZIP, les discordances entre en-têtes locaux et centraux, les encodages non UTF-8, les chemins ambigus non dupliqués et les cas SFX/ZIP64 demeurent à couvrir.

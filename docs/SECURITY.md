@@ -125,3 +125,10 @@ Pour la table centrale classique et ZIP64, les contrôles couvrent les bornes ar
 Une fixture place un faux EOCD dans le commentaire ; une autre y place un locator ZIP64 avec offset impossible suivi d'un faux EOCD. Dans ce second cas, le parseur doit ignorer la candidate malformée et retrouver le compte de l'archive valide. Validé sur HEAD `658d06bfcd406210d44d4546cae3ade5a5f81d23` : CI Unix run `44326068359` (Format check, Clippy et tests réussis) et Windows run `44326068305` (Format check, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
 
 Ces contrôles réduisent les risques de divergence entre le lecteur ZIP et la structure brute, mais ne constituent pas une validation complète de toutes les variantes ZIP. Restent à couvrir : flags et incohérences de tailles supplémentaires, offsets ZIP64/SFX, encodages de noms non UTF-8, chemins ambigus non dupliqués et doublons du fichier principal MSE. Aucune archive n'est extraite et aucune donnée MSE n'est exécutée.
+
+
+## Tests complémentaires des en-têtes centraux ZIP — 18 novembre 2026
+
+Les tests de structure ZIP couvrent désormais aussi le rejet d'une signature d'en-tête central corrompue, d'un champ « disk number start » non nul, d'une taille de table centrale inférieure d'un octet à la taille réellement consommée et d'un compte EOCD annonçant plus d'entrées que la table centrale n'en contient. Ces cas sont testés directement sur le compteur brut, indépendamment de la lecture des ressources MSE.
+
+Validé sur HEAD `8e3b2ed5ff278e1e77b8b3c74ffac8deac420d76` : CI Unix run `44331127526` (formatage, Clippy et tests réussis) et Windows run `44331127504` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis). Le parseur continue de refuser les archives multi-disques. Les flags, les incohérences entre en-têtes locaux et centraux, les encodages non UTF-8 et les variantes SFX/ZIP64 restent des limites à tester ; aucun statut de validation générale du format ZIP n'est revendiqué.
