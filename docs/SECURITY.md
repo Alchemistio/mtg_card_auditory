@@ -132,3 +132,10 @@ Ces contrôles réduisent les risques de divergence entre le lecteur ZIP et la s
 Les tests de structure ZIP couvrent désormais aussi le rejet d'une signature d'en-tête central corrompue, d'un champ « disk number start » non nul, d'une taille de table centrale inférieure d'un octet à la taille réellement consommée et d'un compte EOCD annonçant plus d'entrées que la table centrale n'en contient. Ces cas sont testés directement sur le compteur brut, indépendamment de la lecture des ressources MSE.
 
 Validé sur HEAD `8e3b2ed5ff278e1e77b8b3c74ffac8deac420d76` : CI Unix run `44331127526` (formatage, Clippy et tests réussis) et Windows run `44331127504` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis). Le parseur continue de refuser les archives multi-disques. Les flags, les incohérences entre en-têtes locaux et centraux, les encodages non UTF-8 et les variantes SFX/ZIP64 restent des limites à tester ; aucun statut de validation générale du format ZIP n'est revendiqué.
+
+
+## Rejet des entrées ZIP chiffrées — 18 novembre 2026
+
+Lors de la validation brute de la table centrale, chaque entrée est examinée avant toute interprétation MSE. L'auditeur refuse les entrées dont le general purpose bit flag indique le chiffrement traditionnel (`0x0001`), le chiffrement fort (`0x0040`) ou les en-têtes masqués (`0x2000`). Ce contrôle évite de traiter comme inspectables des entrées dont les données ou en-têtes sont protégés/masqués par ces mécanismes ; aucune tentative de déchiffrement n'est effectuée.
+
+Une régression active séparément chacun de ces trois bits et vérifie le rejet du compteur structurel de la table centrale. Validation sur HEAD `3e62239ce521d38acd0c842c8562366e7a0bbf89` : CI Unix run `44335421823` (formatage, Clippy et tests réussis) et Windows run `44335420030` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis). Les incohérences entre en-têtes locaux et centraux, les offsets ZIP64/SFX et les encodages non UTF-8 restent à auditer.
