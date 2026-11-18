@@ -217,7 +217,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 ### Balayage transversal du cycle — 18 novembre 2026
 
 - **Sécurité/concurrence :** la CI du correctif MSE/CRC est verte sur Unix et Windows. Nouveau chantier : cap-fs-ext 4.0.3 expose MetadataExt::{dev, ino} sur Unix et Windows (volume serial + file index sur Windows). La comparaison d'identité physique des fichiers est implémentée avec un test de remplacement de même taille et mtime restauré ; validation CI en attente. Le contrôle d'identité des répertoires et les courses sur parents de destination restent à traiter séparément.
-- **ZIP/MSE :** correction CRC validée sur les deux plateformes ; ambiguïté de table centrale reste distincte d'une corruption de données de ressource.
+- **ZIP/MSE :** correction CRC validée sur les deux plateformes ; ambiguïté de table centrale reste distincte d'une corruption de données de ressource. Les flags de chiffrement historique (0x0001), chiffrement fort (0x0040) et en-têtes masqués (0x2000) sont désormais refusés dans chaque entrée centrale ; test dédié validé sur Unix et Windows (HEAD `3e62239`).
 - **Métadonnées, rapports, galerie, performance, packaging et connectivité :** aucun changement autonome sûr n'est intégré dans ce cycle ; les critères et prochains travaux restent ceux des domaines ci-dessus.
 
 
@@ -264,3 +264,11 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] CI Windows run `44331127504` : formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis.
 - [ ] Poursuivre les fixtures adversariales sur les flags ZIP, offsets ZIP64/SFX et incohérences de tailles locales/centrales ; tester les encodages de noms non UTF-8, les chemins ambigus et les doublons du fichier principal.
 - [ ] Faire le balayage transversal des domaines raster/SVG, rapports et filtres, galerie/revue persistante, performance et packaging autonome avant de choisir la prochaine tranche de code.
+
+
+### Validation des flags de chiffrement ZIP — 18 novembre 2026
+
+- [x] Lire les general purpose bit flags de chaque en-tête central et refuser les entrées marquées par le chiffrement traditionnel `0x0001`, le chiffrement fort `0x0040` ou les en-têtes masqués `0x2000`.
+- [x] Ajouter une régression qui active séparément chacun des trois flags et exige le rejet du compteur brut de table centrale.
+- [x] Validation sur HEAD `3e62239ce521d38acd0c842c8562366e7a0bbf89` : CI Unix run `44335421823` (formatage, Clippy et tests réussis) et Windows run `44335420030` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
+- [ ] Poursuivre avec la cohérence en-têtes locaux/centraux, offsets ZIP64/SFX et encodages/chemins non UTF-8 ; garder le rejet fail-closed et aucune extraction.
