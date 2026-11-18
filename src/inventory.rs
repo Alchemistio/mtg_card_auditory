@@ -3746,6 +3746,37 @@ mod zip_central_directory_validation_tests {
     }
 
     #[test]
+    fn reads_zip64_local_offset_after_uncompressed_and_compressed_sizes() {
+        let mut extra = vec![0x01, 0x00, 24, 0x00];
+        extra.extend_from_slice(&0x1111_2222_3333_4444_u64.to_le_bytes());
+        extra.extend_from_slice(&0x5555_6666_7777_8888_u64.to_le_bytes());
+        extra.extend_from_slice(&0x9999_aaaa_bbbb_cccc_u64.to_le_bytes());
+
+        assert_eq!(
+            zip64_local_header_offset_from_extra(&extra, true, true),
+            Some(0x9999_aaaa_bbbb_cccc)
+        );
+    }
+
+    #[test]
+    fn rejects_truncated_or_duplicate_zip64_extra_fields() {
+        let truncated = [0x01, 0x00, 8, 0, 1, 2, 3, 4, 5, 6, 7];
+        assert_eq!(
+            zip64_local_header_offset_from_extra(&truncated, false, false),
+            None
+        );
+
+        let mut duplicate = vec![0x01, 0x00, 8, 0];
+        duplicate.extend_from_slice(&12_u64.to_le_bytes());
+        duplicate.extend_from_slice(&[0x01, 0x00, 8, 0]);
+        duplicate.extend_from_slice(&34_u64.to_le_bytes());
+        assert_eq!(
+            zip64_local_header_offset_from_extra(&duplicate, false, false),
+            None
+        );
+    }
+
+    #[test]
     fn rejects_zip_with_central_directory_size_one_byte_too_small() {
         let mut bytes = single_entry_zip();
         let eocd = eocd_offset(&bytes);
