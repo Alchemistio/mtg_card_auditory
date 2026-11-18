@@ -1270,15 +1270,24 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
         if zip64_disk != 0 || total_disks != 1 {
             continue;
         }
-        file.seek(SeekFrom::Start(zip64_offset)).ok()?;
+        // Une candidate EOCD trouvée dans le commentaire peut annoncer un
+        // locator ZIP64 fictif. Son offset ne doit pas empêcher l'examen d'un
+        // EOCD valide situé plus tôt dans le commentaire.
+        if file.seek(SeekFrom::Start(zip64_offset)).is_err() {
+            continue;
+        }
         let mut zip64_eocd = [0_u8; 56];
         if file.read_exact(&mut zip64_eocd).is_err() || &zip64_eocd[..4] != b"PK\x06\x06" {
             continue;
         }
         let record_size = u64::from_le_bytes(zip64_eocd[4..12].try_into().ok()?);
-        if record_size < 44
-            || zip64_offset.checked_add(12)?.checked_add(record_size) != Some(locator_offset)
-        {
+        let Some(zip64_record_end) = zip64_offset
+            .checked_add(12)
+            .and_then(|value| value.checked_add(record_size))
+        else {
+            continue;
+        };
+        if record_size < 44 || zip64_record_end != locator_offset {
             continue;
         }
         let zip64_disk_number = u32::from_le_bytes(zip64_eocd[16..20].try_into().ok()?);
@@ -4786,6 +4795,58 @@ mod tests {
         assert_eq!(
             zip_central_directory_entry_count(&mut archive_file),
             Some(2)
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ignores_invalid_zip64_eocd_candidate_inside_zip_comment() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-fake-zip64-eocd-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("comment.zip");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("only.bin", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"payload").unwrap();
+        writer.finish().unwrap();
+
+        let mut bytes = std::fs::read(&archive_path).unwrap();
+        let eocd = bytes
+            .windows(4)
+            .rposition(|window| window == b"PK\\x05\\x06")
+            .unwrap();
+        let mut fake_locator = [0_u8; 20];
+        fake_locator[..4].copy_from_slice(b"PK\\x06\\x07");
+        fake_locator[8..16].copy_from_slice(&u64::MAX.to_le_bytes());
+        fake_locator[16..20].copy_from_slice(&1_u32.to_le_bytes());
+        let mut fake_eocd = [0_u8; 22];
+        fake_eocd[..4].copy_from_slice(b"PK\\x05\\x06");
+        fake_eocd[8..10].copy_from_slice(&u16::MAX.to_le_bytes());
+        fake_eocd[10..12].copy_from_slice(&u16::MAX.to_le_bytes());
+        fake_eocd[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+        fake_eocd[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
+        let comment_len = (fake_locator.len() + fake_eocd.len()) as u16;
+        bytes[eocd + 20..eocd + 22].copy_from_slice(&comment_len.to_le_bytes());
+        bytes.extend_from_slice(&fake_locator);
+        bytes.extend_from_slice(&fake_eocd);
+        std::fs::write(&archive_path, bytes).unwrap();
+
+        let archive = zip::ZipArchive::new(File::open(&archive_path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 1);
+        drop(archive);
+        let mut archive_file = File::open(&archive_path).unwrap();
+        assert_eq!(
+            zip_central_directory_entry_count(&mut archive_file),
+            Some(1)
         );
 
         std::fs::remove_dir_all(root).unwrap();
