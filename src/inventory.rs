@@ -1247,7 +1247,7 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
         return false;
     }
     let mut local = [0_u8; 30];
-    if file.read_exact(&mut local).is_err() || &local[..4] != b"PK\\x03\\x04" {
+    if file.read_exact(&mut local).is_err() || &local[..4] != b"PK\x03\x04" {
         return false;
     }
     let central_flags = u16::from_le_bytes([central_header[8], central_header[9]]);
@@ -1288,19 +1288,12 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
     let central_crc =
         u32::from_le_bytes(central_header[16..20].try_into().expect("fixed ZIP field"));
     let local_crc = u32::from_le_bytes(local[14..18].try_into().expect("fixed ZIP field"));
-    let central_compressed = u32::from_le_bytes(
-        central_header[20..24]
-            .try_into()
-            .expect("fixed ZIP field"),
-    );
+    let central_compressed =
+        u32::from_le_bytes(central_header[20..24].try_into().expect("fixed ZIP field"));
     let local_compressed = u32::from_le_bytes(local[18..22].try_into().expect("fixed ZIP field"));
-    let central_uncompressed = u32::from_le_bytes(
-        central_header[24..28]
-            .try_into()
-            .expect("fixed ZIP field"),
-    );
-    let local_uncompressed =
-        u32::from_le_bytes(local[22..26].try_into().expect("fixed ZIP field"));
+    let central_uncompressed =
+        u32::from_le_bytes(central_header[24..28].try_into().expect("fixed ZIP field"));
+    let local_uncompressed = u32::from_le_bytes(local[22..26].try_into().expect("fixed ZIP field"));
     let uses_data_descriptor = central_flags & 0x0008 != 0;
     let crc_matches = if uses_data_descriptor {
         local_crc == 0 || local_crc == central_crc
@@ -3731,7 +3724,7 @@ mod zip_central_directory_validation_tests {
         let mut bytes = single_entry_zip();
         let central_header = bytes
             .windows(4)
-            .position(|window| window == b"PK\\x01\\x02")
+            .position(|window| window == b"PK\x01\x02")
             .expect("central directory header");
         let local_name = b"entry.txt";
         let replacement = b"other.txt";
@@ -3750,10 +3743,9 @@ mod zip_central_directory_validation_tests {
         let mut bytes = single_entry_zip();
         let central_header = bytes
             .windows(4)
-            .position(|window| window == b"PK\\x01\\x02")
+            .position(|window| window == b"PK\x01\x02")
             .expect("central directory header");
-        bytes[central_header + 10..central_header + 12]
-            .copy_from_slice(&8_u16.to_le_bytes());
+        bytes[central_header + 10..central_header + 12].copy_from_slice(&8_u16.to_le_bytes());
 
         assert_eq!(
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
