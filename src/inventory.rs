@@ -1131,6 +1131,29 @@ struct MseZipResourceLimits {
     max_total_hash_bytes: u64,
 }
 
+fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
+    file: &mut R,
+    directory_end: u64,
+    directory_size: u64,
+    directory_offset: u64,
+    entries: u64,
+) -> bool {
+    if entries == 0 {
+        return directory_size == 0;
+    }
+    let Some(directory_start) = directory_end.checked_sub(directory_size) else {
+        return false;
+    };
+    if directory_size < 46 || directory_offset > directory_start {
+        return false;
+    }
+    if file.seek(SeekFrom::Start(directory_start)).is_err() {
+        return false;
+    }
+    let mut signature = [0_u8; 4];
+    file.read_exact(&mut signature).is_ok() && &signature == b"PK\\x01\\x02"
+}
+
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
     const MAX_EOCD_SEARCH_BYTES: u64 = 22 + u16::MAX as u64;
     let file_len = file.seek(SeekFrom::End(0)).ok()?;
@@ -1141,54 +1164,98 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
     file.seek(SeekFrom::End(-(tail_len as i64))).ok()?;
     let mut tail = vec![0_u8; tail_len];
     file.read_exact(&mut tail).ok()?;
-    let eocd = (0..=tail.len() - 22)
-        .rev()
-        .find(|offset| &tail[*offset..*offset + 4] == b"PK\x05\x06")?;
-    let comment_len = u16::from_le_bytes(tail[eocd + 20..eocd + 22].try_into().ok()?) as usize;
-    if eocd + 22 + comment_len != tail.len() {
-        return None;
-    }
-    let disk_number = u16::from_le_bytes(tail[eocd + 4..eocd + 6].try_into().ok()?);
-    let central_disk = u16::from_le_bytes(tail[eocd + 6..eocd + 8].try_into().ok()?);
-    let entries_on_disk = u16::from_le_bytes(tail[eocd + 8..eocd + 10].try_into().ok()?);
-    let total_entries = u16::from_le_bytes(tail[eocd + 10..eocd + 12].try_into().ok()?);
-    if disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries {
-        return None;
-    }
-    if total_entries != u16::MAX {
-        file.seek(SeekFrom::Start(0)).ok()?;
-        return Some(total_entries as u64);
-    }
+    let tail_start = file_len.checked_sub(tail_len as u64)?;
 
-    // ZIP64 locator (20 bytes) immediately precedes the classic EOCD.
-    let locator = eocd.checked_sub(20)?;
-    if &tail[locator..locator + 4] != b"PK\x06\x07" {
-        return None;
+    // Un EOCD peut être imité dans le commentaire ZIP. Examiner les signatures
+    // candidates de la fin vers le début et ne retenir que celle cohérente avec
+    // la position réelle de la table centrale.
+    for eocd in (0..=tail.len() - 22).rev() {
+        if &tail[eocd..eocd + 4] != b"PK\\x05\\x06" {
+            continue;
+        }
+        let comment_len =
+            u16::from_le_bytes(tail[eocd + 20..eocd + 22].try_into().ok()?) as usize;
+        if eocd + 22 + comment_len != tail.len() {
+            continue;
+        }
+        let eocd_offset = tail_start.checked_add(eocd as u64)?;
+        let disk_number = u16::from_le_bytes(tail[eocd + 4..eocd + 6].try_into().ok()?);
+        let central_disk = u16::from_le_bytes(tail[eocd + 6..eocd + 8].try_into().ok()?);
+        let entries_on_disk = u16::from_le_bytes(tail[eocd + 8..eocd + 10].try_into().ok()?);
+        let total_entries = u16::from_le_bytes(tail[eocd + 10..eocd + 12].try_into().ok()?);
+        if disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries {
+            continue;
+        }
+        let central_size = u32::from_le_bytes(tail[eocd + 12..eocd + 16].try_into().ok()?);
+        let central_offset = u32::from_le_bytes(tail[eocd + 16..eocd + 20].try_into().ok()?);
+        let requires_zip64 = entries_on_disk == u16::MAX
+            || total_entries == u16::MAX
+            || central_size == u32::MAX
+            || central_offset == u32::MAX;
+        if !requires_zip64 {
+            if zip_central_directory_bounds_are_valid(
+                file,
+                eocd_offset,
+                central_size as u64,
+                central_offset as u64,
+                total_entries as u64,
+            ) {
+                let _ = file.seek(SeekFrom::Start(0));
+                return Some(total_entries as u64);
+            }
+            continue;
+        }
+
+        // Le locator ZIP64 (20 octets) précède immédiatement l'EOCD classique.
+        let Some(locator) = eocd.checked_sub(20) else {
+            continue;
+        };
+        if &tail[locator..locator + 4] != b"PK\\x06\\x07" {
+            continue;
+        }
+        let zip64_disk = u32::from_le_bytes(tail[locator + 4..locator + 8].try_into().ok()?);
+        let zip64_offset = u64::from_le_bytes(tail[locator + 8..locator + 16].try_into().ok()?);
+        let total_disks = u32::from_le_bytes(tail[locator + 16..locator + 20].try_into().ok()?);
+        let locator_offset = tail_start.checked_add(locator as u64)?;
+        if zip64_disk != 0 || total_disks != 1 {
+            continue;
+        }
+        file.seek(SeekFrom::Start(zip64_offset)).ok()?;
+        let mut zip64_eocd = [0_u8; 56];
+        if file.read_exact(&mut zip64_eocd).is_err() || &zip64_eocd[..4] != b"PK\\x06\\x06" {
+            continue;
+        }
+        let record_size = u64::from_le_bytes(zip64_eocd[4..12].try_into().ok()?);
+        if record_size < 44
+            || zip64_offset.checked_add(12)?.checked_add(record_size) != Some(locator_offset)
+        {
+            continue;
+        }
+        let zip64_disk_number = u32::from_le_bytes(zip64_eocd[16..20].try_into().ok()?);
+        let zip64_central_disk = u32::from_le_bytes(zip64_eocd[20..24].try_into().ok()?);
+        let zip64_entries_on_disk = u64::from_le_bytes(zip64_eocd[24..32].try_into().ok()?);
+        let zip64_total_entries = u64::from_le_bytes(zip64_eocd[32..40].try_into().ok()?);
+        let zip64_central_size = u64::from_le_bytes(zip64_eocd[40..48].try_into().ok()?);
+        let zip64_central_offset = u64::from_le_bytes(zip64_eocd[48..56].try_into().ok()?);
+        if zip64_disk_number != 0
+            || zip64_central_disk != 0
+            || zip64_entries_on_disk != zip64_total_entries
+        {
+            continue;
+        }
+        if zip_central_directory_bounds_are_valid(
+            file,
+            zip64_offset,
+            zip64_central_size,
+            zip64_central_offset,
+            zip64_total_entries,
+        ) {
+            let _ = file.seek(SeekFrom::Start(0));
+            return Some(zip64_total_entries);
+        }
     }
-    let zip64_disk = u32::from_le_bytes(tail[locator + 4..locator + 8].try_into().ok()?);
-    let zip64_offset = u64::from_le_bytes(tail[locator + 8..locator + 16].try_into().ok()?);
-    let total_disks = u32::from_le_bytes(tail[locator + 16..locator + 20].try_into().ok()?);
-    if zip64_disk != 0 || total_disks != 1 {
-        return None;
-    }
-    file.seek(SeekFrom::Start(zip64_offset)).ok()?;
-    let mut zip64_eocd = [0_u8; 56];
-    file.read_exact(&mut zip64_eocd).ok()?;
-    if &zip64_eocd[..4] != b"PK\x06\x06" {
-        return None;
-    }
-    let zip64_disk_number = u32::from_le_bytes(zip64_eocd[16..20].try_into().ok()?);
-    let zip64_central_disk = u32::from_le_bytes(zip64_eocd[20..24].try_into().ok()?);
-    let zip64_entries_on_disk = u64::from_le_bytes(zip64_eocd[24..32].try_into().ok()?);
-    let zip64_total_entries = u64::from_le_bytes(zip64_eocd[32..40].try_into().ok()?);
-    if zip64_disk_number != 0
-        || zip64_central_disk != 0
-        || zip64_entries_on_disk != zip64_total_entries
-    {
-        return None;
-    }
-    file.seek(SeekFrom::Start(0)).ok()?;
-    Some(zip64_total_entries)
+    let _ = file.seek(SeekFrom::Start(0));
+    None
 }
 
 fn mse_zip_resources_with_limits_and_cancel(
@@ -1218,7 +1285,7 @@ fn mse_zip_resources_with_limits_and_cancel(
     let mut resources = Vec::<MseResourceRecord>::new();
     let mut seen_paths = HashMap::<String, usize>::new();
     let central_directory_has_hidden_entries =
-        central_entry_count.is_some_and(|count| count != archive.len() as u64);
+        central_entry_count != Some(archive.len() as u64);
     let mut hashed_bytes = 0_u64;
     let mut truncated = central_directory_has_hidden_entries;
     for index in 0..archive.len() {
@@ -4621,6 +4688,51 @@ mod tests {
         assert!(truncated);
         assert_eq!(scan_budget, 1024);
         drop(workspace);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ignores_eocd_signature_inside_zip_comment() {
+        use std::io::Write;
+
+        let root = std::env::temp_dir().join(format!(
+            "mtg-auditor-mse-eocd-comment-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("comment.zip");
+        let file = File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("first.bin", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"first").unwrap();
+        writer
+            .start_file("second.bin", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"second").unwrap();
+        writer.finish().unwrap();
+
+        let mut bytes = std::fs::read(&archive_path).unwrap();
+        let eocd = bytes
+            .windows(4)
+            .rposition(|window| window == b"PK\\x05\\x06")
+            .unwrap();
+        let mut fake_eocd = [0_u8; 22];
+        fake_eocd[..4].copy_from_slice(b"PK\\x05\\x06");
+        fake_eocd[8..10].copy_from_slice(&1_u16.to_le_bytes());
+        fake_eocd[10..12].copy_from_slice(&1_u16.to_le_bytes());
+        bytes[eocd + 20..eocd + 22].copy_from_slice(&(fake_eocd.len() as u16).to_le_bytes());
+        bytes.extend_from_slice(&fake_eocd);
+        std::fs::write(&archive_path, bytes).unwrap();
+
+        let archive = zip::ZipArchive::new(File::open(&archive_path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 2);
+        drop(archive);
+        let mut archive_file = File::open(&archive_path).unwrap();
+        assert_eq!(zip_central_directory_entry_count(&mut archive_file), Some(2));
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
