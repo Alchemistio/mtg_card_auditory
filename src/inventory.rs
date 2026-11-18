@@ -1199,6 +1199,7 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
             || !zip_local_header_matches_central_entry(
                 file,
                 directory_start,
+                directory_start - directory_offset,
                 local_header_offset as u64,
                 &header,
                 &central_name,
@@ -1230,10 +1231,14 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
 fn zip_local_header_matches_central_entry<R: Read + Seek>(
     file: &mut R,
     directory_start: u64,
+    offset_adjustment: u64,
     local_header_offset: u64,
     central_header: &[u8; 46],
     central_name: &[u8],
 ) -> bool {
+    let Some(local_header_offset) = local_header_offset.checked_add(offset_adjustment) else {
+        return false;
+    };
     let Some(local_fixed_end) = local_header_offset.checked_add(30) else {
         return false;
     };
@@ -3748,7 +3753,7 @@ mod zip_central_directory_validation_tests {
             .position(|window| window == b"PK\\x01\\x02")
             .expect("central directory header");
         bytes[central_header + 10..central_header + 12]
-            .copy_from_slice(&zip::CompressionMethod::Deflated.to_u16().to_le_bytes());
+            .copy_from_slice(&8_u16.to_le_bytes());
 
         assert_eq!(
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
