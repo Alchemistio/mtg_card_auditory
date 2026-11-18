@@ -1275,53 +1275,17 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
     else {
         return false;
     };
-    let compressed_size = u32::from_le_bytes([
-        central_header[20],
-        central_header[21],
-        central_header[22],
-        central_header[23],
-    ]) as u64;
-    let Some(data_end) = data_start.checked_add(compressed_size) else {
-        return false;
-    };
-    if data_end > directory_start {
-        return false;
-    }
+    // La table centrale peut décrire une entrée dont les données sont
+    // tronquées ou dont les tailles sont incohérentes. Garder l'entrée
+    // analysable afin que le lecteur ZIP puisse produire read-error ou
+    // size-mismatch au niveau de la ressource ; seule la position du début
+    // des données doit rester avant la table centrale.
     let mut local_name = vec![0_u8; local_name_len];
     if file.read_exact(&mut local_name).is_err() || local_name != central_name {
         return false;
     }
 
-    let central_crc =
-        u32::from_le_bytes(central_header[16..20].try_into().expect("fixed ZIP field"));
-    let local_crc = u32::from_le_bytes(local[14..18].try_into().expect("fixed ZIP field"));
-    let central_compressed =
-        u32::from_le_bytes(central_header[20..24].try_into().expect("fixed ZIP field"));
-    let local_compressed = u32::from_le_bytes(local[18..22].try_into().expect("fixed ZIP field"));
-    let central_uncompressed =
-        u32::from_le_bytes(central_header[24..28].try_into().expect("fixed ZIP field"));
-    let local_uncompressed = u32::from_le_bytes(local[22..26].try_into().expect("fixed ZIP field"));
-    let uses_data_descriptor = central_flags & 0x0008 != 0;
-    let crc_matches = if uses_data_descriptor {
-        local_crc == 0 || local_crc == central_crc
-    } else {
-        local_crc == central_crc
-    };
-    let compressed_matches = if uses_data_descriptor {
-        local_compressed == 0
-            || local_compressed == u32::MAX
-            || local_compressed == central_compressed
-    } else {
-        local_compressed == central_compressed || local_compressed == u32::MAX
-    };
-    let uncompressed_matches = if uses_data_descriptor {
-        local_uncompressed == 0
-            || local_uncompressed == u32::MAX
-            || local_uncompressed == central_uncompressed
-    } else {
-        local_uncompressed == central_uncompressed || local_uncompressed == u32::MAX
-    };
-    crc_matches && compressed_matches && uncompressed_matches
+    true
 }
 
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
