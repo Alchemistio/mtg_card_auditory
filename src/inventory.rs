@@ -1278,14 +1278,12 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
     // La table centrale peut décrire une entrée dont les données sont
     // tronquées ou dont les tailles sont incohérentes. Garder l'entrée
     // analysable afin que le lecteur ZIP puisse produire read-error ou
-    // size-mismatch au niveau de la ressource ; seule la position du début
-    // des données doit rester avant la table centrale.
-    let mut local_name = vec![0_u8; local_name_len];
-    if file.read_exact(&mut local_name).is_err() || local_name != central_name {
+    // size-mismatch au niveau de la ressource, sans lire dans la table centrale.
+    if data_start > directory_start {
         return false;
     }
-
-    true
+    let mut local_name = vec![0_u8; local_name_len];
+    file.read_exact(&mut local_name).is_ok() && local_name == central_name
 }
 
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
