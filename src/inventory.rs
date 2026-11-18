@@ -1283,12 +1283,11 @@ fn zip64_extra_field_is_valid(
                 return false;
             }
             found_zip64 = true;
-            let expected_len = 8_usize
-                .checked_mul(
-                    usize::from(uncompressed_size_is_zip64)
-                        + usize::from(compressed_size_is_zip64)
-                        + usize::from(local_offset_is_zip64),
-                );
+            let expected_len = 8_usize.checked_mul(
+                usize::from(uncompressed_size_is_zip64)
+                    + usize::from(compressed_size_is_zip64)
+                    + usize::from(local_offset_is_zip64),
+            );
             if expected_len != Some(field_len) {
                 return false;
             }
@@ -3820,7 +3819,12 @@ mod zip_central_directory_validation_tests {
         extra.extend_from_slice(&13_u64.to_le_bytes());
         extra.extend_from_slice(&13_u64.to_le_bytes());
         assert!(zip64_extra_field_is_valid(&extra, true, true, false));
-        assert!(!zip64_extra_field_is_valid(&extra[..extra.len() - 1], true, true, false));
+        assert!(!zip64_extra_field_is_valid(
+            &extra[..extra.len() - 1],
+            true,
+            true,
+            false
+        ));
     }
 
     #[test]
@@ -3832,10 +3836,16 @@ mod zip_central_directory_validation_tests {
             .expect("central directory header");
         let name_len =
             u16::from_le_bytes([bytes[central_header + 28], bytes[central_header + 29]]) as usize;
-        let compressed_size =
-            u32::from_le_bytes(bytes[central_header + 20..central_header + 24].try_into().unwrap());
-        let uncompressed_size =
-            u32::from_le_bytes(bytes[central_header + 24..central_header + 28].try_into().unwrap());
+        let compressed_size = u32::from_le_bytes(
+            bytes[central_header + 20..central_header + 24]
+                .try_into()
+                .unwrap(),
+        );
+        let uncompressed_size = u32::from_le_bytes(
+            bytes[central_header + 24..central_header + 28]
+                .try_into()
+                .unwrap(),
+        );
         let extra_position = central_header + 46 + name_len;
         let mut zip64_extra = vec![0x01, 0x00, 16, 0x00];
         zip64_extra.extend_from_slice(&u64::from(uncompressed_size).to_le_bytes());
