@@ -222,6 +222,20 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
     Ok(directory)
 }
 
+fn verify_absolute_directory_matches_handle(
+    path: &Path,
+    expected: &CapabilityDir,
+) -> Result<()> {
+    let current = open_absolute_directory_nofollow(path)
+        .with_context(|| format!("Réouverture sans suivi du répertoire impossible : {}", path.display()))?;
+    let expected_metadata = expected.dir_metadata()?;
+    let current_metadata = current.dir_metadata()?;
+    if !directory_metadata_is_stable(&expected_metadata, &current_metadata) {
+        anyhow::bail!("Répertoire remplacé depuis son ouverture : {}", path.display());
+    }
+    Ok(())
+}
+
 fn open_file_nofollow(workspace: &CapabilityDir, relative: &Path) -> Result<cap_std::fs::File> {
     let components = relative
         .components()
@@ -2492,6 +2506,8 @@ where
     attach_mse_folder_resources(&mut assets);
     attach_mse_zip_resources(&mut assets, &workspace, mse_hash_budget, cancelled);
     verify_mse_zip_sources_unchanged(&assets, &workspace)?;
+    verify_absolute_directory_matches_handle(&canonical_root, &workspace)
+        .context("La racine source a été remplacée pendant le scan")?;
     if cancelled.load(Ordering::Relaxed) {
         anyhow::bail!("Scan annulé par l'utilisateur.");
     }
@@ -2741,6 +2757,8 @@ fn with_new_output_file<T>(
         .with_context(|| format!("Dossier de destination inaccessible : {}", parent.display()))?;
     let directory = open_absolute_directory_nofollow(&canonical_parent)
         .context("Ouverture capability sans suivi du dossier de destination impossible")?;
+    verify_absolute_directory_matches_handle(&canonical_parent, &directory)
+        .context("Le dossier de destination a été remplacé pendant son ouverture")?;
     let mut options = CapabilityOpenOptions::new();
     options.write(true).create_new(true);
     let mut file = directory.open_with(name, &options).with_context(|| {
@@ -2750,9 +2768,13 @@ fn with_new_output_file<T>(
         )
     })?;
     let result = (|| {
+        verify_absolute_directory_matches_handle(&canonical_parent, &directory)
+            .context("Le dossier de destination a été remplacé avant l'écriture")?;
         let value = write(&mut file)?;
         file.sync_all()
             .context("Synchronisation du fichier exporté impossible")?;
+        verify_absolute_directory_matches_handle(&canonical_parent, &directory)
+            .context("Le dossier de destination a été remplacé pendant l'export")?;
         Ok(value)
     })();
     if result.is_err() {
@@ -3672,6 +3694,52 @@ mod tests {
         drop(opened);
         drop(parent);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detects_source_root_replacement_after_open() {
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-root-replacement-{}",
+            std::process::id()
+        ));
+        let root = base.join("source");
+        let moved = base.join("source-original");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        let opened = open_absolute_directory_nofollow(&root).unwrap();
+
+        std::fs::rename(&root, &moved).unwrap();
+        std::fs::create_dir(&root).unwrap();
+
+        let error = verify_absolute_directory_matches_handle(&root, &opened)
+            .expect_err("replaced source root must be detected");
+        assert!(error.to_string().contains("remplacé"));
+        drop(opened);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detects_export_parent_replacement_after_open() {
+        let base = std::env::temp_dir().join(format!(
+            "mtg-auditor-export-parent-replacement-{}",
+            std::process::id()
+        ));
+        let parent = base.join("output");
+        let moved = base.join("output-original");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&parent).unwrap();
+        let opened = open_absolute_directory_nofollow(&parent).unwrap();
+
+        std::fs::rename(&parent, &moved).unwrap();
+        std::fs::create_dir(&parent).unwrap();
+
+        let error = verify_absolute_directory_matches_handle(&parent, &opened)
+            .expect_err("replaced export parent must be detected");
+        assert!(error.to_string().contains("remplacé"));
+        drop(opened);
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[cfg(unix)]

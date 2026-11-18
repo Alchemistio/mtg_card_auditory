@@ -227,3 +227,12 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Revalider le lien nom/handle après l'énumération récursive d'un sous-répertoire pour détecter son remplacement pendant le scan.
 - [x] Ajouter des tests Unix de remplacement d'un répertoire ordinaire à nom constant et de refus d'un composant symbolique lors de l'ouverture absolue.
 - [ ] Valider formatage, Clippy, tests et build Release sur Windows et Unix ; compléter les tests de remplacement de racine source et de parent d'export. La validation CI du commit précédent ne couvre pas ce nouveau changement.
+
+
+### Sécurité des répertoires — suivi après CI du 18 novembre 2026
+
+- [x] La CI Unix run `44260601762` et Windows run `44260601711` valide le contrôle d'identité des répertoires avant/après ouverture et après énumération sur HEAD `f50247aa633b9cc78ea78954f05847192a08d17f`.
+- [x] Vérifier à la fin du scan que le chemin de la racine source désigne toujours le même répertoire que le handle épinglé.
+- [x] Vérifier le parent d'export contre son handle avant écriture et après synchronisation ; supprimer le fichier partiel depuis le handle épinglé en cas de divergence.
+- [x] Ajouter des tests Unix déterministes de remplacement persistant de la racine source et du parent d'export.
+- [ ] Valider cette extension sur CI Unix et Windows ; vérifier ensuite les autres domaines de la roadmap avant de clore le cycle.
