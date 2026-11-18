@@ -3524,6 +3524,48 @@ mod zip_central_directory_validation_tests {
     use super::*;
     use std::io::{Cursor, Write};
 
+    fn single_entry_zip() -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("entry.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"payload").unwrap();
+        writer.finish().unwrap().into_inner()
+    }
+
+    fn eocd_offset(bytes: &[u8]) -> usize {
+        bytes
+            .windows(4)
+            .rposition(|window| window == b"PK\\x05\\x06")
+            .expect("EOCD record")
+    }
+
+    #[test]
+    fn rejects_zip_with_central_directory_size_one_byte_too_small() {
+        let mut bytes = single_entry_zip();
+        let eocd = eocd_offset(&bytes);
+        let size = u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
+        bytes[eocd + 12..eocd + 16].copy_from_slice(&(size - 1).to_le_bytes());
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_zip_with_central_directory_entry_count_mismatch() {
+        let mut bytes = single_entry_zip();
+        let eocd = eocd_offset(&bytes);
+        bytes[eocd + 8..eocd + 10].copy_from_slice(&2_u16.to_le_bytes());
+        bytes[eocd + 10..eocd + 12].copy_from_slice(&2_u16.to_le_bytes());
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            None
+        );
+    }
+
     #[test]
     fn rejects_zip_with_corrupted_central_directory_signature() {
         let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
