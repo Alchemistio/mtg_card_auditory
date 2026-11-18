@@ -1167,13 +1167,13 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
         if general_purpose_flags & (0x0001 | 0x0040 | 0x2000) != 0 {
             return false;
         }
-        let name_len = u16::from_le_bytes([header[28], header[29]]) as u64;
-        let extra_len = u16::from_le_bytes([header[30], header[31]]) as u64;
-        let comment_len = u16::from_le_bytes([header[32], header[33]]) as u64;
+        let name_len = u16::from_le_bytes([header[28], header[29]]) as usize;
+        let extra_len = u16::from_le_bytes([header[30], header[31]]) as usize;
+        let comment_len = u16::from_le_bytes([header[32], header[33]]) as usize;
         let Some(record_len) = 46_u64
-            .checked_add(name_len)
-            .and_then(|value| value.checked_add(extra_len))
-            .and_then(|value| value.checked_add(comment_len))
+            .checked_add(name_len as u64)
+            .and_then(|value| value.checked_add(extra_len as u64))
+            .and_then(|value| value.checked_add(comment_len as u64))
         else {
             return false;
         };
@@ -1183,11 +1183,26 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
         if next_consumed > directory_size || header[34] != 0 || header[35] != 0 {
             return false;
         }
-        if file
-            .seek(SeekFrom::Current(
-                (name_len + extra_len + comment_len) as i64,
-            ))
-            .is_err()
+        let mut central_name = vec![0_u8; name_len];
+        let mut central_extra = vec![0_u8; extra_len];
+        if file.read_exact(&mut central_name).is_err()
+            || file.read_exact(&mut central_extra).is_err()
+            || file.seek(SeekFrom::Current(comment_len as i64)).is_err()
+        {
+            return false;
+        }
+        let local_header_offset =
+            u32::from_le_bytes([header[42], header[43], header[44], header[45]]);
+        // Les offsets ZIP64 par entrée ne sont pas encore résolus ici : refuser
+        // explicitement cette forme plutôt que de vérifier un mauvais en-tête.
+        if local_header_offset == u32::MAX
+            || !zip_local_header_matches_central_entry(
+                file,
+                directory_start,
+                local_header_offset as u64,
+                &header,
+                &central_name,
+            )
         {
             return false;
         }
@@ -1210,6 +1225,98 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
     }
     let signature_len = u16::from_le_bytes([signature[4], signature[5]]) as u64;
     remaining == 6 + signature_len
+}
+
+fn zip_local_header_matches_central_entry<R: Read + Seek>(
+    file: &mut R,
+    directory_start: u64,
+    local_header_offset: u64,
+    central_header: &[u8; 46],
+    central_name: &[u8],
+) -> bool {
+    let Some(local_fixed_end) = local_header_offset.checked_add(30) else {
+        return false;
+    };
+    if local_fixed_end > directory_start || file.seek(SeekFrom::Start(local_header_offset)).is_err()
+    {
+        return false;
+    }
+    let mut local = [0_u8; 30];
+    if file.read_exact(&mut local).is_err() || &local[..4] != b"PK\\x03\\x04" {
+        return false;
+    }
+    let central_flags = u16::from_le_bytes([central_header[8], central_header[9]]);
+    let local_flags = u16::from_le_bytes([local[6], local[7]]);
+    let central_method = u16::from_le_bytes([central_header[10], central_header[11]]);
+    let local_method = u16::from_le_bytes([local[8], local[9]]);
+    let local_name_len = u16::from_le_bytes([local[26], local[27]]) as usize;
+    let local_extra_len = u16::from_le_bytes([local[28], local[29]]) as u64;
+    if central_flags != local_flags
+        || central_method != local_method
+        || local_name_len != central_name.len()
+    {
+        return false;
+    }
+    let Some(data_start) = local_fixed_end
+        .checked_add(local_name_len as u64)
+        .and_then(|value| value.checked_add(local_extra_len))
+    else {
+        return false;
+    };
+    let compressed_size = u32::from_le_bytes([
+        central_header[20],
+        central_header[21],
+        central_header[22],
+        central_header[23],
+    ]) as u64;
+    let Some(data_end) = data_start.checked_add(compressed_size) else {
+        return false;
+    };
+    if data_end > directory_start {
+        return false;
+    }
+    let mut local_name = vec![0_u8; local_name_len];
+    if file.read_exact(&mut local_name).is_err() || local_name != central_name {
+        return false;
+    }
+
+    let central_crc =
+        u32::from_le_bytes(central_header[16..20].try_into().expect("fixed ZIP field"));
+    let local_crc = u32::from_le_bytes(local[14..18].try_into().expect("fixed ZIP field"));
+    let central_compressed = u32::from_le_bytes(
+        central_header[20..24]
+            .try_into()
+            .expect("fixed ZIP field"),
+    );
+    let local_compressed = u32::from_le_bytes(local[18..22].try_into().expect("fixed ZIP field"));
+    let central_uncompressed = u32::from_le_bytes(
+        central_header[24..28]
+            .try_into()
+            .expect("fixed ZIP field"),
+    );
+    let local_uncompressed =
+        u32::from_le_bytes(local[22..26].try_into().expect("fixed ZIP field"));
+    let uses_data_descriptor = central_flags & 0x0008 != 0;
+    let crc_matches = if uses_data_descriptor {
+        local_crc == 0 || local_crc == central_crc
+    } else {
+        local_crc == central_crc
+    };
+    let compressed_matches = if uses_data_descriptor {
+        local_compressed == 0
+            || local_compressed == u32::MAX
+            || local_compressed == central_compressed
+    } else {
+        local_compressed == central_compressed || local_compressed == u32::MAX
+    };
+    let uncompressed_matches = if uses_data_descriptor {
+        local_uncompressed == 0
+            || local_uncompressed == u32::MAX
+            || local_uncompressed == central_uncompressed
+    } else {
+        local_uncompressed == central_uncompressed || local_uncompressed == u32::MAX
+    };
+    crc_matches && compressed_matches && uncompressed_matches
 }
 
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
@@ -3612,6 +3719,41 @@ mod zip_central_directory_validation_tests {
                 "encrypted flag {encrypted_flag:#06x} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn rejects_zip_when_local_and_central_names_differ() {
+        let mut bytes = single_entry_zip();
+        let central_header = bytes
+            .windows(4)
+            .position(|window| window == b"PK\\x01\\x02")
+            .expect("central directory header");
+        let local_name = b"entry.txt";
+        let replacement = b"other.txt";
+        assert_eq!(local_name.len(), replacement.len());
+        bytes[central_header + 46..central_header + 46 + replacement.len()]
+            .copy_from_slice(replacement);
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_zip_when_local_and_central_methods_differ() {
+        let mut bytes = single_entry_zip();
+        let central_header = bytes
+            .windows(4)
+            .position(|window| window == b"PK\\x01\\x02")
+            .expect("central directory header");
+        bytes[central_header + 10..central_header + 12]
+            .copy_from_slice(&zip::CompressionMethod::Deflated.to_u16().to_le_bytes());
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            None
+        );
     }
 
     #[test]
