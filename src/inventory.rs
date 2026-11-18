@@ -189,10 +189,16 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
     let mut traversed = root;
     for name in components {
         let before = directory.symlink_metadata(&name).with_context(|| {
-            format!("Métadonnées du répertoire parent impossibles : {}", traversed.display())
+            format!(
+                "Métadonnées du répertoire parent impossibles : {}",
+                traversed.display()
+            )
         })?;
         if !before.file_type().is_dir() {
-            anyhow::bail!("Composant de chemin remplacé ou non répertoire : {}", traversed.display());
+            anyhow::bail!(
+                "Composant de chemin remplacé ou non répertoire : {}",
+                traversed.display()
+            );
         }
         traversed.push(&name);
         let child = directory.open_dir_nofollow(&name).with_context(|| {
@@ -206,7 +212,10 @@ fn open_absolute_directory_nofollow(path: &Path) -> Result<CapabilityDir> {
         if !directory_metadata_is_stable(&before, &opened)
             || !directory_metadata_is_stable(&after, &opened)
         {
-            anyhow::bail!("Répertoire remplacé pendant son ouverture : {}", traversed.display());
+            anyhow::bail!(
+                "Répertoire remplacé pendant son ouverture : {}",
+                traversed.display()
+            );
         }
         directory = child;
     }
@@ -261,10 +270,16 @@ fn open_child_directory_nofollow(
     relative: &Path,
 ) -> Result<CapabilityDir> {
     let before = parent.symlink_metadata(name).with_context(|| {
-        format!("Métadonnées du sous-répertoire impossibles : {}", relative.display())
+        format!(
+            "Métadonnées du sous-répertoire impossibles : {}",
+            relative.display()
+        )
     })?;
     if !before.file_type().is_dir() {
-        anyhow::bail!("Sous-répertoire remplacé ou non répertoire : {}", relative.display());
+        anyhow::bail!(
+            "Sous-répertoire remplacé ou non répertoire : {}",
+            relative.display()
+        );
     }
     let child = parent.open_dir_nofollow(name).with_context(|| {
         format!(
@@ -277,7 +292,10 @@ fn open_child_directory_nofollow(
     if !directory_metadata_is_stable(&before, &opened)
         || !directory_metadata_is_stable(&after, &opened)
     {
-        anyhow::bail!("Sous-répertoire remplacé pendant son ouverture : {}", relative.display());
+        anyhow::bail!(
+            "Sous-répertoire remplacé pendant son ouverture : {}",
+            relative.display()
+        );
     }
     Ok(child)
 }
@@ -319,7 +337,10 @@ fn collect_files_from_open_directory(
             let current = directory_handle.symlink_metadata(&name)?;
             let opened = child.dir_metadata()?;
             if !directory_metadata_is_stable(&current, &opened) {
-                anyhow::bail!("Sous-répertoire remplacé pendant son analyse : {}", relative.display());
+                anyhow::bail!(
+                    "Sous-répertoire remplacé pendant son analyse : {}",
+                    relative.display()
+                );
             }
         } else if file_type.is_file() {
             paths.push(relative);
