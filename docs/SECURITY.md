@@ -139,3 +139,14 @@ Validé sur HEAD `8e3b2ed5ff278e1e77b8b3c74ffac8deac420d76` : CI Unix run `44331
 Lors de la validation brute de la table centrale, chaque entrée est examinée avant toute interprétation MSE. L'auditeur refuse les entrées dont le general purpose bit flag indique le chiffrement traditionnel (`0x0001`), le chiffrement fort (`0x0040`) ou les en-têtes masqués (`0x2000`). Ce contrôle évite de traiter comme inspectables des entrées dont les données ou en-têtes sont protégés/masqués par ces mécanismes ; aucune tentative de déchiffrement n'est effectuée.
 
 Une régression active séparément chacun de ces trois bits et vérifie le rejet du compteur structurel de la table centrale. Validation sur HEAD `3e62239ce521d38acd0c842c8562366e7a0bbf89` : CI Unix run `44335421823` (formatage, Clippy et tests réussis) et Windows run `44335420030` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis). Les incohérences entre en-têtes locaux et centraux, les offsets ZIP64/SFX et les encodages non UTF-8 restent à auditer.
+
+
+## Cohérence des en-têtes locaux et centraux ZIP — 18 novembre 2026
+
+Le contrôle brut de chaque entrée centrale vérifie désormais qu'elle référence un en-tête local situé avant la table centrale. Il applique l'ajustement d'offset classique nécessaire aux archives SFX, puis compare la signature locale, les flags généraux, la méthode de compression et le nom brut de l'entrée entre les deux en-têtes. Le début des données locales (en-tête fixe, nom et champ extra) doit rester avant la table centrale.
+
+Le contrôle ne compare volontairement pas le CRC ni les tailles déclarées locales/centrales et n'exige pas que toute la plage compressée soit présente avant la table centrale. Ces incohérences et troncatures doivent rester visibles au niveau de la ressource, où le lecteur ZIP peut les signaler comme `read-error` ou `size-mismatch`, sans faire disparaître toutes les ressources du package. Aucun contenu n'est extrait.
+
+Les offsets locaux ZIP64 par entrée (`0xffffffff`) ne sont pas encore résolus et sont refusés explicitement ; les autres extensions ZIP64 par entrée ne sont pas déclarées entièrement prises en charge par ce contrôle. Les offsets classiques préfixés SFX sont ajustés et couverts par la logique, mais les variantes adversariales SFX/ZIP64 restent à compléter.
+
+Validation sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : CI Unix run `44341054195` (formatage, Clippy et 104/104 tests réussis) ; CI Windows run `44341054213` (formatage, Clippy, tests réussis, build Release x64 et upload de l'exécutable réussis). Aucun test ignoré signalé.

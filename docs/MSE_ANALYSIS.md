@@ -131,3 +131,14 @@ Validation sur HEAD `8e3b2ed5ff278e1e77b8b3c74ffac8deac420d76` : CI Unix run `44
 La validation de chaque en-tête central refuse désormais trois indicateurs du general purpose bit flag : chiffrement traditionnel (`0x0001`), chiffrement fort (`0x0040`) et en-têtes masqués (`0x2000`). Le compteur brut de table centrale retourne une structure invalide si l'un de ces bits est activé ; le statut MSE ne doit alors pas être interprété à partir de cette archive. Aucun déchiffrement ni extraction n'est tenté.
 
 Le test `rejects_encrypted_zip_central_directory_entries` vérifie séparément les trois indicateurs sur une archive de fixture. Validation sur HEAD `3e62239ce521d38acd0c842c8562366e7a0bbf89` : CI Unix run `44335421823` et Windows run `44335420030` réussies ; formatage, Clippy et tests ont passé sur les deux plateformes, puis build Release x64 et upload de l'exécutable ont passé sur Windows. Les contrôles des en-têtes locaux, des offsets ZIP64/SFX et des noms non UTF-8 restent ouverts.
+
+
+## Cohérence des en-têtes locaux et centraux ZIP — 18 novembre 2026
+
+Avant l'interprétation des ressources MSE, le compteur brut rapproche chaque entrée de sa référence locale : signature d'en-tête, flags généraux, méthode de compression et nom brut doivent correspondre. L'offset local classique est ajusté pour prendre en compte un préfixe SFX ; le début des données, après l'en-tête fixe, le nom et le champ extra local, doit précéder la table centrale.
+
+Le contrôle ne rejette pas une archive uniquement parce que le CRC ou les tailles déclarées dans les deux en-têtes divergent, ou parce que les données compressées sont physiquement tronquées. Cela permet au lecteur de conserver l'entrée et de fournir un diagnostic au niveau de la ressource (`read-error` ou `size-mismatch`) plutôt que de rendre tout le package opaque. Aucune extraction n'est effectuée.
+
+Limite : l'offset local ZIP64 par entrée (`0xffffffff`) est refusé, car son extra ZIP64 n'est pas encore résolu ici. Les autres variantes ZIP64/SFX adversariales, les noms non UTF-8 et les chemins ambigus restent à couvrir.
+
+Validation sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : Unix run `44341054195` (104/104 tests, formatage et Clippy) ; Windows run `44341054213` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable). Aucun test ignoré.
