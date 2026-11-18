@@ -3536,7 +3536,7 @@ mod zip_central_directory_validation_tests {
     fn eocd_offset(bytes: &[u8]) -> usize {
         bytes
             .windows(4)
-            .rposition(|window| window == b"PK\\x05\\x06")
+            .rposition(|window| window == b"PK\x05\x06")
             .expect("EOCD record")
     }
 
