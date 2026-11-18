@@ -3557,8 +3557,7 @@ mod zip_central_directory_validation_tests {
             .windows(4)
             .position(|window| window == b"PK\x01\x02")
             .expect("central directory header");
-        bytes[central_header + 34..central_header + 36]
-            .copy_from_slice(&1_u16.to_le_bytes());
+        bytes[central_header + 34..central_header + 36].copy_from_slice(&1_u16.to_le_bytes());
 
         assert_eq!(
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
