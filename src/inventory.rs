@@ -4822,14 +4822,14 @@ mod tests {
         let mut bytes = std::fs::read(&archive_path).unwrap();
         let eocd = bytes
             .windows(4)
-            .rposition(|window| window == b"PK\\x05\\x06")
+            .rposition(|window| window == b"PK\x05\x06")
             .unwrap();
         let mut fake_locator = [0_u8; 20];
-        fake_locator[..4].copy_from_slice(b"PK\\x06\\x07");
+        fake_locator[..4].copy_from_slice(b"PK\x06\x07");
         fake_locator[8..16].copy_from_slice(&u64::MAX.to_le_bytes());
         fake_locator[16..20].copy_from_slice(&1_u32.to_le_bytes());
         let mut fake_eocd = [0_u8; 22];
-        fake_eocd[..4].copy_from_slice(b"PK\\x05\\x06");
+        fake_eocd[..4].copy_from_slice(b"PK\x05\x06");
         fake_eocd[8..10].copy_from_slice(&u16::MAX.to_le_bytes());
         fake_eocd[10..12].copy_from_slice(&u16::MAX.to_le_bytes());
         fake_eocd[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
