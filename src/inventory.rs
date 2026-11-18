@@ -3830,6 +3830,24 @@ mod zip_central_directory_validation_tests {
     #[test]
     fn accepts_zip64_central_directory_entry_with_size_sentinels() {
         let mut bytes = single_entry_zip();
+
+        // Une entrée ZIP64 cohérente porte les tailles étendues dans les
+        // champs extra locaux et centraux, même lorsque les tailles tiennent
+        // encore dans 32 bits.
+        let local_name_len = u16::from_le_bytes([bytes[26], bytes[27]]) as usize;
+        let local_extra_len = u16::from_le_bytes([bytes[28], bytes[29]]);
+        assert_eq!(local_extra_len, 0, "fixture starts without local extra fields");
+        let local_compressed_size = u32::from_le_bytes(bytes[18..22].try_into().unwrap());
+        let local_uncompressed_size = u32::from_le_bytes(bytes[22..26].try_into().unwrap());
+        let local_extra_position = 30 + local_name_len;
+        let mut local_zip64_extra = vec![0x01, 0x00, 16, 0x00];
+        local_zip64_extra.extend_from_slice(&u64::from(local_uncompressed_size).to_le_bytes());
+        local_zip64_extra.extend_from_slice(&u64::from(local_compressed_size).to_le_bytes());
+        bytes.splice(local_extra_position..local_extra_position, local_zip64_extra);
+        bytes[18..22].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[22..26].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[28..30].copy_from_slice(&16_u16.to_le_bytes());
+
         let central_header = bytes
             .windows(4)
             .position(|window| window == b"PK\x01\x02")
@@ -3847,16 +3865,26 @@ mod zip_central_directory_validation_tests {
                 .unwrap(),
         );
         let extra_position = central_header + 46 + name_len;
-        let mut zip64_extra = vec![0x01, 0x00, 16, 0x00];
-        zip64_extra.extend_from_slice(&u64::from(uncompressed_size).to_le_bytes());
-        zip64_extra.extend_from_slice(&u64::from(compressed_size).to_le_bytes());
-        bytes.splice(extra_position..extra_position, zip64_extra);
-        bytes[central_header + 20..central_header + 24].copy_from_slice(&u32::MAX.to_le_bytes());
-        bytes[central_header + 24..central_header + 28].copy_from_slice(&u32::MAX.to_le_bytes());
-        bytes[central_header + 30..central_header + 32].copy_from_slice(&16_u16.to_le_bytes());
+        let mut central_zip64_extra = vec![0x01, 0x00, 16, 0x00];
+        central_zip64_extra.extend_from_slice(&u64::from(uncompressed_size).to_le_bytes());
+        central_zip64_extra.extend_from_slice(&u64::from(compressed_size).to_le_bytes());
+        bytes.splice(extra_position..extra_position, central_zip64_extra);
+        bytes[central_header + 20..central_header + 24]
+            .copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[central_header + 24..central_header + 28]
+            .copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[central_header + 30..central_header + 32]
+            .copy_from_slice(&16_u16.to_le_bytes());
+
         let eocd = eocd_offset(&bytes);
-        let directory_size = u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
-        bytes[eocd + 12..eocd + 16].copy_from_slice(&(directory_size + 20).to_le_bytes());
+        let directory_size =
+            u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
+        let directory_offset =
+            u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap());
+        bytes[eocd + 12..eocd + 16]
+            .copy_from_slice(&(directory_size + 20).to_le_bytes());
+        bytes[eocd + 16..eocd + 20]
+            .copy_from_slice(&(directory_offset + 20).to_le_bytes());
 
         assert_eq!(
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
