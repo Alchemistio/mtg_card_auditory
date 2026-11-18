@@ -3602,8 +3602,7 @@ mod zip_central_directory_validation_tests {
                 .windows(4)
                 .position(|window| window == b"PK\x01\x02")
                 .expect("central directory header");
-            let flags =
-                u16::from_le_bytes([bytes[central_header + 8], bytes[central_header + 9]]);
+            let flags = u16::from_le_bytes([bytes[central_header + 8], bytes[central_header + 9]]);
             bytes[central_header + 8..central_header + 10]
                 .copy_from_slice(&(flags | encrypted_flag).to_le_bytes());
 
