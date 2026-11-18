@@ -4194,7 +4194,7 @@ mod tests {
         std::fs::write(&path, b"original-bytes").unwrap();
         let workspace = CapabilityDir::open_ambient_dir(&root, ambient_authority()).unwrap();
         let before = workspace.metadata(Path::new("sample.bin")).unwrap();
-        let original_modified = before.modified().unwrap();
+        let original_modified = std::fs::metadata(&path).unwrap().modified().unwrap();
 
         std::fs::write(&replacement, b"changed-bytes!").unwrap();
         std::fs::File::open(&replacement)
