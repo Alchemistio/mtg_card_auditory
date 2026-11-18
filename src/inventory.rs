@@ -4197,7 +4197,9 @@ mod tests {
         let original_modified = std::fs::metadata(&path).unwrap().modified().unwrap();
 
         std::fs::write(&replacement, b"changed-bytes!").unwrap();
-        std::fs::File::open(&replacement)
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&replacement)
             .unwrap()
             .set_times(std::fs::FileTimes::new().set_modified(original_modified))
             .unwrap();
