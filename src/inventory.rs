@@ -1195,16 +1195,23 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
             u32::from_le_bytes([header[42], header[43], header[44], header[45]]);
         // Les offsets ZIP64 par entrée ne sont pas encore résolus ici : refuser
         // explicitement cette forme plutôt que de vérifier un mauvais en-tête.
-        if local_header_offset == u32::MAX
-            || !zip_local_header_matches_central_entry(
-                file,
-                directory_start,
-                directory_start - directory_offset,
-                local_header_offset as u64,
-                &header,
-                &central_name,
-            )
-        {
+        if local_header_offset == u32::MAX {
+            return false;
+        }
+        if !zip_local_header_matches_central_entry(
+            file,
+            directory_start,
+            directory_start - directory_offset,
+            local_header_offset as u64,
+            &header,
+            &central_name,
+        ) {
+            return false;
+        }
+        let Some(next_position) = directory_start.checked_add(next_consumed) else {
+            return false;
+        };
+        if file.seek(SeekFrom::Start(next_position)).is_err() {
             return false;
         }
         consumed = next_consumed;
@@ -3745,7 +3752,7 @@ mod zip_central_directory_validation_tests {
             .windows(4)
             .position(|window| window == b"PK\x01\x02")
             .expect("central directory header");
-        bytes[central_header + 10..central_header + 12].copy_from_slice(&8_u16.to_le_bytes());
+        bytes[central_header + 10..central_header + 12].copy_from_slice(&0_u16.to_le_bytes());
 
         assert_eq!(
             zip_central_directory_entry_count(&mut Cursor::new(bytes)),
