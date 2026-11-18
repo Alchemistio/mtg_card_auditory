@@ -114,3 +114,14 @@ Sur HEAD `3e42cf75d586525a45e6449739459f1a823ac5e4`, les workflows CI Unix `4426
 Le scan vérifie en fin d'analyse que le chemin absolu de la racine désigne toujours le même répertoire que le handle ouvert. Les exports contrôlent leur parent canonique avant l'écriture et après synchronisation ; en cas de divergence, le fichier partiel est supprimé via le handle épinglé. Les tests de remplacement persistant de la racine et du parent d'export sont déterministes sur Unix. Les workflows verts ne signifient pas que ces scénarios de remplacement par répertoire ordinaire ont été reproduits sur Windows.
 
 Limites : la sélection initiale de la racine repose encore sur des chemins ambiants ; les vérifications ne forment pas un instantané atomique et ne détectent pas nécessairement une substitution transitoire restaurée entre deux contrôles. Sur Windows, l'identifiant de fichier exposé par `cap-fs-ext` est de 64 bits, avec la limite documentée pour ReFS.
+
+
+## Validation des candidates EOCD et des tables centrales ZIP/ZIP64 — 18 novembre 2026
+
+Avant d'interpréter le fichier principal d'un package MSE ZIP, l'auditeur vérifie le compte brut des entrées et la cohérence structurelle de la table centrale. La recherche EOCD examine les signatures candidates de la fin vers le début et ne retient qu'une candidate dont le commentaire se termine exactement à la fin du fichier. Une signature incluse dans le commentaire ne suffit donc pas à définir l'EOCD.
+
+Pour la table centrale classique et ZIP64, les contrôles couvrent les bornes arithmétiques, la cohérence des comptes, la taille minimale et la signature de chaque en-tête, les longueurs variables nom/extra/commentaire, la limite de la table annoncée, le numéro de disque et l'extension numérique centrale reconnue. Les archives multi-disques restent refusées. Une candidate ZIP64 malformée située dans le commentaire (notamment un offset impossible) est écartée sans interrompre la recherche d'une candidate antérieure valide.
+
+Une fixture place un faux EOCD dans le commentaire ; une autre y place un locator ZIP64 avec offset impossible suivi d'un faux EOCD. Dans ce second cas, le parseur doit ignorer la candidate malformée et retrouver le compte de l'archive valide. Validé sur HEAD `658d06bfcd406210d44d4546cae3ade5a5f81d23` : CI Unix run `44326068359` (Format check, Clippy et tests réussis) et Windows run `44326068305` (Format check, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
+
+Ces contrôles réduisent les risques de divergence entre le lecteur ZIP et la structure brute, mais ne constituent pas une validation complète de toutes les variantes ZIP. Restent à couvrir : flags et incohérences de tailles supplémentaires, offsets ZIP64/SFX, encodages de noms non UTF-8, chemins ambigus non dupliqués et doublons du fichier principal MSE. Aucune archive n'est extraite et aucune donnée MSE n'est exécutée.

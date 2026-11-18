@@ -106,3 +106,14 @@ Le compte brut EOCD/ZIP64 est maintenant vérifié avant l'interprétation du fi
 ## Distinction corruption de ressource et ambiguïté de table centrale
 
 Une corruption CRC limitée aux octets d'une ressource n'implique pas que la table centrale ZIP soit ambiguë. Si le nombre brut d'entrées EOCD/ZIP64 correspond au nombre exposé par le lecteur, le fichier principal MSE reste interprétable ; la ressource corrompue est ensuite marquée `read-error` lors de sa lecture et n'obtient aucun SHA-256. Le statut du fichier principal devient indéterminé uniquement lorsque le compte brut et le compte exposé divergent (cas d'entrées centrales masquées).
+
+
+## Validation des enregistrements EOCD et de la table centrale ZIP/ZIP64 — 18 novembre 2026
+
+Avant de lire ou d'interpréter le fichier principal MSE d'une archive, l'auditeur recherche un EOCD dont le commentaire se termine exactement à EOF. Il valide ensuite les bornes et la structure de la table centrale, y compris les en-têtes de chaque entrée, leurs champs de longueur variable et les informations de disque. La variante ZIP64 vérifie le locator, l'enregistrement ZIP64, la cohérence des comptes et les bornes de la table centrale. Les archives multi-disques sont refusées.
+
+Les signatures EOCD présentes dans les commentaires sont traitées comme des candidates et non comme des preuves d'EOCD. Une candidate ZIP64 malformée (par exemple un offset hors fichier) est écartée afin de poursuivre la recherche d'une candidate antérieure. Deux tests couvrent respectivement un faux EOCD et un faux locator/EOCD ZIP64 dans le commentaire. La seconde fixture vérifie que le compte brut de l'archive valide est retrouvé malgré la candidate ZIP64 impossible.
+
+Validation finale sur HEAD `658d06bfcd406210d44d4546cae3ade5a5f81d23` : CI Unix run `44326068359` (formatage, Clippy et tests réussis) et CI Windows run `44326068305` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable réussis). Aucun résultat de cette validation ne justifie d'élargir le périmètre d'interprétation : les ressources restent non extraites et les scripts MSE non exécutés.
+
+Restent à tester : combinaisons de flags, tailles et offsets incohérents, variantes ZIP64/SFX, noms non UTF-8, chemins ambigus non dupliqués et doublons du fichier principal.
