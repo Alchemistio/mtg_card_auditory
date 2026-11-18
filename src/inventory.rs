@@ -1191,13 +1191,26 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
         {
             return false;
         }
+        let uncompressed_size_is_zip64 = header[24..28] == u32::MAX.to_le_bytes();
+        let compressed_size_is_zip64 = header[20..24] == u32::MAX.to_le_bytes();
+        let local_offset_is_zip64 = header[42..46] == u32::MAX.to_le_bytes();
+        if (uncompressed_size_is_zip64 || compressed_size_is_zip64 || local_offset_is_zip64)
+            && !zip64_extra_field_is_valid(
+                &central_extra,
+                uncompressed_size_is_zip64,
+                compressed_size_is_zip64,
+                local_offset_is_zip64,
+            )
+        {
+            return false;
+        }
         let local_header_offset =
             u32::from_le_bytes([header[42], header[43], header[44], header[45]]);
         let local_header_offset = if local_header_offset == u32::MAX {
             zip64_local_header_offset_from_extra(
                 &central_extra,
-                header[24..28] == u32::MAX.to_le_bytes(),
-                header[20..24] == u32::MAX.to_le_bytes(),
+                uncompressed_size_is_zip64,
+                compressed_size_is_zip64,
             )
         } else {
             Some(u64::from(local_header_offset))
@@ -1240,6 +1253,49 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
     }
     let signature_len = u16::from_le_bytes([signature[4], signature[5]]) as u64;
     remaining == 6 + signature_len
+}
+
+fn zip64_extra_field_is_valid(
+    extra: &[u8],
+    uncompressed_size_is_zip64: bool,
+    compressed_size_is_zip64: bool,
+    local_offset_is_zip64: bool,
+) -> bool {
+    let mut cursor = 0_usize;
+    let mut found_zip64 = false;
+    while cursor < extra.len() {
+        let Some(header_end) = cursor.checked_add(4) else {
+            return false;
+        };
+        if header_end > extra.len() {
+            return false;
+        }
+        let field_id = u16::from_le_bytes([extra[cursor], extra[cursor + 1]]);
+        let field_len = u16::from_le_bytes([extra[cursor + 2], extra[cursor + 3]]) as usize;
+        let Some(field_end) = header_end.checked_add(field_len) else {
+            return false;
+        };
+        if field_end > extra.len() {
+            return false;
+        }
+        if field_id == 0x0001 {
+            if found_zip64 {
+                return false;
+            }
+            found_zip64 = true;
+            let expected_len = 8_usize
+                .checked_mul(
+                    usize::from(uncompressed_size_is_zip64)
+                        + usize::from(compressed_size_is_zip64)
+                        + usize::from(local_offset_is_zip64),
+                );
+            if expected_len != Some(field_len) {
+                return false;
+            }
+        }
+        cursor = field_end;
+    }
+    found_zip64
 }
 
 fn zip64_local_header_offset_from_extra(
@@ -3759,12 +3815,53 @@ mod zip_central_directory_validation_tests {
     }
 
     #[test]
+    fn validates_zip64_extra_field_when_central_sizes_are_sentinel() {
+        let mut extra = vec![0x01, 0x00, 16, 0x00];
+        extra.extend_from_slice(&13_u64.to_le_bytes());
+        extra.extend_from_slice(&13_u64.to_le_bytes());
+        assert!(zip64_extra_field_is_valid(&extra, true, true, false));
+        assert!(!zip64_extra_field_is_valid(&extra[..extra.len() - 1], true, true, false));
+    }
+
+    #[test]
+    fn accepts_zip64_central_directory_entry_with_size_sentinels() {
+        let mut bytes = single_entry_zip();
+        let central_header = bytes
+            .windows(4)
+            .position(|window| window == b"PK\\x01\\x02")
+            .expect("central directory header");
+        let name_len =
+            u16::from_le_bytes([bytes[central_header + 28], bytes[central_header + 29]]) as usize;
+        let compressed_size =
+            u32::from_le_bytes(bytes[central_header + 20..central_header + 24].try_into().unwrap());
+        let uncompressed_size =
+            u32::from_le_bytes(bytes[central_header + 24..central_header + 28].try_into().unwrap());
+        let extra_position = central_header + 46 + name_len;
+        let mut zip64_extra = vec![0x01, 0x00, 16, 0x00];
+        zip64_extra.extend_from_slice(&u64::from(uncompressed_size).to_le_bytes());
+        zip64_extra.extend_from_slice(&u64::from(compressed_size).to_le_bytes());
+        bytes.splice(extra_position..extra_position, zip64_extra);
+        bytes[central_header + 20..central_header + 24].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[central_header + 24..central_header + 28].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[central_header + 30..central_header + 32].copy_from_slice(&16_u16.to_le_bytes());
+        let eocd = eocd_offset(&bytes);
+        let directory_size = u32::from_le_bytes(bytes[eocd + 12..eocd + 16].try_into().unwrap());
+        bytes[eocd + 12..eocd + 16].copy_from_slice(&(directory_size + 20).to_le_bytes());
+
+        assert_eq!(
+            zip_central_directory_entry_count(&mut Cursor::new(bytes)),
+            Some(1)
+        );
+    }
+
+    #[test]
     fn rejects_truncated_or_duplicate_zip64_extra_fields() {
         let truncated = [0x01, 0x00, 8, 0, 1, 2, 3, 4, 5, 6, 7];
         assert_eq!(
             zip64_local_header_offset_from_extra(&truncated, false, false),
             None
         );
+        assert!(!zip64_extra_field_is_valid(&truncated, true, false, false));
 
         let mut duplicate = vec![0x01, 0x00, 8, 0];
         duplicate.extend_from_slice(&12_u64.to_le_bytes());
