@@ -282,5 +282,25 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [x] Préserver les diagnostics de ressources : ne pas transformer un CRC/une taille incohérente ou des données tronquées en rejet structurel global ; le lecteur doit pouvoir signaler `read-error` ou `size-mismatch`.
 - [x] Tests adversariaux de noms locaux/centraux divergents et méthodes divergentes ; tests existants de CRC invalide, tailles incohérentes et données tronquées conservés.
 - [x] Validation complète sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : Unix run `44341054195` (formatage, Clippy, 104/104 tests) et Windows run `44341054213` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable).
-- [ ] Compléter ZIP64 par entrée (résolution des offsets et tailles depuis les champs extra), fixtures SFX dédiées, noms non UTF-8, chemins ambigus et doublons du fichier principal MSE.
+- [ ] Compléter ZIP64 par entrée (résolution des offsets et tailles depuis les champs extra), variantes SFX plus complexes, noms non UTF-8, chemins ambigus et doublons du fichier principal MSE.
 - [ ] Balayage transversal suivant : limites raster et décodage, couverture CSS SVG/polices, filtres et staging des rapports, galerie/revue persistante, benchmarks et autonomie du packaging.
+
+
+### Régression SFX ZIP préfixée — 18 novembre 2026
+
+- [x] Ajouter une fixture ZIP avec deux entrées et un stub SFX préfixé, en conservant les offsets ZIP classiques relatifs au début de l'archive.
+- [x] Vérifier que le compteur brut applique l'ajustement SFX et lit correctement les deux entrées sans perdre sa position dans la table centrale.
+- [x] Validation sur HEAD `817ab7811315bfec6ec496cc2474a2bb5c3232a1` : Unix run `44342345771` (formatage, Clippy, 105/105 tests) et Windows run `44342345766` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable).
+- [ ] Couvrir les variantes SFX plus complexes, ZIP64 par entrée, noms non UTF-8, chemins ambigus et doublons du fichier principal MSE.
+
+### Balayage transversal après validation SFX — 18 novembre 2026
+
+- **Sécurité/concurrence :** les contrôles de racine, répertoires, fichiers et parents d'export sont documentés ; les scénarios Windows de remplacement par répertoire ordinaire et les substitutions transitoires restaurées restent des limites.
+- **ZIP/MSE :** EOCD, table centrale, flags de chiffrement, rapprochement local/central et SFX classique préfixé sont couverts. Prochaine tranche ciblée : offsets/tailles ZIP64 par entrée, puis noms non UTF-8 et ambiguïtés de chemins.
+- **Raster :** l'aperçu est limité à 100 Mio par fichier et 30 Mpx avant décodage ; le contrôle suivant doit vérifier que les limites du décodeur sont effectivement imposées lors du rendu, et ajouter une fixture de dimensions extrêmes.
+- **SVG/polices :** SVG XML est borné et ne charge aucune référence ; couverture CSS complète, aperçu sandboxé et formats de polices supplémentaires restent à concevoir.
+- **Rapports/staging :** filtres et synthèses restent à définir ; staging séparé de LIBRARY non implémenté.
+- **Galerie/revue :** galerie HTML, annotations et décisions persistantes restent à concevoir.
+- **Performance :** benchmarks sur corpus synthétique et réactivité UI restent à mesurer.
+- **Packaging :** le build Release x64 et l'artefact CI existent ; autonomie sur Windows propre, versionnement, GitHub Release reproductible et signature restent à valider.
+- **Décision :** ne pas modifier ces domaines sans critères/test précis ; poursuivre d'abord les constructions ZIP64 par entrée, qui prolongent directement le contrôle de structure actuellement testé.

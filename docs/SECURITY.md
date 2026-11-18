@@ -150,3 +150,10 @@ Le contrôle ne compare volontairement pas le CRC ni les tailles déclarées loc
 Les offsets locaux ZIP64 par entrée (`0xffffffff`) ne sont pas encore résolus et sont refusés explicitement ; les autres extensions ZIP64 par entrée ne sont pas déclarées entièrement prises en charge par ce contrôle. Les offsets classiques préfixés SFX sont ajustés et couverts par la logique, mais les variantes adversariales SFX/ZIP64 restent à compléter.
 
 Validation sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : CI Unix run `44341054195` (formatage, Clippy et 104/104 tests réussis) ; CI Windows run `44341054213` (formatage, Clippy, tests réussis, build Release x64 et upload de l'exécutable réussis). Aucun test ignoré signalé.
+
+
+## Régression SFX ZIP avec plusieurs entrées — 18 novembre 2026
+
+Une fixture préfixe désormais une archive ZIP valide par un stub de type exécutable SFX et contient deux entrées. Le compteur brut retrouve les deux en-têtes locaux malgré le préfixe, puis poursuit correctement la lecture de la table centrale après chaque inspection locale. Ce test couvre conjointement l'ajustement d'offset SFX classique et la restauration du curseur central entre les entrées ; il ne constitue pas une validation exhaustive de toutes les variantes SFX.
+
+Validation sur HEAD `817ab7811315bfec6ec496cc2474a2bb5c3232a1` : CI Unix run `44342345771` (105/105 tests, formatage et Clippy) ; CI Windows run `44342345766` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable). Aucun test ignoré.

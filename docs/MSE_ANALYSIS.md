@@ -142,3 +142,10 @@ Le contrôle ne rejette pas une archive uniquement parce que le CRC ou les taill
 Limite : l'offset local ZIP64 par entrée (`0xffffffff`) est refusé, car son extra ZIP64 n'est pas encore résolu ici. Les autres variantes ZIP64/SFX adversariales, les noms non UTF-8 et les chemins ambigus restent à couvrir.
 
 Validation sur HEAD `84171296dbbf935cf116ac9c62a7404ea9196661` : Unix run `44341054195` (104/104 tests, formatage et Clippy) ; Windows run `44341054213` (formatage, Clippy, tests, build Release x64 et upload de l'exécutable). Aucun test ignoré.
+
+
+## Archive SFX préfixée — 18 novembre 2026
+
+Une régression construit une archive ZIP à deux entrées, puis lui ajoute un stub préfixé de type SFX sans modifier les offsets classiques contenus dans la table centrale. Le compteur brut doit reconnaître deux entrées et valider leurs en-têtes locaux en appliquant l'ajustement d'offset ; le test couvre aussi le maintien du curseur dans la table centrale entre les deux entrées.
+
+Validation sur HEAD `817ab7811315bfec6ec496cc2474a2bb5c3232a1` : Unix run `44342345771` (105/105 tests, formatage et Clippy) et Windows run `44342345766` (tests, formatage, Clippy, build Release x64 et upload de l'exécutable). Les cas SFX plus complexes et les offsets ZIP64 par entrée restent à couvrir.
