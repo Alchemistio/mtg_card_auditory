@@ -3521,6 +3521,7 @@ pub fn export_html(document: &InventoryDocument, destination: &Path) -> Result<(
 
 #[cfg(test)]
 mod zip_central_directory_validation_tests {
+    use super::*;
     use std::io::{Cursor, Write};
 
     #[test]
