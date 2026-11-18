@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use cap_fs_ext::{
-    DirExt, FollowSymlinks, MetadataExt, OpenOptions as CapabilityOpenOptions,
-    OpenOptionsFollowExt,
+    DirExt, FollowSymlinks, MetadataExt, OpenOptions as CapabilityOpenOptions, OpenOptionsFollowExt,
 };
 use cap_std::{ambient_authority, fs::Dir as CapabilityDir};
 use image::{ImageDecoder, ImageReader};
@@ -4186,10 +4185,8 @@ mod tests {
 
     #[test]
     fn detects_same_size_file_replacement_with_restored_mtime() {
-        let root = std::env::temp_dir().join(format!(
-            "mtg-auditor-file-identity-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mtg-auditor-file-identity-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("sample.bin");
