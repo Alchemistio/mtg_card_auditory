@@ -1350,6 +1350,30 @@ fn zip64_local_header_offset_from_extra(
     local_header_offset
 }
 
+fn zip_windows_name_key(name: &str) -> (String, bool) {
+    let slash = char::from(92);
+    let mut suspicious = name.is_empty() || name.starts_with('/') || name.starts_with(slash)
+        || name.contains(slash) || name.contains(':')
+        || name.chars().any(|ch| ch <= char::from(31) || matches!(ch, '<' | '>' | '"' | '|' | '?' | '*'));
+    let segments = name.split('/').collect::<Vec<_>>();
+    let mut normalized = Vec::with_capacity(segments.len());
+    for (index, segment) in segments.iter().enumerate() {
+        if segment.is_empty() {
+            if !(index + 1 == segments.len() && name.ends_with('/')) { suspicious = true; }
+            normalized.push(String::new()); continue;
+        }
+        if *segment == "." || *segment == ".." { suspicious = true; }
+        let trimmed = segment.trim_end_matches([' ', '.']);
+        if trimmed.len() != segment.len() { suspicious = true; }
+        let base = trimmed.split('.').next().unwrap_or("").to_ascii_uppercase();
+        let reserved = matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$" | "CONIN$" | "CONOUT$")
+            || ["COM", "LPT"].iter().any(|prefix| base.strip_prefix(prefix).is_some_and(|suffix|
+                matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")));
+        if reserved { suspicious = true; }
+        normalized.push(trimmed.to_lowercase());
+    }
+    (normalized.join("/"), suspicious)
+}
 fn zip_local_header_matches_central_entry<R: Read + Seek>(
     file: &mut R,
     directory_start: u64,
@@ -1558,6 +1582,7 @@ fn mse_zip_resources_with_limits_and_cancel(
         if name == main_name || entry.is_dir() {
             continue;
         }
+        let (collision_key, windows_ambiguous_name) = zip_windows_name_key(&name);
         if name.len() > 4096 {
             truncated = true;
             continue;
@@ -1576,7 +1601,7 @@ fn mse_zip_resources_with_limits_and_cancel(
             });
             continue;
         }
-        if let Some(previous_index) = seen_paths.get(&name).copied() {
+        if let Some(previous_index) = seen_paths.get(&collision_key).copied() {
             if let Some(previous) = resources.get_mut(previous_index) {
                 previous.sha256 = None;
                 previous.hash_status = "ambiguous-path".to_string();
@@ -1590,9 +1615,8 @@ fn mse_zip_resources_with_limits_and_cancel(
             truncated = true;
             continue;
         }
-        let suspicious_path = entry.enclosed_name().is_none()
-            || name.contains('\\')
-            || name.contains(':')
+        let suspicious_path = windows_ambiguous_name || entry.enclosed_name().is_none()
+            || name.contains(char::from(92)) || name.contains(':')
             || name.split('/').any(|part| part == "." || part == "..");
         let hash_status = if suspicious_path {
             "suspicious-path"
@@ -1675,7 +1699,7 @@ fn mse_zip_resources_with_limits_and_cancel(
                     sha256: Some(format!("{:x}", hasher.finalize())),
                     hash_status: "hashed".to_string(),
                 });
-                seen_paths.insert(name, record_index);
+                seen_paths.insert(collision_key.clone(), record_index);
                 continue;
             }
         };
@@ -1686,7 +1710,7 @@ fn mse_zip_resources_with_limits_and_cancel(
             sha256: None,
             hash_status: hash_status.to_string(),
         });
-        seen_paths.insert(name, record_index);
+        seen_paths.insert(collision_key, record_index);
     }
     (resources, truncated)
 }
@@ -1796,6 +1820,7 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
     let central_directory_has_hidden_entries = central_entry_count != Some(entry_count as u64);
     let mut uncompressed_bytes = 0_u64;
     let mut suspicious_paths = 0_usize;
+    let mut seen_names = HashSet::<String>::new();
     let mut suspicious_ratio = false;
     let mut mse_main_file_present = expected_main.map(|_| false);
     for index in 0..archive.len() {
@@ -1812,13 +1837,12 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
             }
         };
         let name = entry.name();
-        if entry.enclosed_name().is_none()
-            || name.contains('\\')
-            || name.contains(':')
+        let (collision_key, windows_ambiguous_name) = zip_windows_name_key(name);
+        if windows_ambiguous_name || entry.enclosed_name().is_none()
+            || name.contains(char::from(92)) || name.contains(':')
             || name.split('/').any(|part| part == "." || part == "..")
-        {
-            suspicious_paths += 1;
-        }
+            || !seen_names.insert(collision_key)
+        { suspicious_paths += 1; }
         if expected_main.is_some_and(|expected| name == expected) {
             mse_main_file_present = Some(true);
         }
@@ -5106,6 +5130,19 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn detects_windows_ambiguous_zip_names_and_case_collisions() {
+        let slash = char::from(92);
+        for name in ["CON.txt", "nul", "folder/../file.png", "trailing. ", "C:/asset.png", "bad?.png"] {
+            assert!(zip_windows_name_key(name).1, "expected suspicious name: {name}");
+        }
+        assert!(zip_windows_name_key(&format!("folder{slash}file.png")).1);
+        let (upper, upper_suspicious) = zip_windows_name_key("Cards/Art.PNG");
+        let (lower, lower_suspicious) = zip_windows_name_key("cards/art.png");
+        assert!(!upper_suspicious && !lower_suspicious); assert_eq!(upper, lower);
+        let (cp437_decoded, cp437_suspicious) = zip_windows_name_key("cartes/é.png");
+        assert!(!cp437_suspicious); assert_eq!(cp437_decoded, "cartes/é.png");
+    }
     #[test]
     fn detects_suspicious_zip_paths_without_extracting() {
         use std::io::Write;
