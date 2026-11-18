@@ -1151,7 +1151,7 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
         return false;
     }
     let mut signature = [0_u8; 4];
-    file.read_exact(&mut signature).is_ok() && &signature == b"PK\\x01\\x02"
+    file.read_exact(&mut signature).is_ok() && &signature == b"PK\x01\x02"
 }
 
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
@@ -1170,7 +1170,7 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
     // candidates de la fin vers le début et ne retenir que celle cohérente avec
     // la position réelle de la table centrale.
     for eocd in (0..=tail.len() - 22).rev() {
-        if &tail[eocd..eocd + 4] != b"PK\\x05\\x06" {
+        if &tail[eocd..eocd + 4] != b"PK\x05\x06" {
             continue;
         }
         let comment_len =
@@ -1210,7 +1210,7 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
         let Some(locator) = eocd.checked_sub(20) else {
             continue;
         };
-        if &tail[locator..locator + 4] != b"PK\\x06\\x07" {
+        if &tail[locator..locator + 4] != b"PK\x06\x07" {
             continue;
         }
         let zip64_disk = u32::from_le_bytes(tail[locator + 4..locator + 8].try_into().ok()?);
@@ -1222,7 +1222,7 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
         }
         file.seek(SeekFrom::Start(zip64_offset)).ok()?;
         let mut zip64_eocd = [0_u8; 56];
-        if file.read_exact(&mut zip64_eocd).is_err() || &zip64_eocd[..4] != b"PK\\x06\\x06" {
+        if file.read_exact(&mut zip64_eocd).is_err() || &zip64_eocd[..4] != b"PK\x06\x06" {
             continue;
         }
         let record_size = u64::from_le_bytes(zip64_eocd[4..12].try_into().ok()?);
@@ -4717,10 +4717,10 @@ mod tests {
         let mut bytes = std::fs::read(&archive_path).unwrap();
         let eocd = bytes
             .windows(4)
-            .rposition(|window| window == b"PK\\x05\\x06")
+            .rposition(|window| window == b"PK\x05\x06")
             .unwrap();
         let mut fake_eocd = [0_u8; 22];
-        fake_eocd[..4].copy_from_slice(b"PK\\x05\\x06");
+        fake_eocd[..4].copy_from_slice(b"PK\x05\x06");
         fake_eocd[8..10].copy_from_slice(&1_u16.to_le_bytes());
         fake_eocd[10..12].copy_from_slice(&1_u16.to_le_bytes());
         bytes[eocd + 20..eocd + 22].copy_from_slice(&(fake_eocd.len() as u16).to_le_bytes());
