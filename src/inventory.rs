@@ -3600,7 +3600,7 @@ mod zip_central_directory_validation_tests {
             let mut bytes = single_entry_zip();
             let central_header = bytes
                 .windows(4)
-                .position(|window| window == b"PK\\x01\\x02")
+                .position(|window| window == b"PK\x01\x02")
                 .expect("central directory header");
             let flags =
                 u16::from_le_bytes([bytes[central_header + 8], bytes[central_header + 9]]);
