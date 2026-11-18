@@ -1173,8 +1173,7 @@ fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64
         if &tail[eocd..eocd + 4] != b"PK\x05\x06" {
             continue;
         }
-        let comment_len =
-            u16::from_le_bytes(tail[eocd + 20..eocd + 22].try_into().ok()?) as usize;
+        let comment_len = u16::from_le_bytes(tail[eocd + 20..eocd + 22].try_into().ok()?) as usize;
         if eocd + 22 + comment_len != tail.len() {
             continue;
         }
@@ -1284,8 +1283,7 @@ fn mse_zip_resources_with_limits_and_cancel(
 
     let mut resources = Vec::<MseResourceRecord>::new();
     let mut seen_paths = HashMap::<String, usize>::new();
-    let central_directory_has_hidden_entries =
-        central_entry_count != Some(archive.len() as u64);
+    let central_directory_has_hidden_entries = central_entry_count != Some(archive.len() as u64);
     let mut hashed_bytes = 0_u64;
     let mut truncated = central_directory_has_hidden_entries;
     for index in 0..archive.len() {
@@ -1539,8 +1537,7 @@ fn zip_metadata_from_file(file: &mut cap_std::fs::File, extension: &str) -> ZipM
             None,
         );
     }
-    let central_directory_has_hidden_entries =
-        central_entry_count != Some(entry_count as u64);
+    let central_directory_has_hidden_entries = central_entry_count != Some(entry_count as u64);
     let mut uncompressed_bytes = 0_u64;
     let mut suspicious_paths = 0_usize;
     let mut suspicious_ratio = false;
@@ -4731,7 +4728,10 @@ mod tests {
         assert_eq!(archive.len(), 2);
         drop(archive);
         let mut archive_file = File::open(&archive_path).unwrap();
-        assert_eq!(zip_central_directory_entry_count(&mut archive_file), Some(2));
+        assert_eq!(
+            zip_central_directory_entry_count(&mut archive_file),
+            Some(2)
+        );
 
         std::fs::remove_dir_all(root).unwrap();
     }
