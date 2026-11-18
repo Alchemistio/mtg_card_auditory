@@ -1139,7 +1139,7 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
     entries: u64,
 ) -> bool {
     if entries == 0 {
-        return directory_size == 0;
+        return directory_size == 0 && directory_offset == directory_end;
     }
     let Some(directory_start) = directory_end.checked_sub(directory_size) else {
         return false;
@@ -4718,8 +4718,6 @@ mod tests {
             .unwrap();
         let mut fake_eocd = [0_u8; 22];
         fake_eocd[..4].copy_from_slice(b"PK\x05\x06");
-        fake_eocd[8..10].copy_from_slice(&1_u16.to_le_bytes());
-        fake_eocd[10..12].copy_from_slice(&1_u16.to_le_bytes());
         bytes[eocd + 20..eocd + 22].copy_from_slice(&(fake_eocd.len() as u16).to_le_bytes());
         bytes.extend_from_slice(&fake_eocd);
         std::fs::write(&archive_path, bytes).unwrap();
