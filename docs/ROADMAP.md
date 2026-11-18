@@ -343,3 +343,11 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 - [ ] Définir une politique explicite pour les noms UTF-8 invalides, les noms marqués UTF-8 mais invalides, les séparateurs `/` et `\\`, les segments `.` / `..`, les chemins absolus, les préfixes de lecteur et les noms en collision après normalisation.
 - [ ] Détecter les doublons exacts et les collisions après normalisation sans extraire les entrées ; conserver les octets originaux pour les diagnostics.
 - [ ] Ajouter des fixtures adversariales et vérifier que les noms ambigus ne peuvent ni masquer des ressources ni provoquer de divergence entre plateformes.
+
+### Précisions sur le décodage des noms ZIP — 18 novembre 2026
+
+- La crate verrouillée est `zip 2.6.1`. L'API de nom brut doit être testée sur cette version précise, pas déduite de la documentation d'une version ultérieure.
+- Le champ brut `name_raw` est le candidat pour conserver les octets du nom d'entrée ; le nom textuel peut suivre les règles d'encodage ZIP (bit EFS/UTF-8, sinon CP437) et les informations de l'extra field Info-ZIP Unicode Path `0x7075`.
+- Ne pas traiter tous les octets non UTF-8 comme invalides : CP437 est une représentation historique valide lorsque le bit EFS n'est pas positionné. En revanche, un nom déclaré UTF-8 par EFS et non UTF-8 doit être signalé.
+- Vérifier les extras `0x7075` (version, CRC32 du nom brut, UTF-8 valide), leur présence locale et centrale, leur cohérence et les divergences entre nom brut et nom effectif. Le CRC invalide signifie que le champ Unicode Path ne doit pas remplacer le nom principal selon la spécification.
+- Les tests de collision doivent couvrir à la fois les octets bruts et les noms effectifs après décodage ; ajouter les cas Unicode Path qui renomme une entrée, les noms CP437 et les noms EFS invalides avant d'utiliser `name_raw` comme unique source de vérité.

@@ -160,3 +160,9 @@ L'offset local est lu dans le champ ZIP64 central après les valeurs de taille �
 Tests et CI validés sur HEAD `28bfa8615a304c94a04dcf0214bde60b443a258d` : Unix run `44390560588` et Windows run `44390562401` ont tous deux passé formatage, Clippy et tests ; Windows a également passé le build Release x64 et l'upload de l'exécutable.
 
 Périmètre restant : fixtures pour valeurs 64 bits dépassant réellement 32 bits, combinaisons de sentinelles, cohérence des valeurs étendues locales/centrales, offsets SFX combinés à ZIP64, noms non UTF-8 et chemins ambigus. Cette tranche ne constitue pas une validation exhaustive du format ZIP64 et ne change pas le principe de non-extraction des ressources.
+
+## Encodage des noms ZIP et extra field Unicode Path
+
+La bibliothèque ZIP verrouillée par le projet est `2.6.1`. L'analyse des noms doit distinguer les octets stockés dans le champ filename, le décodage textuel (UTF-8 lorsque le bit EFS est actif, CP437 dans le cas historique) et l'éventuel nom UTF-8 fourni par l'extra field Info-ZIP Unicode Path `0x7075`.
+
+Un nom dont les octets ne sont pas UTF-8 n'est pas automatiquement invalide : il peut être un nom CP437 valide si le bit EFS est désactivé. À l'inverse, un bit EFS positionné avec une séquence UTF-8 invalide doit être signalé. Le champ Unicode Path doit être validé (version, CRC32 des octets du nom d'origine, contenu UTF-8), et ne doit pas être accepté lorsqu'il est incohérent ou périmé. La couverture doit comparer les noms bruts et les noms effectifs afin de détecter les doublons et les divergences de nommage.
