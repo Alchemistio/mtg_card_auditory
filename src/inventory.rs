@@ -5267,6 +5267,75 @@ mod tests {
     }
 
     #[test]
+    fn local_zip_header_checks_raw_name_encoding_and_unicode_path_consistency() {
+        use std::io::Cursor;
+
+        fn unicode_path_extra(raw_name: &[u8], unicode_name: &[u8]) -> Vec<u8> {
+            let mut extra = Vec::new();
+            extra.extend_from_slice(&0x7075_u16.to_le_bytes());
+            extra.extend_from_slice(&((5 + unicode_name.len()) as u16).to_le_bytes());
+            extra.push(1);
+            extra.extend_from_slice(&zip_crc32(raw_name).to_le_bytes());
+            extra.extend_from_slice(unicode_name);
+            extra
+        }
+
+        fn matches(
+            raw_name: &[u8],
+            flags: u16,
+            local_extra: &[u8],
+            central_extra: &[u8],
+        ) -> bool {
+            let mut local = vec![0_u8; 30];
+            local[..4].copy_from_slice(b"PK\x03\x04");
+            local[6..8].copy_from_slice(&flags.to_le_bytes());
+            local[8..10].copy_from_slice(&0_u16.to_le_bytes());
+            local[26..28].copy_from_slice(&(raw_name.len() as u16).to_le_bytes());
+            local[28..30].copy_from_slice(&(local_extra.len() as u16).to_le_bytes());
+            local.extend_from_slice(raw_name);
+            local.extend_from_slice(local_extra);
+
+            let mut central = [0_u8; 46];
+            central[..4].copy_from_slice(b"PK\x01\x02");
+            central[8..10].copy_from_slice(&flags.to_le_bytes());
+            central[10..12].copy_from_slice(&0_u16.to_le_bytes());
+            zip_local_header_matches_central_entry(
+                &mut Cursor::new(local.clone()),
+                local.len() as u64,
+                0,
+                0,
+                &central,
+                raw_name,
+                central_extra,
+            )
+        }
+
+        // CP437 remains valid when EFS is absent, but invalid UTF-8 is not
+        // accepted when the UTF-8 flag is set, on either header.
+        let cp437 = [0x82, b'.', b't', b'x', b't'];
+        assert!(matches(&cp437, 0, &[], &[]));
+        assert!(!matches(&[0xff], 0x0800, &[], &[]));
+
+        let raw_name = b"cafe.txt";
+        let unicode_name = "café.txt".as_bytes();
+        let matching_extra = unicode_path_extra(raw_name, unicode_name);
+        assert!(matches(raw_name, 0, &matching_extra, &matching_extra));
+
+        let contradictory_extra =
+            unicode_path_extra(raw_name, "autre.txt".as_bytes());
+        assert!(!matches(
+            raw_name,
+            0,
+            &matching_extra,
+            &contradictory_extra
+        ));
+
+        let mut invalid_crc = matching_extra.clone();
+        invalid_crc[6] ^= 1;
+        assert!(!matches(raw_name, 0, &[], &invalid_crc));
+    }
+
+    #[test]
     fn detects_windows_ambiguous_zip_names_and_case_collisions() {
         let slash = char::from(92);
         for name in [
