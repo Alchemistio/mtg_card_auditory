@@ -1356,15 +1356,23 @@ fn zip_unicode_path_extra(extra: &[u8], raw_name: &[u8]) -> Result<Option<Vec<u8
     let mut unicode_path = None;
     while cursor < extra.len() {
         let header_end = cursor.checked_add(4).ok_or(())?;
-        if header_end > extra.len() { return Err(()); }
+        if header_end > extra.len() {
+            return Err(());
+        }
         let field_id = u16::from_le_bytes([extra[cursor], extra[cursor + 1]]);
         let field_len = u16::from_le_bytes([extra[cursor + 2], extra[cursor + 3]]) as usize;
         let field_end = header_end.checked_add(field_len).ok_or(())?;
-        if field_end > extra.len() { return Err(()); }
+        if field_end > extra.len() {
+            return Err(());
+        }
         if field_id == 0x7075 {
-            if unicode_path.is_some() || field_len < 5 { return Err(()); }
+            if unicode_path.is_some() || field_len < 5 {
+                return Err(());
+            }
             let field = &extra[header_end..field_end];
-            if field[0] != 1 { return Err(()); }
+            if field[0] != 1 {
+                return Err(());
+            }
             let expected_crc = u32::from_le_bytes(field[1..5].try_into().map_err(|_| ())?);
             if zip_crc32(raw_name) != expected_crc || std::str::from_utf8(&field[5..]).is_err() {
                 return Err(());
@@ -1381,7 +1389,11 @@ fn zip_crc32(bytes: &[u8]) -> u32 {
     for byte in bytes {
         crc ^= u32::from(*byte);
         for _ in 0..8 {
-            crc = if crc & 1 == 1 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc
@@ -1496,7 +1508,10 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
     {
         return false;
     }
-    match (zip_unicode_path_extra(central_extra, central_name), zip_unicode_path_extra(&local_extra, &local_name)) {
+    match (
+        zip_unicode_path_extra(central_extra, central_name),
+        zip_unicode_path_extra(&local_extra, &local_name),
+    ) {
         (Ok(Some(central)), Ok(Some(local))) => central == local,
         (Ok(_), Ok(_)) => true,
         _ => false,
@@ -5221,7 +5236,11 @@ mod tests {
         assert!(zip_filename_encoding_is_valid(0x0800, raw, &[]));
         assert!(!zip_filename_encoding_is_valid(0x0800, &[0xff], &[]));
         // CP437 accepts every byte when EFS is not set.
-        assert!(zip_filename_encoding_is_valid(0, &[0x82, b'.', b't', b'x', b't'], &[]));
+        assert!(zip_filename_encoding_is_valid(
+            0,
+            &[0x82, b'.', b't', b'x', b't'],
+            &[]
+        ));
 
         let unicode = "café.txt".as_bytes();
         let mut extra = Vec::new();
