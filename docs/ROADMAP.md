@@ -339,7 +339,7 @@ Cette file complète les phases ci-dessus : elle transforme les chantiers partie
 
 ### Prochaine tranche — noms ZIP et chemins d'entrée
 
-- [ ] Exploiter les noms bruts d'entrée de la bibliothèque ZIP `2.6.1` pour éviter de confondre les octets stockés et leur interprétation textuelle.
+- [x] Vérifier sur la source exacte de `zip 2.6.1` l'existence de `ZipFile::name_raw()` et `ZipFile::extra_data()` ; limite établie : `name_raw()` expose les octets après traitement éventuel de `0x7075`, donc ne suffit pas à conserver systématiquement le champ filename central original.
 - [ ] Définir une politique explicite pour les noms UTF-8 invalides, les noms marqués UTF-8 mais invalides, les séparateurs `/` et `\\`, les segments `.` / `..`, les chemins absolus, les préfixes de lecteur et les noms en collision après normalisation.
 - [ ] Détecter les doublons exacts et les collisions après normalisation sans extraire les entrées ; conserver les octets originaux pour les diagnostics.
 - [ ] Ajouter des fixtures adversariales et vérifier que les noms ambigus ne peuvent ni masquer des ressources ni provoquer de divergence entre plateformes.
@@ -360,3 +360,10 @@ Le parcours des ressources ZIP et le résumé des métadonnées détectent déso
 Validation sur HEAD `c935ea9a8c3f6ff0781403c9fc16a5adb6190ff9` : CI Unix run `44513214541` (Format check, Clippy et tests réussis) et CI Windows run `44513214470` (Format check, Clippy, tests, build Release x64 et upload de l'exécutable réussis).
 
 **Limite de portée :** cette tranche travaille sur le nom déjà décodé/exposé par la crate ZIP `2.6.1`. Elle ne valide pas encore les octets bruts du champ filename, la cohérence du bit EFS, le fallback CP437 ni l'extra field Info-ZIP Unicode Path `0x7075` (version, CRC32 et UTF-8). Ne pas présenter ce contrôle comme une validation complète de l'encodage des noms ZIP.
+
+
+### Résultats de l'inspection de l'API zip 2.6.1 — 19 novembre 2026
+
+La source taguée `v2.6.1` de `zip-rs/zip2` confirme les méthodes publiques `ZipFile::name_raw()` et `ZipFile::extra_data()`. Le lecteur central interprète le bit EFS (bit 11) avec `String::from_utf8_lossy`, et utilise CP437 lorsque EFS est absent. Il traite ensuite l'extra field `0x7075` : version lue puis ignorée par l'implémentation, CRC32 vérifié contre le champ brut courant, contenu décodé en UTF-8 et utilisé pour remplacer `file_name_raw` et `file_name`. Ainsi, `name_raw()` peut retourner le contenu Unicode Path, pas nécessairement les octets filename originaux.
+
+Conséquence de sécurité : ne pas se reposer sur `name_raw()` pour auditer strictement EFS ou conserver le filename central original. La prochaine implémentation doit analyser les champs filename et extra depuis les octets de la table centrale et de l'en-tête local, vérifier strictement la version 1, le CRC32 et l'UTF-8 de `0x7075`, puis comparer les représentations. La bibliothèque masque actuellement les erreurs UTF-8 EFS via remplacement lossy ; ce comportement doit être contourné ou détecté par notre parseur brut.
