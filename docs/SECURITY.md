@@ -177,3 +177,12 @@ Le chemin de rendu de planche contact applique maintenant explicitement `image::
 Un test de régression construit un en-tête BMP minimal qui déclare une largeur de 30 000 001 pixels et vérifie que la création du décodeur échoue avec ces limites. CI Unix run `44391633791` et CI Windows run `44391633781` ont passé formatage, Clippy et tests ; Windows a aussi passé le build Release et l'upload de l'exécutable sur HEAD `b2b8988f3bf3ee50833f35bdc9832d0999c71d5b`.
 
 **Limite importante :** `max_alloc` est une limite au mieux et certains décodeurs peuvent l'ignorer. Elle ne doit pas être décrite comme une borne mémoire absolue. Les contrôles préalables de taille, de dimensions et d'aire restent nécessaires ; il faut encore tester les codecs réellement activés, les dimensions extrêmes et les chemins de décodage qui pourraient ne pas honorer le budget d'allocation.
+
+
+## Noms d'entrées ZIP ambigus sur Windows — 19 novembre 2026
+
+L'indexation des ressources et le comptage des chemins suspects appliquent un premier contrôle Windows au nom décodé par le lecteur ZIP. Sont signalés les chemins absolus, séparateurs antislash, deux-points, caractères de contrôle ou interdits, segments `.`/`..`, segments vides intermédiaires, points/espaces terminaux et noms de périphériques réservés Windows (CON, PRN, AUX, NUL, CLOCK$, CONIN$, CONOUT$, COM1–9 et LPT1–9, y compris ¹²³). Une clé normalisée (casse insensible, points/espaces terminaux supprimés par segment) détecte les collisions. Les ressources suspectes ne reçoivent pas de SHA-256.
+
+Validation sur HEAD `c935ea9a8c3f6ff0781403c9fc16a5adb6190ff9` : Unix run `44513214541` et Windows run `44513214470`, tous deux verts ; Windows a également réussi le build Release x64 et l'upload de l'exécutable.
+
+**Limite :** le contrôle porte uniquement sur le nom textuel décodé retourné par la crate ZIP `2.6.1`. Il ne vérifie pas encore le nom brut, le bit EFS, le décodage CP437 ni l'extra field Unicode Path `0x7075` et son CRC32. Les divergences entre en-têtes locaux et centraux restent couvertes séparément par les contrôles structurels existants.
