@@ -1233,6 +1233,7 @@ fn zip_central_directory_bounds_are_valid<R: Read + Seek>(
             local_header_offset,
             &header,
             &central_name,
+            &central_extra,
         ) {
             return false;
         }
@@ -1350,6 +1351,47 @@ fn zip64_local_header_offset_from_extra(
     local_header_offset
 }
 
+fn zip_unicode_path_extra(extra: &[u8], raw_name: &[u8]) -> Result<Option<Vec<u8>>, ()> {
+    let mut cursor = 0_usize;
+    let mut unicode_path = None;
+    while cursor < extra.len() {
+        let header_end = cursor.checked_add(4).ok_or(())?;
+        if header_end > extra.len() { return Err(()); }
+        let field_id = u16::from_le_bytes([extra[cursor], extra[cursor + 1]]);
+        let field_len = u16::from_le_bytes([extra[cursor + 2], extra[cursor + 3]]) as usize;
+        let field_end = header_end.checked_add(field_len).ok_or(())?;
+        if field_end > extra.len() { return Err(()); }
+        if field_id == 0x7075 {
+            if unicode_path.is_some() || field_len < 5 { return Err(()); }
+            let field = &extra[header_end..field_end];
+            if field[0] != 1 { return Err(()); }
+            let expected_crc = u32::from_le_bytes(field[1..5].try_into().map_err(|_| ())?);
+            if zip_crc32(raw_name) != expected_crc || std::str::from_utf8(&field[5..]).is_err() {
+                return Err(());
+            }
+            unicode_path = Some(field[5..].to_vec());
+        }
+        cursor = field_end;
+    }
+    Ok(unicode_path)
+}
+
+fn zip_crc32(bytes: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+        }
+    }
+    !crc
+}
+
+fn zip_filename_encoding_is_valid(flags: u16, raw_name: &[u8], extra: &[u8]) -> bool {
+    (flags & 0x0800 == 0 || std::str::from_utf8(raw_name).is_ok())
+        && zip_unicode_path_extra(extra, raw_name).is_ok()
+}
+
 fn zip_windows_name_key(name: &str) -> (String, bool) {
     let slash = char::from(92);
     let mut suspicious = name.is_empty()
@@ -1403,6 +1445,7 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
     local_header_offset: u64,
     central_header: &[u8; 46],
     central_name: &[u8],
+    central_extra: &[u8],
 ) -> bool {
     let Some(local_header_offset) = local_header_offset.checked_add(offset_adjustment) else {
         return false;
@@ -1444,7 +1487,20 @@ fn zip_local_header_matches_central_entry<R: Read + Seek>(
         return false;
     }
     let mut local_name = vec![0_u8; local_name_len];
-    file.read_exact(&mut local_name).is_ok() && local_name == central_name
+    let mut local_extra = vec![0_u8; local_extra_len as usize];
+    if file.read_exact(&mut local_name).is_err()
+        || file.read_exact(&mut local_extra).is_err()
+        || local_name != central_name
+        || !zip_filename_encoding_is_valid(central_flags, central_name, central_extra)
+        || !zip_filename_encoding_is_valid(local_flags, &local_name, &local_extra)
+    {
+        return false;
+    }
+    match (zip_unicode_path_extra(central_extra, central_name), zip_unicode_path_extra(&local_extra, &local_name)) {
+        (Ok(Some(central)), Ok(Some(local))) => central == local,
+        (Ok(_), Ok(_)) => true,
+        _ => false,
+    }
 }
 
 fn zip_central_directory_entry_count<R: Read + Seek>(file: &mut R) -> Option<u64> {
@@ -5156,6 +5212,39 @@ mod tests {
         assert_eq!(result.duplicate_files, 1);
         assert_eq!(result.assets[1].duplicate_of.as_deref(), Some("b/a.png"));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn validates_raw_zip_filename_encoding_and_unicode_path_extra() {
+        let raw = b"cafe.txt";
+        assert_eq!(zip_crc32(b"123456789"), 0xcbf4_3926);
+        assert!(zip_filename_encoding_is_valid(0x0800, raw, &[]));
+        assert!(!zip_filename_encoding_is_valid(0x0800, &[0xff], &[]));
+        // CP437 accepts every byte when EFS is not set.
+        assert!(zip_filename_encoding_is_valid(0, &[0x82, b'.', b't', b'x', b't'], &[]));
+
+        let unicode = "café.txt".as_bytes();
+        let mut extra = Vec::new();
+        extra.extend_from_slice(&0x7075_u16.to_le_bytes());
+        extra.extend_from_slice(&((5 + unicode.len()) as u16).to_le_bytes());
+        extra.push(1);
+        extra.extend_from_slice(&zip_crc32(raw).to_le_bytes());
+        extra.extend_from_slice(unicode);
+        assert!(zip_filename_encoding_is_valid(0, raw, &extra));
+
+        let mut bad_crc = extra.clone();
+        bad_crc[6] ^= 0x80;
+        assert!(!zip_filename_encoding_is_valid(0, raw, &bad_crc));
+        let mut bad_version = extra.clone();
+        bad_version[4] = 2;
+        assert!(!zip_filename_encoding_is_valid(0, raw, &bad_version));
+        let mut bad_utf8 = extra.clone();
+        *bad_utf8.last_mut().unwrap() = 0xff;
+        assert!(!zip_filename_encoding_is_valid(0, raw, &bad_utf8));
+        assert!(!zip_filename_encoding_is_valid(0, raw, &[0x75, 0x70, 0x08]));
+        let mut duplicate = extra.clone();
+        duplicate.extend_from_slice(&extra);
+        assert!(!zip_filename_encoding_is_valid(0, raw, &duplicate));
     }
 
     #[test]
