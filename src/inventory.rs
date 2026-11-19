@@ -5280,12 +5280,7 @@ mod tests {
             extra
         }
 
-        fn matches(
-            raw_name: &[u8],
-            flags: u16,
-            local_extra: &[u8],
-            central_extra: &[u8],
-        ) -> bool {
+        fn matches(raw_name: &[u8], flags: u16, local_extra: &[u8], central_extra: &[u8]) -> bool {
             let mut local = vec![0_u8; 30];
             local[..4].copy_from_slice(b"PK\x03\x04");
             local[6..8].copy_from_slice(&flags.to_le_bytes());
@@ -5321,14 +5316,8 @@ mod tests {
         let matching_extra = unicode_path_extra(raw_name, unicode_name);
         assert!(matches(raw_name, 0, &matching_extra, &matching_extra));
 
-        let contradictory_extra =
-            unicode_path_extra(raw_name, "autre.txt".as_bytes());
-        assert!(!matches(
-            raw_name,
-            0,
-            &matching_extra,
-            &contradictory_extra
-        ));
+        let contradictory_extra = unicode_path_extra(raw_name, "autre.txt".as_bytes());
+        assert!(!matches(raw_name, 0, &matching_extra, &contradictory_extra));
 
         let mut invalid_crc = matching_extra.clone();
         invalid_crc[6] ^= 1;
